@@ -1,0 +1,60 @@
+---
+interface Props {
+  slug: string;
+  title: string;
+  year: string;
+  location: string;
+  excerpt: string;
+  coverImage: string;
+}
+
+const { slug, title, year, location, excerpt, coverImage } = Astro.props;
+---
+
+<article class="project-card fade-up">
+  <a class="project-link" href={`/projects/${slug}/`}>
+    <div class="image-frame">
+      <img src={coverImage} alt={title} loading="lazy" />
+    </div>
+    <div class="project-meta">
+      <p class="meta">{year} · {location}</p>
+      <h3>{title}</h3>
+      <p>{excerpt}</p>
+    </div>
+  </a>
+</article>
+
+<style>
+  .project-link {
+    display: grid;
+    gap: 0.8rem;
+    transition: opacity 0.25s var(--ease);
+  }
+
+  .project-link:hover {
+    opacity: 0.72;
+  }
+
+  .project-meta h3 {
+    font-size: clamp(1.2rem, 1.8vw, 1.6rem);
+    font-weight: 400;
+    margin: 0;
+  }
+
+  .project-meta p {
+    margin: 0.26rem 0 0;
+  }
+
+  .meta,
+  .project-meta p:last-child {
+    color: var(--muted);
+  }
+
+  .meta {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.73rem;
+    letter-spacing: 0.04em;
+    margin: 0;
+    text-transform: uppercase;
+  }
+</style>

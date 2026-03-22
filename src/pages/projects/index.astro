@@ -1,0 +1,44 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import ProjectCard from '../../components/ProjectCard.astro';
+import { getCollection } from 'astro:content';
+
+const projects = (await getCollection('projects')).sort((a, b) => a.data.order - b.data.order);
+---
+
+<BaseLayout title="Project Archive | Architect" description="Detailed architectural archive.">
+  <section class="section fade-up">
+    <p class="eyebrow">Architect Archive</p>
+    <h1 class="page-title">Project Archive</h1>
+    <p class="page-intro">Detailed records of built work and in-progress spatial investigations.</p>
+  </section>
+
+  <section class="projects-grid">
+    {projects.map((project, index) => (
+      <div class="stagger" style={`--delay:${index * 0.06}s`}>
+        <ProjectCard
+          slug={project.slug}
+          title={project.data.title}
+          year={project.data.year}
+          location={project.data.location}
+          excerpt={project.data.excerpt}
+          coverImage={project.data.coverImage}
+        />
+      </div>
+    ))}
+  </section>
+</BaseLayout>
+
+<style>
+  .projects-grid {
+    display: grid;
+    gap: 1.6rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  @media (max-width: 760px) {
+    .projects-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

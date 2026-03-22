@@ -1,0 +1,56 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="Contact | Sebastian Samana" description="Contact.">
+  <section class="section fade-up">
+    <p class="eyebrow">Contact</p>
+    <h1 class="page-title">For commissions, writing invitations, and studio conversations.</h1>
+  </section>
+
+  <section class="section contact-list">
+    <article class="fade-up stagger" style="--delay:.06s">
+      <p class="meta">Email</p>
+      <a href="mailto:hello@sebastiansamana.com">hello@sebastiansamana.com</a>
+    </article>
+    <article class="fade-up stagger" style="--delay:.12s">
+      <p class="meta">Instagram</p>
+      <a href="https://instagram.com" rel="noreferrer">@sebastiansamana</a>
+    </article>
+    <article class="fade-up stagger" style="--delay:.18s">
+      <p class="meta">Location</p>
+      <p>Manchester, United Kingdom</p>
+    </article>
+  </section>
+</BaseLayout>
+
+<style>
+  .contact-list {
+    border-top: 1px solid var(--line);
+    max-width: 760px;
+  }
+
+  article {
+    border-bottom: 1px solid var(--line);
+    padding: 1rem 0 1.1rem;
+  }
+
+  .meta {
+    color: var(--muted);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    margin: 0 0 0.24rem;
+    text-transform: uppercase;
+  }
+
+  a,
+  p:last-child {
+    font-size: 1.3rem;
+    margin: 0;
+  }
+
+  a:hover {
+    opacity: 0.65;
+  }
+</style>

@@ -1,0 +1,56 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout title="Website under construction" description="Website under construction.">
+  <section class="holding-page">
+    <div class="holding-copy">
+      <h1>Website Under Construction</h1>
+      <a href="https://www.instagram.com/hitscherism/" target="_blank" rel="noreferrer noopener">@hitscherism</a>
+    </div>
+  </section>
+</BaseLayout>
+
+<style>
+  .holding-page {
+    align-items: center;
+    display: flex;
+    justify-content: center;
+    width: 100%;
+  }
+
+  .holding-copy {
+    display: grid;
+    gap: 0;
+    width: fit-content;
+    max-width: 100%;
+    text-align: center;
+  }
+
+  h1 {
+    color: var(--ink);
+    font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 20pt;
+    font-weight: 400;
+    letter-spacing: 0;
+    line-height: 1;
+    margin: 0;
+    white-space: nowrap;
+  }
+
+  a {
+    color: var(--ink);
+    font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 20pt;
+    font-weight: 300;
+    line-height: 1;
+    margin: 0;
+    white-space: nowrap;
+    text-decoration: none;
+  }
+
+  a:hover {
+    color: var(--ink);
+    text-decoration: none;
+  }
+</style>

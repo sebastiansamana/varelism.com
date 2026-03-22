@@ -1,0 +1,74 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+
+const texts = [
+  {
+    title: 'Drawing as Slow Thinking',
+    type: 'Essay',
+    date: 'March 2026',
+    excerpt: 'A text on slowness, notation, and architectural attention.',
+  },
+  {
+    title: 'Margins of the Construction Site',
+    type: 'Notebook',
+    date: 'December 2025',
+    excerpt: 'Fragments from active sites and temporary spatial conditions.',
+  },
+  {
+    title: 'Notes on Material Memory',
+    type: 'Lecture Draft',
+    date: 'September 2025',
+    excerpt: 'How surfaces absorb time through wear, repair, and repetition.',
+  },
+];
+---
+
+<BaseLayout title="Writer | Sebastian Samana" description="Writing practice and research notes.">
+  <section class="section fade-up">
+    <p class="eyebrow">Writer</p>
+    <h1 class="page-title">Texts, notebooks, and research fragments.</h1>
+    <p class="page-intro">Writing is where projects begin and where completed work is tested again through language.</p>
+  </section>
+
+  <section class="section writing-list">
+    {texts.map((text, index) => (
+      <article class="entry fade-up stagger" style={`--delay:${index * 0.07}s`}>
+        <p class="meta">{text.type} · {text.date}</p>
+        <h2>{text.title}</h2>
+        <p>{text.excerpt}</p>
+      </article>
+    ))}
+  </section>
+</BaseLayout>
+
+<style>
+  .writing-list {
+    border-top: 1px solid var(--line);
+  }
+
+  .entry {
+    border-bottom: 1px solid var(--line);
+    padding: 1.4rem 0 1.5rem;
+  }
+
+  .meta {
+    color: var(--muted);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.73rem;
+    letter-spacing: 0.04em;
+    margin: 0 0 0.35rem;
+    text-transform: uppercase;
+  }
+
+  h2 {
+    font-size: clamp(1.3rem, 2vw, 1.7rem);
+    font-weight: 400;
+    margin: 0;
+  }
+
+  .entry p:last-child {
+    color: var(--muted);
+    margin: 0.35rem 0 0;
+    max-width: 70ch;
+  }
+</style>

@@ -1,0 +1,96 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getCollection, render } from 'astro:content';
+
+export async function getStaticPaths() {
+  const projects = await getCollection('projects');
+  return projects.map((project) => ({
+    params: { slug: project.slug },
+    props: { project },
+  }));
+}
+
+const { project } = Astro.props;
+const { Content } = await render(project);
+---
+
+<BaseLayout title={`${project.data.title} | Architect`} description={project.data.excerpt}>
+  <article class="project-detail">
+    <header class="detail-header section fade-up">
+      <p class="eyebrow">Architect</p>
+      <h1 class="page-title">{project.data.title}</h1>
+      <p class="page-intro">{project.data.subtitle}</p>
+      <div class="detail-meta">
+        <span>{project.data.year}</span>
+        <span>{project.data.location}</span>
+        <span>{project.data.category}</span>
+      </div>
+    </header>
+
+    <section class="section image-frame fade-up stagger" style="--delay:.1s">
+      <img src={project.data.coverImage} alt={project.data.title} />
+    </section>
+
+    <section class="section content-wrap fade-up stagger" style="--delay:.15s">
+      <Content />
+    </section>
+
+    <section class="gallery section">
+      {project.data.gallery.map((image, index) => (
+        <figure class="image-frame fade-up stagger" style={`--delay:${0.2 + index * 0.08}s`}>
+          <img src={image} alt={`${project.data.title} image ${index + 1}`} loading="lazy" />
+        </figure>
+      ))}
+    </section>
+  </article>
+</BaseLayout>
+
+<style>
+  .detail-meta {
+    border-top: 1px solid var(--line);
+    display: flex;
+    gap: 1.2rem;
+    margin-top: 1.4rem;
+    padding-top: 0.9rem;
+  }
+
+  .detail-meta span {
+    color: var(--muted);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .content-wrap {
+    margin-inline: auto;
+    max-width: 72ch;
+  }
+
+  .content-wrap :global(h2) {
+    font-size: 1.8rem;
+    font-weight: 400;
+    margin: 1.2rem 0 0.5rem;
+  }
+
+  .content-wrap :global(p) {
+    margin: 0 0 1rem;
+  }
+
+  .gallery {
+    display: grid;
+    gap: 1.2rem;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  @media (max-width: 760px) {
+    .detail-meta {
+      flex-direction: column;
+      gap: 0.2rem;
+    }
+
+    .gallery {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
