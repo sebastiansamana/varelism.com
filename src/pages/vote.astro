@@ -13,8 +13,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     <section class="candidates">
       <article class="candidate">
         <div class="portrait" aria-hidden="true"></div>
-        <h2>MSSA Chair</h2>
-        <p>
+        <div class="candidate-heading">
+          <h2>MSSA Chair</h2>
+          <p class="candidate-name">Sebastian</p>
+        </div>
+        <p class="candidate-copy">
           Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer vel sapien sed
           massa placerat luctus. Praesent in mi sed risus feugiat sodales in sed erat.
         </p>
@@ -22,8 +25,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
       <article class="candidate">
         <div class="portrait" aria-hidden="true"></div>
-        <h2>MSSA Secretary</h2>
-        <p>
+        <div class="candidate-heading">
+          <h2>MSSA Secretary</h2>
+          <p class="candidate-name">Ansh</p>
+        </div>
+        <p class="candidate-copy">
           Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vivamus vulputate,
           nunc ac mattis interdum, justo nibh ultrices arcu, et dignissim neque nisl ac erat.
         </p>
@@ -95,6 +101,12 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     text-align: center;
   }
 
+  .candidate-heading {
+    display: grid;
+    gap: 0;
+    justify-items: center;
+  }
+
   .portrait {
     aspect-ratio: 1;
     background: rgba(27, 55, 67, 0.08);
@@ -113,11 +125,20 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     margin: 0;
   }
 
-  .candidate p,
-  .shared-copy {
+  .candidate-name {
     color: rgba(27, 55, 67, 0.78);
     font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     font-size: 15pt;
+    font-weight: 200;
+    line-height: 1;
+    margin: 0;
+  }
+
+  .candidate-copy,
+  .shared-copy {
+    color: rgba(27, 55, 67, 0.78);
+    font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 11.25pt;
     font-weight: 200;
     line-height: 1.55;
     margin: 0;
