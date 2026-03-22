@@ -12,7 +12,9 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
     <section class="candidates">
       <article class="candidate">
-        <div class="portrait" aria-hidden="true"></div>
+        <div class="portrait">
+          <img class="portrait-image" src="/images/sebastian-chair.jpg" alt="Sebastian portrait" />
+        </div>
         <div class="candidate-heading">
           <h2>MSSA Chair</h2>
           <p class="candidate-name">Sebastian</p>
@@ -118,7 +120,16 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     background: rgba(27, 55, 67, 0.08);
     border: 1px solid rgba(27, 55, 67, 0.14);
     border-radius: 50%;
+    overflow: hidden;
     width: var(--profile-size);
+  }
+
+  .portrait-image {
+    display: block;
+    height: 100%;
+    object-fit: cover;
+    object-position: center 38%;
+    width: 100%;
   }
 
   .candidate h2 {
