@@ -19,10 +19,27 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           <h2>MSSA Chair</h2>
           <p class="candidate-name">Sebastian</p>
         </div>
-        <p class="candidate-copy">
-          Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer vel sapien sed
-          massa placerat luctus. Praesent in mi sed risus feugiat sodales in sed erat.
-        </p>
+        <div class="candidate-copy manifesto-copy">
+          <p>
+            Through being leader of MSSA Climate Action Group, as well as creative
+            director of MSSA photography, I am confident that I can benefit the role
+            of MSSA Chair in every scale, for the individual student, for our community,
+            and for how we present ourselves and collaborate with the world beyond the school.
+            If you have met me, you know I am outgoing and friendly; always happy to talk
+            and help you. As chair, some of my current goals are to:
+          </p>
+          <ul>
+            <li>Involve the architecture staff / professors within MSSA subgroups through architecture competitions with students and teachers in teams.</li>
+            <li>Give the ability for connectivity through a more rigorous interactive online website.</li>
+            <li>Collaborate with cross faculties from both Universities MMU and UoM for inter curricular events specifically with the visual arts faculty and civil engineering faculty.</li>
+            <li>Clear information and liaison between what students actually want vs what they are offered in the MSSA.</li>
+            <li>Societies made accessible through defined calendars and schedules for friendly tournaments for the sports and clear events and incentives for the students.</li>
+            <li>Quantitative outputs that result in verifiable and CV transferable experiences from MSSA to boost student employability.</li>
+            <li>Direct relation with companies to boost and fast track active participants of the MSSA for summer or easter architecture internships.</li>
+            <li>Greater reach for architecture companies, guest speakers and industry opportunities, for real networking.</li>
+          </ul>
+          <p>Vote for Sebastian for MSSA to experience, grow and perform.</p>
+        </div>
       </article>
 
       <article class="candidate">
@@ -31,10 +48,31 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           <h2>MSSA Secretary</h2>
           <p class="candidate-name">Ansh</p>
         </div>
-        <p class="candidate-copy">
-          Lorem ipsum dolor sit amet, consectetur adipiscing elit. Vivamus vulputate,
-          nunc ac mattis interdum, justo nibh ultrices arcu, et dignissim neque nisl ac erat.
-        </p>
+        <div class="candidate-copy">
+          <p>
+            Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris viverra,
+            lacus at faucibus commodo, mi libero pellentesque orci, sed sollicitudin
+            lectus lorem id nunc. Quisque dictum consequat nisl, vitae facilisis erat
+            lobortis ut. Suspendisse nec semper ipsum. Duis eget sapien sed augue
+            tincidunt vestibulum. Curabitur euismod, odio ac tempor vulputate, turpis
+            orci vulputate elit, et volutpat augue augue nec massa. Integer lacinia
+            tortor non massa laoreet, sed luctus nisl semper. Aenean a mauris nec nunc
+            vulputate dictum. Vestibulum ante ipsum primis in faucibus orci luctus et
+            ultrices posuere cubilia curae; Nam pellentesque, nisl non mattis ultricies,
+            dui odio porttitor erat, eget tincidunt libero sapien sed justo. Aliquam
+            bibendum luctus velit, sit amet suscipit augue facilisis vel. Fusce ultrices
+            tristique elit, in eleifend erat feugiat ut. Nunc tincidunt sapien in erat
+            iaculis, eu elementum mauris ultrices. Vivamus consequat mi quis nisl
+            interdum, sit amet cursus purus faucibus. Integer porta, erat ut interdum
+            condimentum, erat magna ultrices tortor, vitae tincidunt nunc odio vel risus.
+            Praesent suscipit magna a nulla aliquet, sed laoreet massa tristique. Sed
+            ullamcorper nunc non turpis feugiat, at finibus tellus feugiat. Pellentesque
+            habitant morbi tristique senectus et netus et malesuada fames ac turpis egestas.
+            Donec pharetra malesuada elit, in accumsan urna interdum vitae. Morbi commodo,
+            sapien sed gravida posuere, ipsum arcu consequat velit, a convallis justo sem
+            vitae nisl. Nulla facilisi. Nam blandit ligula sed justo et nibh semper.
+          </p>
+        </div>
       </article>
     </section>
 
@@ -165,6 +203,28 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
   .candidate-copy {
     width: var(--manifesto-copy-size);
+  }
+
+  .candidate-copy p {
+    margin: 0;
+  }
+
+  .manifesto-copy {
+    display: grid;
+    gap: 0.9rem;
+    text-align: left;
+  }
+
+  .manifesto-copy ul {
+    display: grid;
+    gap: 0.7rem;
+    margin: 0;
+    padding-left: 1.15rem;
+    text-align: left;
+  }
+
+  .manifesto-copy li {
+    margin: 0;
   }
 
   .shared-copy {
