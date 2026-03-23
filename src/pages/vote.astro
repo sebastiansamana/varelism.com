@@ -102,7 +102,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
     <section class="shared-manifesto">
       <p class="shared-label">Shared Manifesto</p>
-      <div class="shared-copy shared-copy-block">
+      <div class="shared-copy shared-copy-block manifesto-copy">
         <p>
           Together, we want MSSA to be more connected and more ambitious in what it
           offers students. Our aim is to strengthen the sense of community within MSA
@@ -292,7 +292,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     gap: 0.25rem;
     justify-items: center;
     padding-top: var(--divider-space);
-    text-align: center;
+    text-align: left;
   }
 
   .shared-label {
@@ -302,6 +302,9 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     font-weight: 400;
     letter-spacing: -0.01em;
     line-height: 1.1;
+    margin: 0;
+    text-align: left;
+    width: var(--manifesto-copy-size);
   }
 
   @media (max-width: 900px) {
