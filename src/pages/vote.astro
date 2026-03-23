@@ -43,7 +43,13 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       </article>
 
       <article class="candidate">
-        <div class="portrait" aria-hidden="true"></div>
+        <div class="portrait">
+          <img
+            class="portrait-image portrait-image--secretary"
+            src="/images/ansh-secretary.jpeg"
+            alt="Ansh portrait"
+          />
+        </div>
         <div class="candidate-heading">
           <h2>MSSA Secretary</h2>
           <p class="candidate-name">Ansh</p>
@@ -168,6 +174,10 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     object-fit: cover;
     object-position: center 38%;
     width: 100%;
+  }
+
+  .portrait-image--secretary {
+    object-position: center 18%;
   }
 
   .candidate h2 {
