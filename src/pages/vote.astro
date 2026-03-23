@@ -102,12 +102,27 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
     <section class="shared-manifesto">
       <p class="shared-label">Shared Manifesto</p>
-      <p class="shared-copy">
-        Lorem ipsum dolor sit amet, consectetur adipiscing elit. Cras aliquet, velit ut
-        tristique luctus, urna lectus pharetra arcu, nec posuere turpis nunc vel nibh.
-        Suspendisse potenti. Curabitur finibus, erat id vulputate faucibus, lorem eros
-        bibendum est, a imperdiet tellus sapien sit amet neque.
-      </p>
+      <div class="shared-copy shared-copy-block">
+        <p>
+          Together, we want MSSA to be more connected and more ambitious in what it
+          offers students. Our aim is to strengthen the sense of community within MSA
+          while also expanding the opportunities, networks, and collaborations available
+          through student life.
+        </p>
+        <p>
+          We believe MSSA should not only bring people together socially, but also act
+          as a stronger platform for participation, visibility, and growth. Connecting
+          students across year groups, disciplines, and backgrounds, while opening
+          clearer pathways to creative collaboration, industry engagement, and wider
+          opportunity.
+        </p>
+        <p>
+          Our shared vision is for an MSSA that feels welcoming and representative, but
+          also active, outward-looking, and genuinely valuable: a society that helps
+          students connect, contribute, and grow both within the school and beyond it.
+        </p>
+        <p>Vote Sebastian &amp; Ash for a more connected and ambitious MSSA.</p>
+      </div>
     </section>
   </section>
 </BaseLayout>
@@ -260,6 +275,15 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
   .shared-copy {
     width: var(--manifesto-copy-size);
+  }
+
+  .shared-copy-block {
+    display: grid;
+    gap: 0.9rem;
+  }
+
+  .shared-copy-block p {
+    margin: 0;
   }
 
   .shared-manifesto {
