@@ -130,6 +130,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 <style>
   .vote-page {
     --manifesto-copy-size: clamp(13.125rem, 23.625vw, 16.40625rem);
+    --shared-manifesto-copy-size: calc(var(--manifesto-copy-size) * 1.1);
     --divider-space: 5.15625rem;
     display: grid;
     gap: var(--divider-space);
@@ -274,7 +275,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   }
 
   .shared-copy {
-    width: var(--manifesto-copy-size);
+    width: var(--shared-manifesto-copy-size);
   }
 
   .shared-copy-block {
@@ -289,7 +290,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   .shared-manifesto {
     border-top: 1px solid rgba(27, 55, 67, 0.12);
     display: grid;
-    gap: 0.25rem;
+    gap: 1rem;
     justify-items: center;
     padding-top: var(--divider-space);
     text-align: left;
