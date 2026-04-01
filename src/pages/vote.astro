@@ -4,6 +4,33 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
 <BaseLayout title="Vote" description="Campaign and manifesto page.">
   <section class="vote-page">
+    <section class="vote-cta">
+      <a
+        class="vote-button"
+        href="https://www.totum.vote/manmet"
+        target="_blank"
+        rel="noreferrer"
+      >
+        Vote Now
+      </a>
+      <p class="vote-countdown" id="vote-countdown" data-target="2026-04-14T23:59:59+01:00">
+        13 days
+      </p>
+      <p class="vote-deadline">Voting ends April 14</p>
+      <div class="vote-instructions">
+        <p>Make sure to Join the MSSA through MMU Student Union.</p>
+        <p>
+          <a
+            href="https://www.theunionmmu.org/groups/manchester-student-society-of-architecture-mssa"
+            target="_blank"
+            rel="noreferrer"
+          >
+            https://www.theunionmmu.org/groups/manchester-student-society-of-architecture-mssa
+          </a>
+        </p>
+      </div>
+    </section>
+
     <section class="pillars">
       <h1><span class="lead-word">Better</span><span class="main-word">Portfolios</span></h1>
       <h1><span class="lead-word">Stronger</span><span class="main-word">Networks</span></h1>
@@ -131,38 +158,6 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       </div>
     </section>
 
-    <section class="vote-cta">
-      <a
-        class="vote-button"
-        href="https://www.totum.vote/manmet"
-        target="_blank"
-        rel="noreferrer"
-      >
-        Vote Now
-      </a>
-      <p class="vote-countdown" id="vote-countdown" data-target="2026-04-14T23:59:59+01:00">
-        13 days 00 hours 00 minutes 00 seconds
-      </p>
-      <p class="vote-deadline">Voting ends April 14</p>
-      <div class="vote-instructions">
-        <p class="vote-kicker">To vote</p>
-        <p>
-          Make sure to Join the MSSA through MMU Student Union. You can join the MSSA
-          through this link:
-          <a
-            href="https://www.theunionmmu.org/groups/manchester-student-society-of-architecture-mssa"
-            target="_blank"
-            rel="noreferrer"
-          >
-            https://www.theunionmmu.org/groups/manchester-student-society-of-architecture-mssa
-          </a>
-        </p>
-        <p>
-          After you have joined with your MMU ID please cast your vote: Vote Sebastian
-          for Chair and Ansh for Secretary.
-        </p>
-      </div>
-    </section>
   </section>
 </BaseLayout>
 
@@ -177,11 +172,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       const distance = Math.max(target - now, 0);
 
       const days = Math.floor(distance / (1000 * 60 * 60 * 24));
-      const hours = Math.floor((distance / (1000 * 60 * 60)) % 24);
-      const minutes = Math.floor((distance / (1000 * 60)) % 60);
-      const seconds = Math.floor((distance / 1000) % 60);
-
-      countdown.textContent = `${days} days ${String(hours).padStart(2, '0')} hours ${String(minutes).padStart(2, '0')} minutes ${String(seconds).padStart(2, '0')} seconds`;
+      countdown.textContent = `${days} days`;
     };
 
     renderCountdown();
@@ -374,11 +365,9 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   }
 
   .vote-cta {
-    border-top: 1px solid rgba(27, 55, 67, 0.12);
     display: grid;
     gap: 0.9rem;
     justify-items: center;
-    padding-top: var(--divider-space);
     text-align: center;
   }
 
@@ -405,8 +394,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   }
 
   .vote-countdown,
-  .vote-deadline,
-  .vote-kicker {
+  .vote-deadline {
     margin: 0;
   }
 
@@ -442,13 +430,6 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     font-weight: 400;
     line-height: 1.55;
     margin: 0;
-  }
-
-  .vote-kicker {
-    color: rgba(27, 55, 67, 0.72);
-    font-size: 0.82rem !important;
-    letter-spacing: 0.02em;
-    text-transform: none;
   }
 
   .vote-instructions a {
