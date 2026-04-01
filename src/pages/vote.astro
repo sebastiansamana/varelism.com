@@ -130,8 +130,65 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         <p>Vote Sebastian &amp; Ash for a more connected and ambitious MSSA.</p>
       </div>
     </section>
+
+    <section class="vote-cta">
+      <a
+        class="vote-button"
+        href="https://www.totum.vote/manmet"
+        target="_blank"
+        rel="noreferrer"
+      >
+        Vote Now
+      </a>
+      <p class="vote-countdown" id="vote-countdown" data-target="2026-04-14T23:59:59+01:00">
+        13 days 00 hours 00 minutes 00 seconds
+      </p>
+      <p class="vote-deadline">Voting ends April 14</p>
+      <div class="vote-instructions">
+        <p class="vote-kicker">To vote</p>
+        <p>
+          Make sure to join the MSSA through MMU Student Union. You can join the MSSA
+          through this
+          <a
+            href="https://www.theunionmmu.org/groups/manchester-student-society-of-architecture-mssa"
+            target="_blank"
+            rel="noreferrer"
+          >
+            link
+          </a>
+          .
+        </p>
+        <p>
+          After you have joined with your MMU ID please cast your vote: Vote Sebastian
+          for Chair and Ansh for Secretary.
+        </p>
+      </div>
+    </section>
   </section>
 </BaseLayout>
+
+<script is:inline>
+  const countdown = document.getElementById('vote-countdown');
+
+  if (countdown instanceof HTMLElement) {
+    const target = new Date(countdown.dataset.target ?? '').getTime();
+
+    const renderCountdown = () => {
+      const now = Date.now();
+      const distance = Math.max(target - now, 0);
+
+      const days = Math.floor(distance / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((distance / (1000 * 60 * 60)) % 24);
+      const minutes = Math.floor((distance / (1000 * 60)) % 60);
+      const seconds = Math.floor((distance / 1000) % 60);
+
+      countdown.textContent = `${days} days ${String(hours).padStart(2, '0')} hours ${String(minutes).padStart(2, '0')} minutes ${String(seconds).padStart(2, '0')} seconds`;
+    };
+
+    renderCountdown();
+    window.setInterval(renderCountdown, 1000);
+  }
+</script>
 
 <style>
   .vote-page {
@@ -315,6 +372,91 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     margin: 0;
     text-align: center;
     width: var(--shared-manifesto-copy-size);
+  }
+
+  .vote-cta {
+    border-top: 1px solid rgba(27, 55, 67, 0.12);
+    display: grid;
+    gap: 0.9rem;
+    justify-items: center;
+    padding-top: var(--divider-space);
+    text-align: center;
+  }
+
+  .vote-button {
+    border: 1px solid rgba(27, 55, 67, 0.2);
+    color: var(--ink);
+    display: inline-flex;
+    font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 1rem;
+    font-weight: 400;
+    justify-content: center;
+    letter-spacing: -0.01em;
+    min-width: 10rem;
+    padding: 0.8rem 1.5rem;
+    text-decoration: none;
+    transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease;
+  }
+
+  .vote-button:hover,
+  .vote-button:focus-visible {
+    background: rgba(27, 55, 67, 0.05);
+    border-color: rgba(27, 55, 67, 0.32);
+    color: var(--ink);
+  }
+
+  .vote-countdown,
+  .vote-deadline,
+  .vote-kicker {
+    margin: 0;
+  }
+
+  .vote-countdown {
+    color: var(--ink);
+    font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: clamp(1.1rem, 2vw, 1.35rem);
+    font-weight: 400;
+    letter-spacing: -0.01em;
+    line-height: 1.2;
+  }
+
+  .vote-deadline {
+    color: rgba(27, 55, 67, 0.82);
+    font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 0.95rem;
+    font-weight: 400;
+    line-height: 1.3;
+  }
+
+  .vote-instructions {
+    color: rgba(27, 55, 67, 0.78);
+    display: grid;
+    gap: 0.65rem;
+    justify-items: center;
+    margin-top: 0.8rem;
+    max-width: 34rem;
+  }
+
+  .vote-instructions p {
+    font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 0.95rem;
+    font-weight: 400;
+    line-height: 1.55;
+    margin: 0;
+  }
+
+  .vote-kicker {
+    color: rgba(27, 55, 67, 0.72);
+    font-size: 0.82rem !important;
+    letter-spacing: 0.02em;
+    text-transform: none;
+  }
+
+  .vote-instructions a {
+    color: var(--ink);
+    text-decoration: underline;
+    text-decoration-thickness: 0.05em;
+    text-underline-offset: 0.12em;
   }
 
   @media (max-width: 900px) {
