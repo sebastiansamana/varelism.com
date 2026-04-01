@@ -6,28 +6,27 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   <section class="vote-page">
     <section class="vote-cta">
       <a
-        class="vote-button"
+        class="vote-button vote-button--primary"
         href="https://www.totum.vote/manmet"
         target="_blank"
         rel="noreferrer"
       >
         Vote Now
       </a>
-      <p class="vote-countdown" id="vote-countdown" data-target="2026-04-14T23:59:59+01:00">
-        13 days
+      <p class="vote-countdown">
+        <span class="vote-countdown-label">Voting ends in</span>
+        <span id="vote-countdown" data-target="2026-04-14T23:59:59+01:00">13 days</span>
       </p>
-      <p class="vote-deadline">Voting ends April 14</p>
       <div class="vote-instructions">
-        <p>Make sure to Join the MSSA through MMU Student Union.</p>
-        <p>
-          <a
-            href="https://www.theunionmmu.org/groups/manchester-student-society-of-architecture-mssa"
-            target="_blank"
-            rel="noreferrer"
-          >
-            https://www.theunionmmu.org/groups/manchester-student-society-of-architecture-mssa
-          </a>
-        </p>
+        <p>Join the MSSA through MMU Student Union to Vote Now</p>
+        <a
+          class="vote-button vote-button--secondary"
+          href="https://www.theunionmmu.org/groups/manchester-student-society-of-architecture-mssa"
+          target="_blank"
+          rel="noreferrer"
+        >
+          Join MSSA
+        </a>
       </div>
     </section>
 
@@ -376,14 +375,23 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     color: var(--ink);
     display: inline-flex;
     font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    font-size: 1rem;
     font-weight: 400;
     justify-content: center;
     letter-spacing: -0.01em;
-    min-width: 10rem;
-    padding: 0.8rem 1.5rem;
     text-decoration: none;
     transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease;
+  }
+
+  .vote-button--primary {
+    font-size: 1.35rem;
+    min-width: 20rem;
+    padding: 1.6rem 3rem;
+  }
+
+  .vote-button--secondary {
+    font-size: 1rem;
+    min-width: 11rem;
+    padding: 0.9rem 1.8rem;
   }
 
   .vote-button:hover,
@@ -393,32 +401,31 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     color: var(--ink);
   }
 
-  .vote-countdown,
-  .vote-deadline {
+  .vote-countdown {
     margin: 0;
   }
 
   .vote-countdown {
     color: var(--ink);
+    display: flex;
     font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    flex-wrap: wrap;
     font-size: clamp(1.1rem, 2vw, 1.35rem);
+    gap: 0.35rem;
     font-weight: 400;
+    justify-content: center;
     letter-spacing: -0.01em;
     line-height: 1.2;
   }
 
-  .vote-deadline {
+  .vote-countdown-label {
     color: rgba(27, 55, 67, 0.82);
-    font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    font-size: 0.95rem;
-    font-weight: 400;
-    line-height: 1.3;
   }
 
   .vote-instructions {
     color: rgba(27, 55, 67, 0.78);
     display: grid;
-    gap: 0.65rem;
+    gap: 0.85rem;
     justify-items: center;
     margin-top: 0.8rem;
     max-width: 34rem;
@@ -430,13 +437,6 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     font-weight: 400;
     line-height: 1.55;
     margin: 0;
-  }
-
-  .vote-instructions a {
-    color: var(--ink);
-    text-decoration: underline;
-    text-decoration-thickness: 0.05em;
-    text-underline-offset: 0.12em;
   }
 
   @media (max-width: 900px) {
