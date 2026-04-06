@@ -5,20 +5,15 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 <BaseLayout title="Vote" description="Campaign and manifesto page.">
   <section class="vote-page">
     <section class="vote-cta">
-      <a
-        class="vote-button vote-button--primary"
-        href="https://www.totum.vote/manmet"
-        target="_blank"
-        rel="noreferrer"
-      >
-        Vote Now
-      </a>
       <p class="vote-countdown">
         <span class="vote-countdown-label">Voting ends in</span>
         <span id="vote-countdown" data-target="2026-04-14T23:59:59+01:00">13 days</span>
       </p>
       <div class="vote-instructions">
-        <p>Join the MSSA through MMU Student Union to Vote Now</p>
+        <p class="vote-attention">
+          Attention: you must sign up as a member of the MSSA to cast your vote
+        </p>
+        <p>1.) Join the MSSA</p>
         <a
           class="vote-button vote-button--secondary"
           href="https://www.theunionmmu.org/groups/manchester-student-society-of-architecture-mssa"
@@ -27,7 +22,19 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         >
           Join MSSA
         </a>
+        <p>
+          2.) Click the Vote Now button and vote for Sebastian as MSSA Chair and
+          Ansh as MSSA Secretary
+        </p>
       </div>
+      <a
+        class="vote-button vote-button--primary"
+        href="https://www.totum.vote/manmet"
+        target="_blank"
+        rel="noreferrer"
+      >
+        Vote Now
+      </a>
     </section>
 
     <section class="pillars">
@@ -437,6 +444,10 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     font-weight: 400;
     line-height: 1.55;
     margin: 0;
+  }
+
+  .vote-attention {
+    color: var(--ink);
   }
 
   @media (max-width: 900px) {
