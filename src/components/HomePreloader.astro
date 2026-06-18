@@ -20,9 +20,11 @@ const videoSrc = '/videos/Logo_Animation_Preloader.mp4';
     if (!overlay) return;
 
     const sessionKey = 'varelism-home-preloader-seen';
-    const minimumVisibleMs = 3000;
-    const fallbackMs = 8000;
-    const fadeMs = 700;
+    const videoVisibleMs = 6000;
+    const videoFadeMs = 300;
+    const whiteHoldMs = 300;
+    const overlayFadeMs = 300;
+    const fallbackMs = 10000;
     const isHome = window.location.pathname === '/' || window.location.pathname === '/index.html';
     const storage = {
       get() {
@@ -56,25 +58,28 @@ const videoSrc = '/videos/Logo_Animation_Preloader.mp4';
     overlay.classList.add('is-visible');
 
     let isPageReady = document.readyState === 'complete';
-    let hasMetMinimum = false;
+    let hasMetVideoDuration = false;
     let isHiding = false;
 
     const hideOverlay = () => {
-      if (isHiding || !isPageReady || !hasMetMinimum) return;
+      if (isHiding || !isPageReady || !hasMetVideoDuration) return;
 
       isHiding = true;
-      overlay.classList.add('is-fading');
-      window.setTimeout(removeOverlay, fadeMs);
+      overlay.classList.add('is-video-fading');
+      window.setTimeout(() => {
+        overlay.classList.add('is-overlay-fading');
+        window.setTimeout(removeOverlay, overlayFadeMs);
+      }, videoFadeMs + whiteHoldMs);
     };
 
     window.setTimeout(() => {
-      hasMetMinimum = true;
+      hasMetVideoDuration = true;
       hideOverlay();
-    }, minimumVisibleMs);
+    }, videoVisibleMs);
 
     const fallbackTimer = window.setTimeout(() => {
       isPageReady = true;
-      hasMetMinimum = true;
+      hasMetVideoDuration = true;
       hideOverlay();
     }, fallbackMs);
 
@@ -104,7 +109,7 @@ const videoSrc = '/videos/Logo_Animation_Preloader.mp4';
     opacity: 0;
     pointer-events: none;
     position: fixed;
-    transition: opacity 700ms ease, visibility 700ms ease;
+    transition: opacity 300ms ease, visibility 300ms ease;
     visibility: hidden;
     z-index: 9999;
   }
@@ -115,7 +120,7 @@ const videoSrc = '/videos/Logo_Animation_Preloader.mp4';
     visibility: visible;
   }
 
-  .home-preloader.is-fading {
+  .home-preloader.is-overlay-fading {
     opacity: 0;
     pointer-events: none;
     visibility: hidden;
@@ -127,7 +132,13 @@ const videoSrc = '/videos/Logo_Animation_Preloader.mp4';
     max-height: min(34vh, 18rem);
     max-width: min(48vw, 22rem);
     object-fit: contain;
+    opacity: 1;
+    transition: opacity 300ms ease;
     width: min(48vw, 22rem);
+  }
+
+  .home-preloader.is-video-fading .home-preloader__video {
+    opacity: 0;
   }
 
   :global(html.home-preloader-active),
