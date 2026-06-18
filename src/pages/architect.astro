@@ -3,11 +3,17 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
 const basePath = import.meta.env.BASE_URL === '/' ? '' : import.meta.env.BASE_URL.replace(/\/$/, '');
 const modelUrl = `${basePath}/models/Processed_Rock_Model.glb`;
+const loadingIconUrl = `${basePath}/images/Loading_icon.gif`;
 ---
 
 <BaseLayout title="Architect | Varelism" description="Interactive architectural object.">
   <section class="architect-stage" aria-label="Architect">
-    <div class="architect-viewer" data-architect-viewer data-model-url={modelUrl}></div>
+    <div class="architect-viewer" data-architect-viewer data-model-url={modelUrl}>
+      <div class="architect-loader" data-architect-loader role="status" aria-live="polite">
+        <img src={loadingIconUrl} alt="" aria-hidden="true" />
+        <p>architecture experience loading</p>
+      </div>
+    </div>
   </section>
 </BaseLayout>
 
@@ -23,6 +29,7 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model.glb`;
     const startViewer = async () => {
       if (didStart) return;
       didStart = true;
+      const loaderElement = viewer.querySelector('[data-architect-loader]');
 
       const [THREE, { GLTFLoader }, { OrbitControls }] = await Promise.all([
         import('three'),
@@ -105,17 +112,20 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model.glb`;
       const sourceCenter = sourceBox.getCenter(new THREE.Vector3());
       const sourceSize = sourceBox.getSize(new THREE.Vector3());
       const maxDimension = Math.max(sourceSize.x, sourceSize.y, sourceSize.z) || 1;
+      const autoFitScale = 2.85 / maxDimension;
+      const finalScale = autoFitScale * 2.5;
       const sculpture = new THREE.Group();
 
       model.position.sub(sourceCenter);
-      sculpture.scale.setScalar(2.85 / maxDimension);
+      sculpture.scale.setScalar(finalScale);
       sculpture.add(model);
       scene.add(sculpture);
 
-      const fittedBox = new THREE.Box3().setFromObject(sculpture);
-      const fittedSphere = fittedBox.getBoundingSphere(new THREE.Sphere());
-      const radius = fittedSphere.radius || 1.4;
-      const target = fittedSphere.center.clone();
+      const displayBox = new THREE.Box3().setFromObject(sculpture);
+      const displaySphere = displayBox.getBoundingSphere(new THREE.Sphere());
+      const displayRadius = displaySphere.radius || 3.5;
+      const radius = displayRadius / 2.5;
+      const target = displaySphere.center.clone();
       const cameraDirection = new THREE.Vector3(0.82, 0.72, 1).normalize();
 
       controls.target.copy(target);
@@ -132,8 +142,8 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model.glb`;
         const direction = camera.position.lengthSq() > 0 ? camera.position.clone().sub(target).normalize() : cameraDirection;
 
         camera.aspect = aspect;
-        camera.near = Math.max(radius / 120, 0.01);
-        camera.far = radius * 90;
+        camera.near = Math.max(displayRadius / 320, 0.01);
+        camera.far = displayRadius * 90;
         camera.position.copy(target).add(direction.multiplyScalar(distance));
         camera.updateProjectionMatrix();
 
@@ -154,6 +164,10 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model.glb`;
         controls.update();
         renderer.render(scene, camera);
       };
+      controls.update();
+      renderer.render(scene, camera);
+      loaderElement?.remove();
+      viewer.classList.add('is-ready');
       render();
 
       cleanup = () => {
@@ -202,11 +216,10 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model.glb`;
 <style>
   .architect-stage {
     display: grid;
-    margin: calc(-1 * clamp(6rem, 12vh, 8rem)) 50% 0;
+    margin: calc(-1 * clamp(6rem, 12vh, 8rem)) calc(50% - 50vw) 0;
     min-height: 100svh;
-    padding: clamp(5.7rem, 12vh, 8rem) clamp(1rem, 3.8vw, 3rem) clamp(4.5rem, 8vh, 6rem);
+    padding: 0 clamp(1rem, 3.8vw, 3rem);
     place-items: center;
-    transform: translateX(-50%);
     width: 100vw;
   }
 
@@ -221,6 +234,35 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model.glb`;
     width: min(90vw, 72rem);
   }
 
+  .architect-loader {
+    align-items: center;
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+    inset: 0;
+    justify-content: center;
+    pointer-events: none;
+    position: fixed;
+    text-align: center;
+    z-index: 10;
+  }
+
+  .architect-loader img {
+    display: block;
+    height: auto;
+    width: 6rem;
+  }
+
+  .architect-loader p {
+    color: #000000;
+    font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: clamp(0.82rem, 1vw, 0.98rem);
+    font-weight: 200;
+    letter-spacing: 0;
+    line-height: 1;
+    margin: 0;
+  }
+
   .architect-viewer:active {
     cursor: grabbing;
   }
@@ -231,20 +273,30 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model.glb`;
     inset: 0;
     position: absolute;
     touch-action: none;
+    opacity: 0;
+    transition: opacity 180ms ease;
     width: 100%;
+  }
+
+  .architect-viewer.is-ready :global(canvas) {
+    opacity: 1;
   }
 
   @media (max-width: 560px) {
     .architect-stage {
       margin-top: -5rem;
       min-height: 100svh;
-      padding: 4.85rem 0.75rem 4rem;
+      padding: 0 0.75rem;
     }
 
     .architect-viewer {
       height: min(74svh, 39rem);
       min-height: 24rem;
       width: 100%;
+    }
+
+    .architect-loader img {
+      width: 5.25rem;
     }
   }
 </style>
