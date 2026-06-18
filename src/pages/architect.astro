@@ -18,7 +18,30 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
       preload="auto"
     ></video>
   </div>
-  <section class="architect-stage" aria-label="Architect">
+  <section class="architect-stage" data-architect-stage aria-label="Architect">
+    <nav class="architect-spatial-nav" aria-label="Architect sections">
+      <a
+        class="architect-spatial-link architect-spatial-link--projects"
+        href="/projects/"
+        data-architect-spatial-link
+      >
+        Projects
+      </a>
+      <a
+        class="architect-spatial-link architect-spatial-link--product-designs"
+        href="/productdesigns/"
+        data-architect-spatial-link
+      >
+        Product Designs
+      </a>
+      <a
+        class="architect-spatial-link architect-spatial-link--portfolios"
+        href="/portfolios/"
+        data-architect-spatial-link
+      >
+        Portfolios
+      </a>
+    </nav>
     <div class="architect-viewer" data-architect-viewer data-model-url={modelUrl}></div>
   </section>
 </BaseLayout>
@@ -49,6 +72,9 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
 
       if (viewer.dataset.viewerBooted === 'true') return;
 
+      const stage = viewer.closest('[data-architect-stage]');
+      const controlsElement = stage instanceof HTMLElement ? stage : viewer;
+
       disposeCurrentViewer();
       viewer.dataset.viewerBooted = 'true';
       document.documentElement.classList.add('architect-preloader-active');
@@ -68,6 +94,7 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
       let hasMetMinimumDuration = false;
       let isModelReady = false;
       let isPreloaderHiding = false;
+      let cleanupSpatialLinks = () => {};
       const preloaderTimers = new Set();
 
       const videoVisibleMs = 1000;
@@ -112,6 +139,83 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
         hidePreloaderWhenReady();
       }, videoVisibleMs);
 
+      const installSpatialLinkGuards = () => {
+        const spatialLinks = Array.from(
+          controlsElement.querySelectorAll('[data-architect-spatial-link]'),
+        ).filter((link) => link instanceof HTMLAnchorElement);
+        const dragThreshold = 10;
+        let activePointer = null;
+        let draggedLink = null;
+
+        const onPointerDown = (event) => {
+          activePointer = {
+            id: event.pointerId,
+            link: event.currentTarget,
+            startX: event.clientX,
+            startY: event.clientY,
+            hasDragged: false,
+          };
+          event.currentTarget.setPointerCapture?.(event.pointerId);
+        };
+
+        const onPointerMove = (event) => {
+          if (!activePointer || activePointer.id !== event.pointerId) return;
+
+          const deltaX = event.clientX - activePointer.startX;
+          const deltaY = event.clientY - activePointer.startY;
+          if (Math.hypot(deltaX, deltaY) > dragThreshold) {
+            activePointer.hasDragged = true;
+          }
+        };
+
+        const onPointerUp = (event) => {
+          if (!activePointer || activePointer.id !== event.pointerId) return;
+
+          if (activePointer.hasDragged) {
+            const linkToSuppress = activePointer.link;
+            draggedLink = linkToSuppress;
+            window.setTimeout(() => {
+              if (draggedLink === linkToSuppress) draggedLink = null;
+            }, 0);
+          }
+
+          activePointer = null;
+        };
+
+        const onPointerCancel = () => {
+          activePointer = null;
+          draggedLink = null;
+        };
+
+        const onClick = (event) => {
+          if (draggedLink !== event.currentTarget) return;
+
+          event.preventDefault();
+          event.stopPropagation();
+          draggedLink = null;
+        };
+
+        spatialLinks.forEach((link) => {
+          link.addEventListener('pointerdown', onPointerDown);
+          link.addEventListener('pointermove', onPointerMove);
+          link.addEventListener('pointerup', onPointerUp);
+          link.addEventListener('pointercancel', onPointerCancel);
+          link.addEventListener('click', onClick);
+        });
+
+        cleanupSpatialLinks = () => {
+          spatialLinks.forEach((link) => {
+            link.removeEventListener('pointerdown', onPointerDown);
+            link.removeEventListener('pointermove', onPointerMove);
+            link.removeEventListener('pointerup', onPointerUp);
+            link.removeEventListener('pointercancel', onPointerCancel);
+            link.removeEventListener('click', onClick);
+          });
+        };
+      };
+
+      installSpatialLinkGuards();
+
       const startViewer = async () => {
         if (didStart || hasDisposed) return;
         didStart = true;
@@ -137,6 +241,7 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
         let resizeObserver = null;
         let frameId = 0;
         let controls = null;
+        const preventTouchMove = (event) => event.preventDefault();
 
         const disposeObject = (object) => {
           object.traverse((child) => {
@@ -154,6 +259,7 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
         cleanup = () => {
           window.cancelAnimationFrame(frameId);
           resizeObserver?.disconnect();
+          controlsElement.removeEventListener('touchmove', preventTouchMove);
           controls?.dispose();
           disposeScene();
           renderer.dispose();
@@ -180,7 +286,7 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
         fill.position.set(-4.2, 1.8, -3.8);
         scene.add(hemisphere, key, fill);
 
-        controls = new TrackballControls(camera, renderer.domElement);
+        controls = new TrackballControls(camera, controlsElement);
         controls.noPan = true;
         controls.noZoom = true;
         controls.rotateSpeed = 0.55;
@@ -188,9 +294,7 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
         controls.dynamicDampingFactor = 0.055;
         controls.target.set(0, 0, 0);
 
-        renderer.domElement.addEventListener('touchmove', (event) => event.preventDefault(), {
-          passive: false,
-        });
+        controlsElement.addEventListener('touchmove', preventTouchMove, { passive: false });
 
         const loader = new GLTFLoader();
         loader.setMeshoptDecoder(MeshoptDecoder);
@@ -346,6 +450,7 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
         preloaderTimers.clear();
         delete viewer.dataset.viewerBooted;
         viewer.classList.remove('is-ready');
+        cleanupSpatialLinks();
         unlockPageBehindPreloader();
         removePreloader();
         cleanup();
@@ -428,32 +533,100 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
 
   .architect-stage {
     display: grid;
+    cursor: grab;
+    isolation: isolate;
     min-height: 100svh;
     overflow: hidden;
     place-items: center;
-    width: 100%;
-  }
-
-  .architect-viewer {
-    cursor: grab;
-    height: 100svh;
-    min-height: 0;
-    overflow: hidden;
     position: relative;
     touch-action: none;
     user-select: none;
     width: 100%;
   }
 
-  .architect-viewer:active {
+  .architect-stage:active {
     cursor: grabbing;
   }
 
+  .architect-spatial-nav {
+    inset: 0;
+    pointer-events: none;
+    position: absolute;
+    z-index: 1;
+  }
+
+  .architect-spatial-link {
+    color: #691b17;
+    cursor: pointer;
+    display: block;
+    font-family: 'SF Pro Display Ultralight', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: clamp(1.35rem, 2.1vw, 2.15rem);
+    font-weight: 300;
+    letter-spacing: 0;
+    line-height: 1;
+    pointer-events: auto;
+    position: absolute;
+    text-align: center;
+    text-decoration: none;
+    touch-action: none;
+    transform: translate(-50%, -50%);
+    transition: color 180ms ease;
+    white-space: nowrap;
+  }
+
+  .architect-spatial-link:focus-visible {
+    color: #000000;
+    outline: 1px solid #691b17;
+    outline-offset: 0.45rem;
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .architect-spatial-link:hover {
+      color: #000000;
+    }
+  }
+
+  @media (hover: none) and (pointer: coarse) {
+    .architect-spatial-link:active {
+      color: #000000;
+    }
+  }
+
+  .architect-spatial-link--projects {
+    left: 22%;
+    top: 40%;
+  }
+
+  .architect-spatial-link--product-designs {
+    left: 56.5%;
+    top: 70.5%;
+  }
+
+  .architect-spatial-link--portfolios {
+    left: 82.5%;
+    top: 60%;
+  }
+
+  .architect-viewer {
+    height: 100svh;
+    inset: 0;
+    min-height: 0;
+    overflow: hidden;
+    pointer-events: none;
+    position: absolute;
+    touch-action: none;
+    user-select: none;
+    width: 100%;
+    z-index: 2;
+  }
+
   .architect-viewer :global(canvas) {
+    background: transparent;
     display: block;
     height: 100%;
     inset: 0;
     position: absolute;
+    pointer-events: none;
     touch-action: none;
     opacity: 0;
     transition: none;
@@ -469,6 +642,25 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
   @media (max-width: 560px) {
     .architect-stage {
       min-height: 100svh;
+    }
+
+    .architect-spatial-link {
+      font-size: clamp(0.95rem, 3.8vw, 1.25rem);
+    }
+
+    .architect-spatial-link--projects {
+      left: 18%;
+      top: 48%;
+    }
+
+    .architect-spatial-link--product-designs {
+      left: 52%;
+      top: 53%;
+    }
+
+    .architect-spatial-link--portfolios {
+      left: 76%;
+      top: 53%;
     }
 
     .architect-viewer {
