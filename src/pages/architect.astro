@@ -148,6 +148,7 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
         let draggedLink = null;
 
         const onPointerDown = (event) => {
+          event.stopPropagation();
           activePointer = {
             id: event.pointerId,
             link: event.currentTarget,
@@ -160,6 +161,7 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
 
         const onPointerMove = (event) => {
           if (!activePointer || activePointer.id !== event.pointerId) return;
+          event.stopPropagation();
 
           const deltaX = event.clientX - activePointer.startX;
           const deltaY = event.clientY - activePointer.startY;
@@ -170,6 +172,7 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
 
         const onPointerUp = (event) => {
           if (!activePointer || activePointer.id !== event.pointerId) return;
+          event.stopPropagation();
 
           if (activePointer.hasDragged) {
             const linkToSuppress = activePointer.link;
@@ -182,7 +185,8 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
           activePointer = null;
         };
 
-        const onPointerCancel = () => {
+        const onPointerCancel = (event) => {
+          event.stopPropagation();
           activePointer = null;
           draggedLink = null;
         };
@@ -192,7 +196,12 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
 
           event.preventDefault();
           event.stopPropagation();
+          event.stopImmediatePropagation();
           draggedLink = null;
+        };
+
+        const stopTouchPropagation = (event) => {
+          event.stopPropagation();
         };
 
         spatialLinks.forEach((link) => {
@@ -201,6 +210,10 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
           link.addEventListener('pointerup', onPointerUp);
           link.addEventListener('pointercancel', onPointerCancel);
           link.addEventListener('click', onClick);
+          link.addEventListener('touchstart', stopTouchPropagation);
+          link.addEventListener('touchmove', stopTouchPropagation);
+          link.addEventListener('touchend', stopTouchPropagation);
+          link.addEventListener('touchcancel', stopTouchPropagation);
         });
 
         cleanupSpatialLinks = () => {
@@ -210,6 +223,10 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
             link.removeEventListener('pointerup', onPointerUp);
             link.removeEventListener('pointercancel', onPointerCancel);
             link.removeEventListener('click', onClick);
+            link.removeEventListener('touchstart', stopTouchPropagation);
+            link.removeEventListener('touchmove', stopTouchPropagation);
+            link.removeEventListener('touchend', stopTouchPropagation);
+            link.removeEventListener('touchcancel', stopTouchPropagation);
           });
         };
       };
