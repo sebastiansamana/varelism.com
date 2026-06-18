@@ -2,7 +2,7 @@
 import BaseLayout from '../layouts/BaseLayout.astro';
 
 const basePath = import.meta.env.BASE_URL === '/' ? '' : import.meta.env.BASE_URL.replace(/\/$/, '');
-const modelUrl = `${basePath}/models/Processed_Rock_Model.glb`;
+const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
 const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
 ---
 
@@ -46,7 +46,7 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
     let isPreloaderHiding = false;
     const preloaderTimers = new Set();
 
-    const videoVisibleMs = 3000;
+    const videoVisibleMs = 1000;
     const videoFadeMs = 300;
     const whiteHoldMs = 300;
     const overlayFadeMs = 300;
@@ -86,11 +86,13 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
       if (didStart) return;
       didStart = true;
 
-      const [THREE, { GLTFLoader }, { OrbitControls }] = await Promise.all([
+      const [THREE, { GLTFLoader }, { TrackballControls }, { MeshoptDecoder }] = await Promise.all([
         import('three'),
         import('three/examples/jsm/loaders/GLTFLoader.js'),
-        import('three/examples/jsm/controls/OrbitControls.js'),
+        import('three/examples/jsm/controls/TrackballControls.js'),
+        import('three/examples/jsm/libs/meshopt_decoder.module.js'),
       ]);
+      THREE.Cache.enabled = true;
 
       const scene = new THREE.Scene();
       const camera = new THREE.PerspectiveCamera(37, 1, 0.01, 100);
@@ -108,7 +110,7 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
       renderer.toneMappingExposure = 1.04;
       renderer.setClearColor(0xffffff, 0);
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
       viewer.appendChild(renderer.domElement);
 
       const hemisphere = new THREE.HemisphereLight(0xffffff, 0xe8e1d6, 1.45);
@@ -122,12 +124,12 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
       fill.position.set(-4.2, 1.8, -3.8);
       scene.add(hemisphere, key, fill);
 
-      const controls = new OrbitControls(camera, renderer.domElement);
-      controls.enableDamping = true;
-      controls.dampingFactor = 0.075;
-      controls.enablePan = false;
-      controls.enableZoom = false;
-      controls.rotateSpeed = 0.42;
+      const controls = new TrackballControls(camera, renderer.domElement);
+      controls.noPan = true;
+      controls.noZoom = true;
+      controls.rotateSpeed = 0.55;
+      controls.staticMoving = false;
+      controls.dynamicDampingFactor = 0.055;
       controls.target.set(0, 0, 0);
 
       renderer.domElement.addEventListener('touchmove', (event) => event.preventDefault(), {
@@ -135,7 +137,8 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
       });
 
       const loader = new GLTFLoader();
-      const gltf = await loader.loadAsync(viewer.dataset.modelUrl || '/models/Processed_Rock_Model.glb');
+      loader.setMeshoptDecoder(MeshoptDecoder);
+      const gltf = await loader.loadAsync(viewer.dataset.modelUrl || '/models/Processed_Rock_Model_optimized.glb');
       const model = gltf.scene;
       const importedRig = [];
 
@@ -210,8 +213,9 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
         camera.updateProjectionMatrix();
         hasAppliedInitialCameraBookmark = true;
 
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
         renderer.setSize(width, height, false);
+        controls.handleResize();
         controls.update();
       };
 
@@ -221,13 +225,23 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
       resizeObserver.observe(viewer);
 
       let frameId = 0;
-      const render = () => {
-        frameId = window.requestAnimationFrame(render);
+      const renderScene = () => {
         controls.update();
         renderer.render(scene, camera);
       };
-      controls.update();
-      renderer.render(scene, camera);
+      const render = () => {
+        frameId = window.requestAnimationFrame(render);
+        renderScene();
+      };
+      const renderStableFirstFrame = () =>
+        new Promise((resolve) => {
+          window.requestAnimationFrame(() => {
+            renderScene();
+            window.requestAnimationFrame(resolve);
+          });
+        });
+
+      await renderStableFirstFrame();
       viewer.classList.add('is-ready');
       isModelReady = true;
       hidePreloaderWhenReady();
@@ -363,12 +377,15 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
     position: absolute;
     touch-action: none;
     opacity: 0;
-    transition: opacity 180ms ease;
+    transition: opacity 220ms ease, visibility 0ms linear 220ms;
+    visibility: hidden;
     width: 100%;
   }
 
   .architect-viewer.is-ready :global(canvas) {
     opacity: 1;
+    transition-delay: 0ms;
+    visibility: visible;
   }
 
   @media (max-width: 560px) {
