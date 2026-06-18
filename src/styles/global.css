@@ -126,6 +126,7 @@ button,
 
 .cart-link {
   height: clamp(1.05rem, 1.7vw, 1.45rem);
+  transform: translateY(12%);
   width: clamp(1.05rem, 1.7vw, 1.45rem);
 }
 
