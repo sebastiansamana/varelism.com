@@ -23,9 +23,31 @@ const { title, description = 'Website under construction.' } = Astro.props;
   </head>
   <body>
     <div class="site-shell">
+      <header class="site-header" aria-label="Site navigation">
+        <a class="site-logo" href="/" aria-label="Varelism home">
+          <span class="image-swap">
+            <img class="image-swap__base" src="/images/Samana_Logo_Text.png" alt="Varelism" />
+            <img class="image-swap__hover" src="/images/Samana_Logo_Text_Cursor.png" alt="" aria-hidden="true" />
+          </span>
+        </a>
+        <nav class="site-nav" aria-label="Primary navigation">
+          <a href="/contact/">contact</a>
+          <a href="/about/">about</a>
+          <a class="cart-link" href="/buy/" aria-label="buy">
+            <span class="image-swap">
+              <img class="image-swap__base" src="/images/Basket.png" alt="" aria-hidden="true" />
+              <img class="image-swap__hover" src="/images/Basket_Cursor.png" alt="" aria-hidden="true" />
+            </span>
+          </a>
+        </nav>
+      </header>
       <main>
         <slot />
       </main>
+      <footer class="site-footer">
+        <img src="/images/Triangular_Logo.png" alt="" aria-hidden="true" />
+        <p>&copy; 2026 Varelism</p>
+      </footer>
     </div>
   </body>
 </html>

@@ -8,7 +8,9 @@
   font-family: 'SF Pro Display';
   font-style: normal;
   font-weight: 200;
-  src: url('/fonts/SF-Pro-Display-Thin.ttf') format('truetype');
+  src:
+    url('/fonts/SF-Pro-Display-Thin.otf') format('opentype'),
+    url('/fonts/SF-Pro-Display-Thin.ttf') format('truetype');
   font-display: swap;
 }
 
@@ -54,12 +56,159 @@ a {
 
 .site-shell {
   min-height: 100vh;
+  position: relative;
+}
+
+.site-header {
+  align-items: center;
+  display: flex;
+  inset: 0 0 auto;
+  justify-content: space-between;
+  padding: clamp(1.1rem, 2.4vw, 2.1rem) clamp(1rem, 4vw, 3rem);
+  pointer-events: none;
+  position: absolute;
+  width: 100%;
+  z-index: 20;
+}
+
+.site-header a {
+  pointer-events: auto;
+}
+
+.site-logo {
+  display: block;
+  height: clamp(2rem, 3.4vw, 2.8rem);
+  width: clamp(8.25rem, 18vw, 15rem);
+}
+
+.site-nav {
+  align-items: center;
+  display: flex;
+  gap: clamp(1.15rem, 3vw, 2.75rem);
+}
+
+.site-nav a {
+  color: #000000;
+  display: block;
+  font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: clamp(0.82rem, 1vw, 0.98rem);
+  font-weight: 200;
+  letter-spacing: 0;
+  line-height: 1;
+  transition: color 160ms ease;
+}
+
+.site-nav a:hover,
+.site-nav a:focus-visible,
+.site-nav a:active {
+  color: #6a1c17;
+}
+
+.cart-link {
+  height: clamp(1.05rem, 1.7vw, 1.45rem);
+  width: clamp(1.05rem, 1.7vw, 1.45rem);
+}
+
+.image-swap {
+  display: grid;
+  height: 100%;
+  width: 100%;
+}
+
+.image-swap img {
+  display: block;
+  grid-area: 1 / 1;
+  height: 100%;
+  max-width: 100%;
+  object-fit: contain;
+  width: 100%;
+}
+
+.image-swap__hover {
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+
+.site-logo:hover .image-swap__hover,
+.site-logo:focus-visible .image-swap__hover,
+.site-logo:active .image-swap__hover,
+.cart-link:hover .image-swap__hover,
+.cart-link:focus-visible .image-swap__hover,
+.cart-link:active .image-swap__hover {
+  opacity: 1;
+}
+
+.site-logo:hover .image-swap__base,
+.site-logo:focus-visible .image-swap__base,
+.site-logo:active .image-swap__base,
+.cart-link:hover .image-swap__base,
+.cart-link:focus-visible .image-swap__base,
+.cart-link:active .image-swap__base {
+  opacity: 0;
+}
+
+.site-header a:focus-visible {
+  outline: 1px solid #6a1c17;
+  outline-offset: 0.35rem;
 }
 
 main {
   margin: 0 auto;
   max-width: calc(var(--content) + 3rem);
   min-height: 100vh;
-  padding: 0 1.5rem;
+  padding: clamp(6rem, 12vh, 8rem) 1.5rem 0;
   width: 100%;
+}
+
+.site-footer {
+  align-items: center;
+  color: #919191;
+  display: flex;
+  flex-direction: column;
+  font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 0.58rem;
+  font-weight: 200;
+  gap: 0.35rem;
+  line-height: 1;
+  padding: 3rem 1rem 2.2rem;
+  text-align: center;
+}
+
+.site-footer img {
+  display: block;
+  height: auto;
+  opacity: 0.78;
+  width: 1.15rem;
+}
+
+.site-footer p {
+  margin: 0;
+}
+
+@media (max-width: 560px) {
+  .site-header {
+    padding: 1rem 0.85rem;
+  }
+
+  .site-logo {
+    height: 1.7rem;
+    width: clamp(6.6rem, 35vw, 8.5rem);
+  }
+
+  .site-nav {
+    gap: clamp(0.65rem, 3.7vw, 1rem);
+  }
+
+  .site-nav a {
+    font-size: 0.72rem;
+  }
+
+  .cart-link {
+    height: 1rem;
+    width: 1rem;
+  }
+
+  main {
+    padding-top: 5rem;
+  }
 }
