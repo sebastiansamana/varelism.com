@@ -643,6 +643,14 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
     width: 100% !important;
   }
 
+  :global(.site-shell > .site-footer) {
+    inset: auto 0 0;
+    pointer-events: none;
+    position: absolute;
+    width: 100%;
+    z-index: 20;
+  }
+
   .architect-stage {
     display: grid;
     cursor: grab;
