@@ -24,283 +24,352 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
 </BaseLayout>
 
 <script>
-  const viewer = document.querySelector('[data-architect-viewer]');
-  const preloader = document.querySelector('[data-architect-preloader]');
+  (() => {
+    const stateKey = '__varelismArchitectViewer';
+    const state = (window[stateKey] ||= {
+      dispose: null,
+      listenersAttached: false,
+    });
 
-  if (viewer instanceof HTMLElement && viewer.dataset.viewerBooted !== 'true') {
-    viewer.dataset.viewerBooted = 'true';
-    document.documentElement.classList.add('architect-preloader-active');
-    const preloaderVideo = preloader?.querySelector('video');
-
-    if (preloaderVideo instanceof HTMLVideoElement) {
-      preloaderVideo.muted = true;
-      preloaderVideo.play().catch(() => {
-        // Muted autoplay can still be delayed by the browser; the white overlay remains the fallback holding state.
-      });
-    }
-
-    let didStart = false;
-    let cleanup = () => {};
-    let hasMetMinimumDuration = false;
-    let isModelReady = false;
-    let isPreloaderHiding = false;
-    const preloaderTimers = new Set();
-
-    const videoVisibleMs = 1000;
-    const videoFadeMs = 300;
-    const whiteHoldMs = 300;
-    const overlayFadeMs = 300;
-
-    const setPreloaderTimer = (callback, delay) => {
-      const timer = window.setTimeout(() => {
-        preloaderTimers.delete(timer);
-        callback();
-      }, delay);
-      preloaderTimers.add(timer);
-      return timer;
+    const disposeCurrentViewer = () => {
+      if (typeof state.dispose === 'function') {
+        state.dispose();
+        state.dispose = null;
+      }
     };
 
-    const unlockPageBehindPreloader = () => {
-      document.documentElement.classList.remove('architect-preloader-active');
-    };
+    const initArchitectViewer = () => {
+      const viewer = document.querySelector('[data-architect-viewer]');
+      const preloader = document.querySelector('[data-architect-preloader]');
 
-    const removePreloader = () => {
-      preloader?.remove();
-    };
+      if (!(viewer instanceof HTMLElement)) {
+        document.documentElement.classList.remove('architect-preloader-active');
+        return;
+      }
 
-    const hidePreloaderWhenReady = () => {
-      if (isPreloaderHiding || !isModelReady || !hasMetMinimumDuration) return;
+      if (viewer.dataset.viewerBooted === 'true') return;
 
-      isPreloaderHiding = true;
-      preloader?.classList.add('is-video-fading');
+      disposeCurrentViewer();
+      viewer.dataset.viewerBooted = 'true';
+      document.documentElement.classList.add('architect-preloader-active');
+      const preloaderVideo = preloader?.querySelector('video');
+
+      if (preloaderVideo instanceof HTMLVideoElement) {
+        preloaderVideo.muted = true;
+        preloaderVideo.play().catch(() => {
+          // Muted autoplay can still be delayed by the browser; the white overlay remains the fallback holding state.
+        });
+      }
+
+      let didStart = false;
+      let hasDisposed = false;
+      let cleanup = () => {};
+      let observer = null;
+      let hasMetMinimumDuration = false;
+      let isModelReady = false;
+      let isPreloaderHiding = false;
+      const preloaderTimers = new Set();
+
+      const videoVisibleMs = 1000;
+      const videoFadeMs = 300;
+      const whiteHoldMs = 300;
+      const overlayFadeMs = 300;
+
+      const setPreloaderTimer = (callback, delay) => {
+        const timer = window.setTimeout(() => {
+          preloaderTimers.delete(timer);
+          if (!hasDisposed) callback();
+        }, delay);
+        preloaderTimers.add(timer);
+        return timer;
+      };
+
+      const unlockPageBehindPreloader = () => {
+        document.documentElement.classList.remove('architect-preloader-active');
+      };
+
+      const removePreloader = () => {
+        preloader?.remove();
+      };
+
+      const hidePreloaderWhenReady = () => {
+        if (hasDisposed || isPreloaderHiding || !isModelReady || !hasMetMinimumDuration) return;
+
+        isPreloaderHiding = true;
+        preloader?.classList.add('is-video-fading');
+
+        setPreloaderTimer(() => {
+          unlockPageBehindPreloader();
+          setPreloaderTimer(() => {
+            preloader?.classList.add('is-overlay-fading');
+            setPreloaderTimer(removePreloader, overlayFadeMs);
+          }, whiteHoldMs);
+        }, videoFadeMs);
+      };
 
       setPreloaderTimer(() => {
-        unlockPageBehindPreloader();
-        setPreloaderTimer(() => {
-          preloader?.classList.add('is-overlay-fading');
-          setPreloaderTimer(removePreloader, overlayFadeMs);
-        }, whiteHoldMs);
-      }, videoFadeMs);
-    };
+        hasMetMinimumDuration = true;
+        hidePreloaderWhenReady();
+      }, videoVisibleMs);
 
-    setPreloaderTimer(() => {
-      hasMetMinimumDuration = true;
-      hidePreloaderWhenReady();
-    }, videoVisibleMs);
+      const startViewer = async () => {
+        if (didStart || hasDisposed) return;
+        didStart = true;
 
-    const startViewer = async () => {
-      if (didStart) return;
-      didStart = true;
+        const [THREE, { GLTFLoader }, { TrackballControls }, { MeshoptDecoder }] = await Promise.all([
+          import('three'),
+          import('three/examples/jsm/loaders/GLTFLoader.js'),
+          import('three/examples/jsm/controls/TrackballControls.js'),
+          import('three/examples/jsm/libs/meshopt_decoder.module.js'),
+        ]);
+        if (hasDisposed) return;
+        THREE.Cache.enabled = true;
 
-      const [THREE, { GLTFLoader }, { TrackballControls }, { MeshoptDecoder }] = await Promise.all([
-        import('three'),
-        import('three/examples/jsm/loaders/GLTFLoader.js'),
-        import('three/examples/jsm/controls/TrackballControls.js'),
-        import('three/examples/jsm/libs/meshopt_decoder.module.js'),
-      ]);
-      THREE.Cache.enabled = true;
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(37, 1, 0.01, 100);
+        const renderer = new THREE.WebGLRenderer({
+          alpha: true,
+          antialias: true,
+          powerPreference: 'high-performance',
+        });
+        const INITIAL_MODEL_ROTATION_DEGREES = { x: 0, y: 54, z: 0 };
+        const INITIAL_CAMERA_DIRECTION = new THREE.Vector3(0.43, 0.41, -0.8).normalize();
+        let resizeObserver = null;
+        let frameId = 0;
+        let controls = null;
 
-      const scene = new THREE.Scene();
-      const camera = new THREE.PerspectiveCamera(37, 1, 0.01, 100);
-      const renderer = new THREE.WebGLRenderer({
-        alpha: true,
-        antialias: true,
-        powerPreference: 'high-performance',
-      });
-      const INITIAL_MODEL_ROTATION_DEGREES = { x: 0, y: 54, z: 0 };
-      const INITIAL_CAMERA_DIRECTION = new THREE.Vector3(0.43, 0.41, -0.8).normalize();
+        const disposeObject = (object) => {
+          object.traverse((child) => {
+            if (!child.isMesh) return;
+            child.geometry?.dispose();
+            const materials = Array.isArray(child.material) ? child.material : [child.material];
+            materials.forEach((material) => material?.dispose());
+          });
+        };
 
-      renderer.outputColorSpace = THREE.SRGBColorSpace;
-      renderer.shadowMap.enabled = true;
-      renderer.shadowMap.type = THREE.PCFShadowMap;
-      renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = 1.04;
-      renderer.setClearColor(0xffffff, 0);
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
-      viewer.appendChild(renderer.domElement);
+        const disposeScene = () => {
+          disposeObject(scene);
+        };
 
-      const hemisphere = new THREE.HemisphereLight(0xffffff, 0xe8e1d6, 1.45);
-      const key = new THREE.DirectionalLight(0xffffff, 5.2);
-      const fill = new THREE.DirectionalLight(0xf3efe8, 0.55);
+        cleanup = () => {
+          window.cancelAnimationFrame(frameId);
+          resizeObserver?.disconnect();
+          controls?.dispose();
+          disposeScene();
+          renderer.dispose();
+          renderer.domElement.remove();
+        };
 
-      key.position.set(3.6, 5.2, 4.4);
-      key.castShadow = true;
-      key.shadow.mapSize.set(2048, 2048);
-      key.shadow.bias = -0.00008;
-      fill.position.set(-4.2, 1.8, -3.8);
-      scene.add(hemisphere, key, fill);
+        renderer.outputColorSpace = THREE.SRGBColorSpace;
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFShadowMap;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.04;
+        renderer.setClearColor(0xffffff, 0);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+        viewer.appendChild(renderer.domElement);
 
-      const controls = new TrackballControls(camera, renderer.domElement);
-      controls.noPan = true;
-      controls.noZoom = true;
-      controls.rotateSpeed = 0.55;
-      controls.staticMoving = false;
-      controls.dynamicDampingFactor = 0.055;
-      controls.target.set(0, 0, 0);
+        const hemisphere = new THREE.HemisphereLight(0xffffff, 0xe8e1d6, 1.45);
+        const key = new THREE.DirectionalLight(0xffffff, 5.2);
+        const fill = new THREE.DirectionalLight(0xf3efe8, 0.55);
 
-      renderer.domElement.addEventListener('touchmove', (event) => event.preventDefault(), {
-        passive: false,
-      });
+        key.position.set(3.6, 5.2, 4.4);
+        key.castShadow = true;
+        key.shadow.mapSize.set(2048, 2048);
+        key.shadow.bias = -0.00008;
+        fill.position.set(-4.2, 1.8, -3.8);
+        scene.add(hemisphere, key, fill);
 
-      const loader = new GLTFLoader();
-      loader.setMeshoptDecoder(MeshoptDecoder);
-      const gltf = await loader.loadAsync(viewer.dataset.modelUrl || '/models/Processed_Rock_Model_optimized.glb');
-      const model = gltf.scene;
-      const importedRig = [];
+        controls = new TrackballControls(camera, renderer.domElement);
+        controls.noPan = true;
+        controls.noZoom = true;
+        controls.rotateSpeed = 0.55;
+        controls.staticMoving = false;
+        controls.dynamicDampingFactor = 0.055;
+        controls.target.set(0, 0, 0);
 
-      model.traverse((child) => {
-        if (child.isLight || child.isCamera) {
-          importedRig.push(child);
+        renderer.domElement.addEventListener('touchmove', (event) => event.preventDefault(), {
+          passive: false,
+        });
+
+        const loader = new GLTFLoader();
+        loader.setMeshoptDecoder(MeshoptDecoder);
+        const gltf = await loader.loadAsync(viewer.dataset.modelUrl || '/models/Processed_Rock_Model_optimized.glb');
+        if (hasDisposed) {
+          disposeObject(gltf.scene);
           return;
         }
+        const model = gltf.scene;
+        const importedRig = [];
 
-        if (!child.isMesh) return;
+        model.traverse((child) => {
+          if (child.isLight || child.isCamera) {
+            importedRig.push(child);
+            return;
+          }
 
-        child.castShadow = true;
-        child.receiveShadow = true;
+          if (!child.isMesh) return;
 
-        if (child.geometry && !child.geometry.attributes.normal) {
-          child.geometry.computeVertexNormals();
-        }
+          child.castShadow = true;
+          child.receiveShadow = true;
 
-        const materials = Array.isArray(child.material) ? child.material : [child.material];
-        materials.forEach((material) => {
-          if (!material) return;
-          if ('roughness' in material) material.roughness = Math.max(material.roughness ?? 0.82, 0.78);
-          if ('metalness' in material) material.metalness = Math.min(material.metalness ?? 0, 0.04);
-          material.needsUpdate = true;
-        });
-      });
+          if (child.geometry && !child.geometry.attributes.normal) {
+            child.geometry.computeVertexNormals();
+          }
 
-      importedRig.forEach((child) => child.parent?.remove(child));
-
-      const sourceBox = new THREE.Box3().setFromObject(model);
-      const sourceCenter = sourceBox.getCenter(new THREE.Vector3());
-      const sourceSize = sourceBox.getSize(new THREE.Vector3());
-      const maxDimension = Math.max(sourceSize.x, sourceSize.y, sourceSize.z) || 1;
-      const normalizedScale = 2.85 / maxDimension;
-      const sculpture = new THREE.Group();
-
-      model.position.sub(sourceCenter);
-      sculpture.rotation.set(
-        THREE.MathUtils.degToRad(INITIAL_MODEL_ROTATION_DEGREES.x),
-        THREE.MathUtils.degToRad(INITIAL_MODEL_ROTATION_DEGREES.y),
-        THREE.MathUtils.degToRad(INITIAL_MODEL_ROTATION_DEGREES.z),
-      );
-      sculpture.scale.setScalar(normalizedScale);
-      sculpture.add(model);
-      scene.add(sculpture);
-
-      const displayBox = new THREE.Box3().setFromObject(sculpture);
-      const displaySphere = displayBox.getBoundingSphere(new THREE.Sphere());
-      const displayRadius = displaySphere.radius || 1.2;
-      const target = displaySphere.center.clone();
-      let hasAppliedInitialCameraBookmark = false;
-
-      controls.target.copy(target);
-
-      const fitCamera = () => {
-        const width = Math.max(viewer.clientWidth, 1);
-        const height = Math.max(viewer.clientHeight, 1);
-        const aspect = width / height;
-        const verticalFov = THREE.MathUtils.degToRad(camera.fov);
-        const horizontalFov = 2 * Math.atan(Math.tan(verticalFov / 2) * aspect);
-        const limitingFov = Math.min(verticalFov, horizontalFov);
-        const cameraFill = aspect < 0.72 ? 0.62 : aspect < 1 ? 0.52 : 0.44;
-        const distance = (displayRadius / Math.sin(limitingFov / 2)) * cameraFill;
-        const direction = hasAppliedInitialCameraBookmark
-          ? camera.position.clone().sub(target).normalize()
-          : INITIAL_CAMERA_DIRECTION.clone();
-
-        camera.aspect = aspect;
-        camera.near = Math.max(displayRadius / 320, 0.01);
-        camera.far = displayRadius * 90;
-        camera.position.copy(target).add(direction.multiplyScalar(distance));
-        camera.updateProjectionMatrix();
-        hasAppliedInitialCameraBookmark = true;
-
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
-        renderer.setSize(width, height, false);
-        controls.handleResize();
-        controls.update();
-      };
-
-      fitCamera();
-
-      const resizeObserver = new ResizeObserver(fitCamera);
-      resizeObserver.observe(viewer);
-
-      let frameId = 0;
-      const renderScene = () => {
-        controls.update();
-        renderer.render(scene, camera);
-      };
-      const render = () => {
-        frameId = window.requestAnimationFrame(render);
-        renderScene();
-      };
-      const renderStableFirstFrame = () =>
-        new Promise((resolve) => {
-          window.requestAnimationFrame(() => {
-            renderScene();
-            window.requestAnimationFrame(resolve);
+          const materials = Array.isArray(child.material) ? child.material : [child.material];
+          materials.forEach((material) => {
+            if (!material) return;
+            if ('roughness' in material) material.roughness = Math.max(material.roughness ?? 0.82, 0.78);
+            if ('metalness' in material) material.metalness = Math.min(material.metalness ?? 0, 0.04);
+            material.needsUpdate = true;
           });
         });
 
-      await renderStableFirstFrame();
-      render();
-      await new Promise((resolve) => {
-        window.requestAnimationFrame(resolve);
-      });
-      viewer.classList.add('is-ready');
-      isModelReady = true;
-      hidePreloaderWhenReady();
+        importedRig.forEach((child) => child.parent?.remove(child));
 
-      cleanup = () => {
-        window.cancelAnimationFrame(frameId);
-        resizeObserver.disconnect();
-        controls.dispose();
-        renderer.dispose();
-        renderer.domElement.remove();
+        const sourceBox = new THREE.Box3().setFromObject(model);
+        const sourceCenter = sourceBox.getCenter(new THREE.Vector3());
+        const sourceSize = sourceBox.getSize(new THREE.Vector3());
+        const maxDimension = Math.max(sourceSize.x, sourceSize.y, sourceSize.z) || 1;
+        const normalizedScale = 2.85 / maxDimension;
+        const sculpture = new THREE.Group();
+
+        model.position.sub(sourceCenter);
+        sculpture.rotation.set(
+          THREE.MathUtils.degToRad(INITIAL_MODEL_ROTATION_DEGREES.x),
+          THREE.MathUtils.degToRad(INITIAL_MODEL_ROTATION_DEGREES.y),
+          THREE.MathUtils.degToRad(INITIAL_MODEL_ROTATION_DEGREES.z),
+        );
+        sculpture.scale.setScalar(normalizedScale);
+        sculpture.add(model);
+        scene.add(sculpture);
+
+        const displayBox = new THREE.Box3().setFromObject(sculpture);
+        const displaySphere = displayBox.getBoundingSphere(new THREE.Sphere());
+        const displayRadius = displaySphere.radius || 1.2;
+        const target = displaySphere.center.clone();
+        let hasAppliedInitialCameraBookmark = false;
+
+        controls.target.copy(target);
+
+        const fitCamera = () => {
+          const width = Math.max(viewer.clientWidth, 1);
+          const height = Math.max(viewer.clientHeight, 1);
+          const aspect = width / height;
+          const verticalFov = THREE.MathUtils.degToRad(camera.fov);
+          const horizontalFov = 2 * Math.atan(Math.tan(verticalFov / 2) * aspect);
+          const limitingFov = Math.min(verticalFov, horizontalFov);
+          const cameraFill = aspect < 0.72 ? 0.62 : aspect < 1 ? 0.52 : 0.44;
+          const distance = (displayRadius / Math.sin(limitingFov / 2)) * cameraFill;
+          const direction = hasAppliedInitialCameraBookmark
+            ? camera.position.clone().sub(target).normalize()
+            : INITIAL_CAMERA_DIRECTION.clone();
+
+          camera.aspect = aspect;
+          camera.near = Math.max(displayRadius / 320, 0.01);
+          camera.far = displayRadius * 90;
+          camera.position.copy(target).add(direction.multiplyScalar(distance));
+          camera.updateProjectionMatrix();
+          hasAppliedInitialCameraBookmark = true;
+
+          renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+          renderer.setSize(width, height, false);
+          controls.handleResize();
+          controls.update();
+        };
+
+        fitCamera();
+
+        resizeObserver = new ResizeObserver(fitCamera);
+        resizeObserver.observe(viewer);
+
+        const renderScene = () => {
+          controls.update();
+          renderer.render(scene, camera);
+        };
+        const render = () => {
+          frameId = window.requestAnimationFrame(render);
+          renderScene();
+        };
+        const renderStableFirstFrame = () =>
+          new Promise((resolve) => {
+            window.requestAnimationFrame(() => {
+              if (!hasDisposed) renderScene();
+              window.requestAnimationFrame(resolve);
+            });
+          });
+
+        await renderStableFirstFrame();
+        if (hasDisposed) return;
+        render();
+        await new Promise((resolve) => {
+          window.requestAnimationFrame(resolve);
+        });
+        if (hasDisposed) return;
+        viewer.classList.add('is-ready');
+        isModelReady = true;
+        hidePreloaderWhenReady();
       };
+
+      observer =
+        'IntersectionObserver' in window
+          ? new IntersectionObserver(
+              (entries) => {
+                if (!entries.some((entry) => entry.isIntersecting)) return;
+                observer?.disconnect();
+                startViewer().catch((error) => {
+                  console.error('Architect viewer failed to load.', error);
+                });
+              },
+              { rootMargin: '280px' },
+            )
+          : null;
+
+      if (observer) {
+        observer.observe(viewer);
+      } else {
+        window.setTimeout(() => {
+          startViewer().catch((error) => {
+            console.error('Architect viewer failed to load.', error);
+          });
+        }, 1);
+      }
+
+      const dispose = () => {
+        if (hasDisposed) return;
+        hasDisposed = true;
+        document.removeEventListener('astro:before-swap', dispose);
+        window.removeEventListener('pagehide', dispose);
+        observer?.disconnect();
+        preloaderTimers.forEach((timer) => window.clearTimeout(timer));
+        preloaderTimers.clear();
+        delete viewer.dataset.viewerBooted;
+        viewer.classList.remove('is-ready');
+        unlockPageBehindPreloader();
+        removePreloader();
+        cleanup();
+        if (state.dispose === dispose) state.dispose = null;
+      };
+
+      state.dispose = dispose;
+      document.addEventListener('astro:before-swap', dispose);
+      window.addEventListener('pagehide', dispose);
     };
 
-    const observer =
-      'IntersectionObserver' in window
-        ? new IntersectionObserver(
-            (entries) => {
-              if (!entries.some((entry) => entry.isIntersecting)) return;
-              observer?.disconnect();
-              startViewer().catch((error) => {
-                console.error('Architect viewer failed to load.', error);
-              });
-            },
-            { rootMargin: '280px' },
-          )
-        : null;
-
-    if (observer) {
-      observer.observe(viewer);
-    } else {
-      window.setTimeout(() => {
-        startViewer().catch((error) => {
-          console.error('Architect viewer failed to load.', error);
-        });
-      }, 1);
+    if (!state.listenersAttached) {
+      document.addEventListener('astro:after-swap', initArchitectViewer);
+      document.addEventListener('astro:page-load', initArchitectViewer);
+      window.addEventListener('pageshow', initArchitectViewer);
+      state.listenersAttached = true;
     }
 
-    const dispose = () => {
-      observer?.disconnect();
-      preloaderTimers.forEach((timer) => window.clearTimeout(timer));
-      preloaderTimers.clear();
-      unlockPageBehindPreloader();
-      removePreloader();
-      cleanup();
-    };
-
-    document.addEventListener('astro:before-swap', dispose, { once: true });
-    window.addEventListener('pagehide', dispose, { once: true });
-  }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initArchitectViewer, { once: true });
+    } else {
+      initArchitectViewer();
+    }
+  })();
 </script>
 
 <style>
