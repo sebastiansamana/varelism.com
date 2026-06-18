@@ -77,8 +77,8 @@ a {
 
 .site-logo {
   display: block;
-  height: clamp(2rem, 3.4vw, 2.8rem);
-  width: clamp(8.25rem, 18vw, 15rem);
+  height: clamp(1rem, 1.7vw, 1.4rem);
+  width: clamp(4.125rem, 9vw, 7.5rem);
 }
 
 .site-nav {
@@ -191,8 +191,8 @@ main {
   }
 
   .site-logo {
-    height: 1.7rem;
-    width: clamp(6.6rem, 35vw, 8.5rem);
+    height: 0.85rem;
+    width: clamp(3.3rem, 17.5vw, 4.25rem);
   }
 
   .site-nav {
