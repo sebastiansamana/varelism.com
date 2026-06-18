@@ -99,6 +99,8 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
         antialias: true,
         powerPreference: 'high-performance',
       });
+      const INITIAL_MODEL_ROTATION_DEGREES = { x: 0, y: 54, z: 0 };
+      const INITIAL_CAMERA_DIRECTION = new THREE.Vector3(0.43, 0.41, -0.8).normalize();
 
       renderer.outputColorSpace = THREE.SRGBColorSpace;
       renderer.shadowMap.enabled = true;
@@ -171,6 +173,11 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
       const sculpture = new THREE.Group();
 
       model.position.sub(sourceCenter);
+      sculpture.rotation.set(
+        THREE.MathUtils.degToRad(INITIAL_MODEL_ROTATION_DEGREES.x),
+        THREE.MathUtils.degToRad(INITIAL_MODEL_ROTATION_DEGREES.y),
+        THREE.MathUtils.degToRad(INITIAL_MODEL_ROTATION_DEGREES.z),
+      );
       sculpture.scale.setScalar(normalizedScale);
       sculpture.add(model);
       scene.add(sculpture);
@@ -179,7 +186,7 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
       const displaySphere = displayBox.getBoundingSphere(new THREE.Sphere());
       const displayRadius = displaySphere.radius || 1.2;
       const target = displaySphere.center.clone();
-      const cameraDirection = new THREE.Vector3(0.78, 0.82, 1).normalize();
+      let hasAppliedInitialCameraBookmark = false;
 
       controls.target.copy(target);
 
@@ -192,20 +199,22 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
         const limitingFov = Math.min(verticalFov, horizontalFov);
         const cameraFill = aspect < 0.72 ? 0.62 : aspect < 1 ? 0.52 : 0.44;
         const distance = (displayRadius / Math.sin(limitingFov / 2)) * cameraFill;
-        const direction = camera.position.lengthSq() > 0 ? camera.position.clone().sub(target).normalize() : cameraDirection;
+        const direction = hasAppliedInitialCameraBookmark
+          ? camera.position.clone().sub(target).normalize()
+          : INITIAL_CAMERA_DIRECTION.clone();
 
         camera.aspect = aspect;
         camera.near = Math.max(displayRadius / 320, 0.01);
         camera.far = displayRadius * 90;
         camera.position.copy(target).add(direction.multiplyScalar(distance));
         camera.updateProjectionMatrix();
+        hasAppliedInitialCameraBookmark = true;
 
         renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
         renderer.setSize(width, height, false);
         controls.update();
       };
 
-      camera.position.copy(target).add(cameraDirection.multiplyScalar(displayRadius * 4));
       fitCamera();
 
       const resizeObserver = new ResizeObserver(fitCamera);
