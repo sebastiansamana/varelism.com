@@ -36,6 +36,88 @@ const sections = [
   </section>
 </BaseLayout>
 
+<script is:inline>
+  const setupColumnHitboxes = () => {
+    if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
+      return;
+    }
+
+    document.querySelectorAll('.triptych-item').forEach((item) => {
+      const column = item.querySelector('.column-base');
+      if (!(column instanceof HTMLImageElement) || item.dataset.hitboxReady === 'true') {
+        return;
+      }
+
+      item.dataset.hitboxReady = 'true';
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d', { willReadFrequently: true });
+      let isReady = false;
+
+      const cacheColumnPixels = () => {
+        if (!context || !column.naturalWidth || !column.naturalHeight) {
+          return;
+        }
+
+        canvas.width = column.naturalWidth;
+        canvas.height = column.naturalHeight;
+        context.drawImage(column, 0, 0);
+        isReady = true;
+      };
+
+      const clearHit = () => {
+        item.classList.remove('is-column-hit');
+      };
+
+      const updateHit = (event) => {
+        if (!isReady || !context) {
+          clearHit();
+          return;
+        }
+
+        const rect = column.getBoundingClientRect();
+        const isInsideImage =
+          event.clientX >= rect.left &&
+          event.clientX <= rect.right &&
+          event.clientY >= rect.top &&
+          event.clientY <= rect.bottom;
+
+        if (!isInsideImage) {
+          clearHit();
+          return;
+        }
+
+        const x = Math.min(
+          canvas.width - 1,
+          Math.floor(((event.clientX - rect.left) / rect.width) * canvas.width),
+        );
+        const y = Math.min(
+          canvas.height - 1,
+          Math.floor(((event.clientY - rect.top) / rect.height) * canvas.height),
+        );
+        const [red, green, blue, alpha] = context.getImageData(x, y, 1, 1).data;
+        const isColumnPixel = alpha > 24 && !(red > 245 && green > 245 && blue > 245);
+
+        item.classList.toggle('is-column-hit', isColumnPixel);
+      };
+
+      if (column.complete) {
+        cacheColumnPixels();
+      } else {
+        column.addEventListener('load', cacheColumnPixels, { once: true });
+      }
+
+      item.addEventListener('pointermove', updateHit);
+      item.addEventListener('pointerleave', clearHit);
+    });
+  };
+
+  if (!window.varelismColumnHitboxesReady) {
+    window.varelismColumnHitboxesReady = true;
+    setupColumnHitboxes();
+    document.addEventListener('astro:page-load', setupColumnHitboxes);
+  }
+</script>
+
 <style>
   @font-face {
     font-family: 'SF Pro Display Ultralight';
@@ -115,11 +197,11 @@ const sections = [
   }
 
   @media (hover: hover) and (pointer: fine) {
-    .triptych-item:hover {
+    .triptych-item.is-column-hit {
       color: #691b17;
     }
 
-    .triptych-item:hover .column-hover {
+    .triptych-item.is-column-hit .column-hover {
       opacity: 1;
     }
   }
