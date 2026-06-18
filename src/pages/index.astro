@@ -105,17 +105,15 @@ const sections = [
     transition: opacity 180ms ease;
   }
 
-  .triptych-item:focus-visible,
-  .triptych-item:active {
+  .triptych-item:focus-visible {
     color: #691b17;
   }
 
-  .triptych-item:focus-visible .column-hover,
-  .triptych-item:active .column-hover {
+  .triptych-item:focus-visible .column-hover {
     opacity: 1;
   }
 
-  @media (hover: hover) {
+  @media (hover: hover) and (pointer: fine) {
     .triptych-item:hover {
       color: #691b17;
     }

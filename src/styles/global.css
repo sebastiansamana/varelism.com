@@ -52,6 +52,7 @@ body {
 a {
   color: inherit;
   text-decoration: none;
+  touch-action: manipulation;
 }
 
 .site-shell {
@@ -98,12 +99,11 @@ a {
   transition: color 160ms ease;
 }
 
-.site-nav a:focus-visible,
-.site-nav a:active {
+.site-nav a:focus-visible {
   color: #6a1c17;
 }
 
-@media (hover: hover) {
+@media (hover: hover) and (pointer: fine) {
   .site-nav a:hover {
     color: #6a1c17;
   }
@@ -135,20 +135,16 @@ a {
 }
 
 .site-logo:focus-visible .image-swap__hover,
-.site-logo:active .image-swap__hover,
-.cart-link:focus-visible .image-swap__hover,
-.cart-link:active .image-swap__hover {
+.cart-link:focus-visible .image-swap__hover {
   opacity: 1;
 }
 
 .site-logo:focus-visible .image-swap__base,
-.site-logo:active .image-swap__base,
-.cart-link:focus-visible .image-swap__base,
-.cart-link:active .image-swap__base {
+.cart-link:focus-visible .image-swap__base {
   opacity: 0;
 }
 
-@media (hover: hover) {
+@media (hover: hover) and (pointer: fine) {
   .site-logo:hover .image-swap__hover,
   .cart-link:hover .image-swap__hover {
     opacity: 1;
