@@ -98,10 +98,15 @@ a {
   transition: color 160ms ease;
 }
 
-.site-nav a:hover,
 .site-nav a:focus-visible,
 .site-nav a:active {
   color: #6a1c17;
+}
+
+@media (hover: hover) {
+  .site-nav a:hover {
+    color: #6a1c17;
+  }
 }
 
 .cart-link {
@@ -129,22 +134,30 @@ a {
   transition: opacity 160ms ease;
 }
 
-.site-logo:hover .image-swap__hover,
 .site-logo:focus-visible .image-swap__hover,
 .site-logo:active .image-swap__hover,
-.cart-link:hover .image-swap__hover,
 .cart-link:focus-visible .image-swap__hover,
 .cart-link:active .image-swap__hover {
   opacity: 1;
 }
 
-.site-logo:hover .image-swap__base,
 .site-logo:focus-visible .image-swap__base,
 .site-logo:active .image-swap__base,
-.cart-link:hover .image-swap__base,
 .cart-link:focus-visible .image-swap__base,
 .cart-link:active .image-swap__base {
   opacity: 0;
+}
+
+@media (hover: hover) {
+  .site-logo:hover .image-swap__hover,
+  .cart-link:hover .image-swap__hover {
+    opacity: 1;
+  }
+
+  .site-logo:hover .image-swap__base,
+  .cart-link:hover .image-swap__base {
+    opacity: 0;
+  }
 }
 
 .site-header a:focus-visible {

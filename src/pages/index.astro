@@ -105,14 +105,24 @@ const sections = [
     transition: opacity 180ms ease;
   }
 
-  .triptych-item:hover,
-  .triptych-item:focus-visible {
+  .triptych-item:focus-visible,
+  .triptych-item:active {
     color: #691b17;
   }
 
-  .triptych-item:hover .column-hover,
-  .triptych-item:focus-visible .column-hover {
+  .triptych-item:focus-visible .column-hover,
+  .triptych-item:active .column-hover {
     opacity: 1;
+  }
+
+  @media (hover: hover) {
+    .triptych-item:hover {
+      color: #691b17;
+    }
+
+    .triptych-item:hover .column-hover {
+      opacity: 1;
+    }
   }
 
   .triptych-item:focus-visible {

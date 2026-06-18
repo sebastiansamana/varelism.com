@@ -98,10 +98,16 @@ import MSAWorldMap from '../components/MSAWorldMap.jsx';
     transition: border-color 160ms ease, color 160ms ease;
   }
 
-  :global(.msa-map__controls button:hover),
   :global(.msa-map__controls button.is-active) {
     border-color: #691b17;
     color: #691b17;
+  }
+
+  @media (hover: hover) {
+    :global(.msa-map__controls button:hover) {
+      border-color: #691b17;
+      color: #691b17;
+    }
   }
 
   :global(.msa-map__svg) {
