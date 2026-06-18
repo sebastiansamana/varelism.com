@@ -1,0 +1,128 @@
+---
+const videoSrc = '/videos/Logo_Animation_Preloader.mp4';
+---
+
+<div class="home-preloader" data-home-preloader aria-hidden="true">
+  <video
+    class="home-preloader__video"
+    src={videoSrc}
+    autoplay
+    muted
+    playsinline
+    loop
+    preload="auto"
+  ></video>
+</div>
+
+<script is:inline>
+  (() => {
+    const overlay = document.querySelector('[data-home-preloader]');
+    if (!overlay) return;
+
+    const sessionKey = 'varelism-home-preloader-seen';
+    const fallbackMs = 8000;
+    const fadeMs = 700;
+    const isHome = window.location.pathname === '/' || window.location.pathname === '/index.html';
+    const storage = {
+      get() {
+        try {
+          return sessionStorage.getItem(sessionKey);
+        } catch {
+          return null;
+        }
+      },
+      set() {
+        try {
+          sessionStorage.setItem(sessionKey, 'true');
+        } catch {
+          // Storage can be unavailable in strict privacy contexts.
+        }
+      },
+    };
+
+    const removeOverlay = () => {
+      overlay.remove();
+      document.documentElement.classList.remove('home-preloader-active');
+    };
+
+    if (!isHome || storage.get() === 'true') {
+      removeOverlay();
+      return;
+    }
+
+    storage.set();
+    document.documentElement.classList.add('home-preloader-active');
+    overlay.classList.add('is-visible');
+
+    const hideOverlay = () => {
+      overlay.classList.add('is-fading');
+      window.setTimeout(removeOverlay, fadeMs);
+    };
+
+    const fallbackTimer = window.setTimeout(hideOverlay, fallbackMs);
+
+    if (document.readyState === 'complete') {
+      window.clearTimeout(fallbackTimer);
+      hideOverlay();
+    } else {
+      window.addEventListener(
+        'load',
+        () => {
+          window.clearTimeout(fallbackTimer);
+          hideOverlay();
+        },
+        { once: true },
+      );
+    }
+  })();
+</script>
+
+<style>
+  .home-preloader {
+    align-items: center;
+    background: #ffffff;
+    display: flex;
+    inset: 0;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    position: fixed;
+    transition: opacity 700ms ease, visibility 700ms ease;
+    visibility: hidden;
+    z-index: 9999;
+  }
+
+  .home-preloader.is-visible {
+    opacity: 1;
+    pointer-events: auto;
+    visibility: visible;
+  }
+
+  .home-preloader.is-fading {
+    opacity: 0;
+    pointer-events: none;
+    visibility: hidden;
+  }
+
+  .home-preloader__video {
+    display: block;
+    height: auto;
+    max-height: min(34vh, 18rem);
+    max-width: min(48vw, 22rem);
+    object-fit: contain;
+    width: min(48vw, 22rem);
+  }
+
+  :global(html.home-preloader-active),
+  :global(html.home-preloader-active body) {
+    overflow: hidden;
+  }
+
+  @media (max-width: 720px) {
+    .home-preloader__video {
+      max-height: min(28vh, 13rem);
+      max-width: min(62vw, 16rem);
+      width: min(62vw, 16rem);
+    }
+  }
+</style>
