@@ -3,33 +3,88 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
 const basePath = import.meta.env.BASE_URL === '/' ? '' : import.meta.env.BASE_URL.replace(/\/$/, '');
 const modelUrl = `${basePath}/models/Processed_Rock_Model.glb`;
-const loadingIconUrl = `${basePath}/images/Loading_icon.gif`;
+const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
 ---
 
 <BaseLayout title="Architect | Varelism" description="Interactive architectural object.">
+  <div class="architect-preloader" data-architect-preloader aria-hidden="true">
+    <video
+      class="architect-preloader__video"
+      src={preloaderVideoUrl}
+      autoplay
+      muted
+      playsinline
+      loop
+      preload="auto"
+    ></video>
+  </div>
   <section class="architect-stage" aria-label="Architect">
-    <div class="architect-viewer" data-architect-viewer data-model-url={modelUrl}>
-      <div class="architect-loader" data-architect-loader role="status" aria-live="polite">
-        <img src={loadingIconUrl} alt="" aria-hidden="true" />
-        <p>architecture experience loading</p>
-      </div>
-    </div>
+    <div class="architect-viewer" data-architect-viewer data-model-url={modelUrl}></div>
   </section>
 </BaseLayout>
 
 <script>
   const viewer = document.querySelector('[data-architect-viewer]');
+  const preloader = document.querySelector('[data-architect-preloader]');
 
   if (viewer instanceof HTMLElement && viewer.dataset.viewerBooted !== 'true') {
     viewer.dataset.viewerBooted = 'true';
+    document.documentElement.classList.add('architect-preloader-active');
+    const preloaderVideo = preloader?.querySelector('video');
+
+    if (preloaderVideo instanceof HTMLVideoElement) {
+      preloaderVideo.muted = true;
+      preloaderVideo.play().catch(() => {
+        // Muted autoplay can still be delayed by the browser; the white overlay remains the fallback holding state.
+      });
+    }
 
     let didStart = false;
     let cleanup = () => {};
+    let hasMetMinimumDuration = false;
+    let isModelReady = false;
+    let isPreloaderHiding = false;
+    const preloaderTimers = new Set();
+
+    const videoVisibleMs = 3000;
+    const videoFadeMs = 300;
+    const whiteHoldMs = 300;
+    const overlayFadeMs = 300;
+
+    const setPreloaderTimer = (callback, delay) => {
+      const timer = window.setTimeout(() => {
+        preloaderTimers.delete(timer);
+        callback();
+      }, delay);
+      preloaderTimers.add(timer);
+      return timer;
+    };
+
+    const removePreloader = () => {
+      preloader?.remove();
+      document.documentElement.classList.remove('architect-preloader-active');
+    };
+
+    const hidePreloaderWhenReady = () => {
+      if (isPreloaderHiding || !isModelReady || !hasMetMinimumDuration) return;
+
+      isPreloaderHiding = true;
+      preloader?.classList.add('is-video-fading');
+
+      setPreloaderTimer(() => {
+        preloader?.classList.add('is-overlay-fading');
+        setPreloaderTimer(removePreloader, overlayFadeMs);
+      }, videoFadeMs + whiteHoldMs);
+    };
+
+    setPreloaderTimer(() => {
+      hasMetMinimumDuration = true;
+      hidePreloaderWhenReady();
+    }, videoVisibleMs);
 
     const startViewer = async () => {
       if (didStart) return;
       didStart = true;
-      const loaderElement = viewer.querySelector('[data-architect-loader]');
 
       const [THREE, { GLTFLoader }, { OrbitControls }] = await Promise.all([
         import('three'),
@@ -113,7 +168,8 @@ const loadingIconUrl = `${basePath}/images/Loading_icon.gif`;
       const sourceSize = sourceBox.getSize(new THREE.Vector3());
       const maxDimension = Math.max(sourceSize.x, sourceSize.y, sourceSize.z) || 1;
       const autoFitScale = 2.85 / maxDimension;
-      const finalScale = autoFitScale * 2.5;
+      const modelScaleMultiplier = 0.8;
+      const finalScale = autoFitScale * modelScaleMultiplier;
       const sculpture = new THREE.Group();
 
       model.position.sub(sourceCenter);
@@ -123,8 +179,8 @@ const loadingIconUrl = `${basePath}/images/Loading_icon.gif`;
 
       const displayBox = new THREE.Box3().setFromObject(sculpture);
       const displaySphere = displayBox.getBoundingSphere(new THREE.Sphere());
-      const displayRadius = displaySphere.radius || 3.5;
-      const radius = displayRadius / 2.5;
+      const displayRadius = displaySphere.radius || 1.2;
+      const radius = displayRadius / modelScaleMultiplier;
       const target = displaySphere.center.clone();
       const cameraDirection = new THREE.Vector3(0.82, 0.72, 1).normalize();
 
@@ -166,8 +222,9 @@ const loadingIconUrl = `${basePath}/images/Loading_icon.gif`;
       };
       controls.update();
       renderer.render(scene, camera);
-      loaderElement?.remove();
       viewer.classList.add('is-ready');
+      isModelReady = true;
+      hidePreloaderWhenReady();
       render();
 
       cleanup = () => {
@@ -205,6 +262,9 @@ const loadingIconUrl = `${basePath}/images/Loading_icon.gif`;
 
     const dispose = () => {
       observer?.disconnect();
+      preloaderTimers.forEach((timer) => window.clearTimeout(timer));
+      preloaderTimers.clear();
+      removePreloader();
       cleanup();
     };
 
@@ -214,6 +274,46 @@ const loadingIconUrl = `${basePath}/images/Loading_icon.gif`;
 </script>
 
 <style>
+  .architect-preloader {
+    align-items: center;
+    background: #ffffff;
+    display: flex;
+    inset: 0;
+    justify-content: center;
+    opacity: 1;
+    pointer-events: auto;
+    position: fixed;
+    transition: opacity 300ms ease, visibility 300ms ease;
+    visibility: visible;
+    z-index: 9999;
+  }
+
+  .architect-preloader.is-overlay-fading {
+    opacity: 0;
+    pointer-events: none;
+    visibility: hidden;
+  }
+
+  .architect-preloader__video {
+    display: block;
+    height: auto;
+    max-height: min(34vh, 18rem);
+    max-width: min(48vw, 22rem);
+    object-fit: contain;
+    opacity: 1;
+    transition: opacity 300ms ease;
+    width: min(48vw, 22rem);
+  }
+
+  .architect-preloader.is-video-fading .architect-preloader__video {
+    opacity: 0;
+  }
+
+  :global(html.architect-preloader-active),
+  :global(html.architect-preloader-active body) {
+    overflow: hidden;
+  }
+
   .architect-stage {
     display: grid;
     margin: calc(-1 * clamp(6rem, 12vh, 8rem)) calc(50% - 50vw) 0;
@@ -232,35 +332,6 @@ const loadingIconUrl = `${basePath}/images/Loading_icon.gif`;
     touch-action: none;
     user-select: none;
     width: min(90vw, 72rem);
-  }
-
-  .architect-loader {
-    align-items: center;
-    display: flex;
-    flex-direction: column;
-    gap: 0.85rem;
-    inset: 0;
-    justify-content: center;
-    pointer-events: none;
-    position: fixed;
-    text-align: center;
-    z-index: 10;
-  }
-
-  .architect-loader img {
-    display: block;
-    height: auto;
-    width: 6rem;
-  }
-
-  .architect-loader p {
-    color: #000000;
-    font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    font-size: clamp(0.82rem, 1vw, 0.98rem);
-    font-weight: 200;
-    letter-spacing: 0;
-    line-height: 1;
-    margin: 0;
   }
 
   .architect-viewer:active {
@@ -295,8 +366,10 @@ const loadingIconUrl = `${basePath}/images/Loading_icon.gif`;
       width: 100%;
     }
 
-    .architect-loader img {
-      width: 5.25rem;
+    .architect-preloader__video {
+      max-height: min(28vh, 13rem);
+      max-width: min(62vw, 16rem);
+      width: min(62vw, 16rem);
     }
   }
 </style>
