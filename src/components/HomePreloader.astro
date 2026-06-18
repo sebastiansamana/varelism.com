@@ -20,6 +20,7 @@ const videoSrc = '/videos/Logo_Animation_Preloader.mp4';
     if (!overlay) return;
 
     const sessionKey = 'varelism-home-preloader-seen';
+    const minimumVisibleMs = 3000;
     const fallbackMs = 8000;
     const fadeMs = 700;
     const isHome = window.location.pathname === '/' || window.location.pathname === '/index.html';
@@ -54,20 +55,36 @@ const videoSrc = '/videos/Logo_Animation_Preloader.mp4';
     document.documentElement.classList.add('home-preloader-active');
     overlay.classList.add('is-visible');
 
+    let isPageReady = document.readyState === 'complete';
+    let hasMetMinimum = false;
+    let isHiding = false;
+
     const hideOverlay = () => {
+      if (isHiding || !isPageReady || !hasMetMinimum) return;
+
+      isHiding = true;
       overlay.classList.add('is-fading');
       window.setTimeout(removeOverlay, fadeMs);
     };
 
-    const fallbackTimer = window.setTimeout(hideOverlay, fallbackMs);
+    window.setTimeout(() => {
+      hasMetMinimum = true;
+      hideOverlay();
+    }, minimumVisibleMs);
+
+    const fallbackTimer = window.setTimeout(() => {
+      isPageReady = true;
+      hasMetMinimum = true;
+      hideOverlay();
+    }, fallbackMs);
 
     if (document.readyState === 'complete') {
-      window.clearTimeout(fallbackTimer);
       hideOverlay();
     } else {
       window.addEventListener(
         'load',
         () => {
+          isPageReady = true;
           window.clearTimeout(fallbackTimer);
           hideOverlay();
         },
