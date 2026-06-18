@@ -1,7 +1,250 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
+
+const basePath = import.meta.env.BASE_URL === '/' ? '' : import.meta.env.BASE_URL.replace(/\/$/, '');
+const modelUrl = `${basePath}/models/Processed_Rock_Model.glb`;
 ---
 
-<BaseLayout title="Architect | Varelism" description="Architect.">
-  <section aria-label="Architect"></section>
+<BaseLayout title="Architect | Varelism" description="Interactive architectural object.">
+  <section class="architect-stage" aria-label="Architect">
+    <div class="architect-viewer" data-architect-viewer data-model-url={modelUrl}></div>
+  </section>
 </BaseLayout>
+
+<script>
+  const viewer = document.querySelector('[data-architect-viewer]');
+
+  if (viewer instanceof HTMLElement && viewer.dataset.viewerBooted !== 'true') {
+    viewer.dataset.viewerBooted = 'true';
+
+    let didStart = false;
+    let cleanup = () => {};
+
+    const startViewer = async () => {
+      if (didStart) return;
+      didStart = true;
+
+      const [THREE, { GLTFLoader }, { OrbitControls }] = await Promise.all([
+        import('three'),
+        import('three/examples/jsm/loaders/GLTFLoader.js'),
+        import('three/examples/jsm/controls/OrbitControls.js'),
+      ]);
+
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(37, 1, 0.01, 100);
+      const renderer = new THREE.WebGLRenderer({
+        alpha: true,
+        antialias: true,
+        powerPreference: 'high-performance',
+      });
+
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFShadowMap;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.04;
+      renderer.setClearColor(0xffffff, 0);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      viewer.appendChild(renderer.domElement);
+
+      const hemisphere = new THREE.HemisphereLight(0xffffff, 0xe8e1d6, 1.45);
+      const key = new THREE.DirectionalLight(0xffffff, 5.2);
+      const fill = new THREE.DirectionalLight(0xf3efe8, 0.55);
+
+      key.position.set(3.6, 5.2, 4.4);
+      key.castShadow = true;
+      key.shadow.mapSize.set(2048, 2048);
+      key.shadow.bias = -0.00008;
+      fill.position.set(-4.2, 1.8, -3.8);
+      scene.add(hemisphere, key, fill);
+
+      const controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.075;
+      controls.enablePan = false;
+      controls.enableZoom = false;
+      controls.rotateSpeed = 0.42;
+      controls.target.set(0, 0, 0);
+
+      renderer.domElement.addEventListener('touchmove', (event) => event.preventDefault(), {
+        passive: false,
+      });
+
+      const loader = new GLTFLoader();
+      const gltf = await loader.loadAsync(viewer.dataset.modelUrl || '/models/Processed_Rock_Model.glb');
+      const model = gltf.scene;
+      const importedRig = [];
+
+      model.traverse((child) => {
+        if (child.isLight || child.isCamera) {
+          importedRig.push(child);
+          return;
+        }
+
+        if (!child.isMesh) return;
+
+        child.castShadow = true;
+        child.receiveShadow = true;
+
+        if (child.geometry && !child.geometry.attributes.normal) {
+          child.geometry.computeVertexNormals();
+        }
+
+        const materials = Array.isArray(child.material) ? child.material : [child.material];
+        materials.forEach((material) => {
+          if (!material) return;
+          if ('roughness' in material) material.roughness = Math.max(material.roughness ?? 0.82, 0.78);
+          if ('metalness' in material) material.metalness = Math.min(material.metalness ?? 0, 0.04);
+          material.needsUpdate = true;
+        });
+      });
+
+      importedRig.forEach((child) => child.parent?.remove(child));
+
+      const sourceBox = new THREE.Box3().setFromObject(model);
+      const sourceCenter = sourceBox.getCenter(new THREE.Vector3());
+      const sourceSize = sourceBox.getSize(new THREE.Vector3());
+      const maxDimension = Math.max(sourceSize.x, sourceSize.y, sourceSize.z) || 1;
+      const sculpture = new THREE.Group();
+
+      model.position.sub(sourceCenter);
+      sculpture.scale.setScalar(2.85 / maxDimension);
+      sculpture.add(model);
+      scene.add(sculpture);
+
+      const fittedBox = new THREE.Box3().setFromObject(sculpture);
+      const fittedSphere = fittedBox.getBoundingSphere(new THREE.Sphere());
+      const radius = fittedSphere.radius || 1.4;
+      const target = fittedSphere.center.clone();
+      const cameraDirection = new THREE.Vector3(0.82, 0.72, 1).normalize();
+
+      controls.target.copy(target);
+
+      const fitCamera = () => {
+        const width = Math.max(viewer.clientWidth, 1);
+        const height = Math.max(viewer.clientHeight, 1);
+        const aspect = width / height;
+        const verticalFov = THREE.MathUtils.degToRad(camera.fov);
+        const horizontalFov = 2 * Math.atan(Math.tan(verticalFov / 2) * aspect);
+        const limitingFov = Math.min(verticalFov, horizontalFov);
+        const mobilePadding = aspect < 0.72 ? 0.82 : 0.68;
+        const distance = (radius / Math.sin(limitingFov / 2)) * mobilePadding;
+        const direction = camera.position.lengthSq() > 0 ? camera.position.clone().sub(target).normalize() : cameraDirection;
+
+        camera.aspect = aspect;
+        camera.near = Math.max(radius / 120, 0.01);
+        camera.far = radius * 90;
+        camera.position.copy(target).add(direction.multiplyScalar(distance));
+        camera.updateProjectionMatrix();
+
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+        renderer.setSize(width, height, false);
+        controls.update();
+      };
+
+      camera.position.copy(target).add(cameraDirection.multiplyScalar(radius * 4));
+      fitCamera();
+
+      const resizeObserver = new ResizeObserver(fitCamera);
+      resizeObserver.observe(viewer);
+
+      let frameId = 0;
+      const render = () => {
+        frameId = window.requestAnimationFrame(render);
+        controls.update();
+        renderer.render(scene, camera);
+      };
+      render();
+
+      cleanup = () => {
+        window.cancelAnimationFrame(frameId);
+        resizeObserver.disconnect();
+        controls.dispose();
+        renderer.dispose();
+        renderer.domElement.remove();
+      };
+    };
+
+    const observer =
+      'IntersectionObserver' in window
+        ? new IntersectionObserver(
+            (entries) => {
+              if (!entries.some((entry) => entry.isIntersecting)) return;
+              observer?.disconnect();
+              startViewer().catch((error) => {
+                console.error('Architect viewer failed to load.', error);
+              });
+            },
+            { rootMargin: '280px' },
+          )
+        : null;
+
+    if (observer) {
+      observer.observe(viewer);
+    } else {
+      window.setTimeout(() => {
+        startViewer().catch((error) => {
+          console.error('Architect viewer failed to load.', error);
+        });
+      }, 1);
+    }
+
+    const dispose = () => {
+      observer?.disconnect();
+      cleanup();
+    };
+
+    document.addEventListener('astro:before-swap', dispose, { once: true });
+    window.addEventListener('pagehide', dispose, { once: true });
+  }
+</script>
+
+<style>
+  .architect-stage {
+    display: grid;
+    margin: calc(-1 * clamp(6rem, 12vh, 8rem)) 50% 0;
+    min-height: 100svh;
+    padding: clamp(5.7rem, 12vh, 8rem) clamp(1rem, 3.8vw, 3rem) clamp(4.5rem, 8vh, 6rem);
+    place-items: center;
+    transform: translateX(-50%);
+    width: 100vw;
+  }
+
+  .architect-viewer {
+    cursor: grab;
+    height: min(72svh, 48rem);
+    min-height: 28rem;
+    overflow: hidden;
+    position: relative;
+    touch-action: none;
+    user-select: none;
+    width: min(90vw, 72rem);
+  }
+
+  .architect-viewer:active {
+    cursor: grabbing;
+  }
+
+  .architect-viewer :global(canvas) {
+    display: block;
+    height: 100%;
+    inset: 0;
+    position: absolute;
+    touch-action: none;
+    width: 100%;
+  }
+
+  @media (max-width: 560px) {
+    .architect-stage {
+      margin-top: -5rem;
+      min-height: 100svh;
+      padding: 4.85rem 0.75rem 4rem;
+    }
+
+    .architect-viewer {
+      height: min(74svh, 39rem);
+      min-height: 24rem;
+      width: 100%;
+    }
+  }
+</style>
