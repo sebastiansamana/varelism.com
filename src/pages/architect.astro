@@ -60,9 +60,12 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
       return timer;
     };
 
+    const unlockPageBehindPreloader = () => {
+      document.documentElement.classList.remove('architect-preloader-active');
+    };
+
     const removePreloader = () => {
       preloader?.remove();
-      document.documentElement.classList.remove('architect-preloader-active');
     };
 
     const hidePreloaderWhenReady = () => {
@@ -72,9 +75,12 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
       preloader?.classList.add('is-video-fading');
 
       setPreloaderTimer(() => {
-        preloader?.classList.add('is-overlay-fading');
-        setPreloaderTimer(removePreloader, overlayFadeMs);
-      }, videoFadeMs + whiteHoldMs);
+        unlockPageBehindPreloader();
+        setPreloaderTimer(() => {
+          preloader?.classList.add('is-overlay-fading');
+          setPreloaderTimer(removePreloader, overlayFadeMs);
+        }, whiteHoldMs);
+      }, videoFadeMs);
     };
 
     setPreloaderTimer(() => {
@@ -242,10 +248,13 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
         });
 
       await renderStableFirstFrame();
+      render();
+      await new Promise((resolve) => {
+        window.requestAnimationFrame(resolve);
+      });
       viewer.classList.add('is-ready');
       isModelReady = true;
       hidePreloaderWhenReady();
-      render();
 
       cleanup = () => {
         window.cancelAnimationFrame(frameId);
@@ -284,6 +293,7 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
       observer?.disconnect();
       preloaderTimers.forEach((timer) => window.clearTimeout(timer));
       preloaderTimers.clear();
+      unlockPageBehindPreloader();
       removePreloader();
       cleanup();
     };
@@ -303,7 +313,7 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
     opacity: 1;
     pointer-events: auto;
     position: fixed;
-    transition: opacity 300ms ease, visibility 300ms ease;
+    transition: opacity 300ms ease, visibility 0ms linear 300ms;
     visibility: visible;
     z-index: 9999;
   }
@@ -377,14 +387,13 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
     position: absolute;
     touch-action: none;
     opacity: 0;
-    transition: opacity 220ms ease, visibility 0ms linear 220ms;
+    transition: none;
     visibility: hidden;
     width: 100%;
   }
 
   .architect-viewer.is-ready :global(canvas) {
     opacity: 1;
-    transition-delay: 0ms;
     visibility: visible;
   }
 
