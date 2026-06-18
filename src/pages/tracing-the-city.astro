@@ -110,6 +110,13 @@ import MSAWorldMap from '../components/MSAWorldMap.jsx';
     }
   }
 
+  @media (hover: none) and (pointer: coarse) {
+    :global(.msa-map__controls button:active) {
+      border-color: #691b17;
+      color: #691b17;
+    }
+  }
+
   :global(.msa-map__svg) {
     display: block;
     height: auto;

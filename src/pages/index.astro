@@ -123,6 +123,16 @@ const sections = [
     }
   }
 
+  @media (hover: none) and (pointer: coarse) {
+    .triptych-item:active {
+      color: #691b17;
+    }
+
+    .triptych-item:active .column-hover {
+      opacity: 1;
+    }
+  }
+
   .triptych-item:focus-visible {
     outline: 1px solid #691b17;
     outline-offset: 0.75rem;

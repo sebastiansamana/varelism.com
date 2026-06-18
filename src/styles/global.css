@@ -52,7 +52,13 @@ body {
 a {
   color: inherit;
   text-decoration: none;
+}
+
+a,
+button,
+[role='button'] {
   touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .site-shell {
@@ -109,6 +115,15 @@ a {
   }
 }
 
+@media (hover: none) and (pointer: coarse) {
+  a:active,
+  button:active,
+  [role='button']:active {
+    border-color: #6a1c17;
+    color: #6a1c17;
+  }
+}
+
 .cart-link {
   height: clamp(1.05rem, 1.7vw, 1.45rem);
   width: clamp(1.05rem, 1.7vw, 1.45rem);
@@ -152,6 +167,18 @@ a {
 
   .site-logo:hover .image-swap__base,
   .cart-link:hover .image-swap__base {
+    opacity: 0;
+  }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .site-logo:active .image-swap__hover,
+  .cart-link:active .image-swap__hover {
+    opacity: 1;
+  }
+
+  .site-logo:active .image-swap__base,
+  .cart-link:active .image-swap__base {
     opacity: 0;
   }
 }
