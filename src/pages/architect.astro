@@ -167,22 +167,19 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
       const sourceCenter = sourceBox.getCenter(new THREE.Vector3());
       const sourceSize = sourceBox.getSize(new THREE.Vector3());
       const maxDimension = Math.max(sourceSize.x, sourceSize.y, sourceSize.z) || 1;
-      const autoFitScale = 2.85 / maxDimension;
-      const modelScaleMultiplier = 0.8;
-      const finalScale = autoFitScale * modelScaleMultiplier;
+      const normalizedScale = 2.85 / maxDimension;
       const sculpture = new THREE.Group();
 
       model.position.sub(sourceCenter);
-      sculpture.scale.setScalar(finalScale);
+      sculpture.scale.setScalar(normalizedScale);
       sculpture.add(model);
       scene.add(sculpture);
 
       const displayBox = new THREE.Box3().setFromObject(sculpture);
       const displaySphere = displayBox.getBoundingSphere(new THREE.Sphere());
       const displayRadius = displaySphere.radius || 1.2;
-      const radius = displayRadius / modelScaleMultiplier;
       const target = displaySphere.center.clone();
-      const cameraDirection = new THREE.Vector3(0.82, 0.72, 1).normalize();
+      const cameraDirection = new THREE.Vector3(0.78, 0.82, 1).normalize();
 
       controls.target.copy(target);
 
@@ -193,8 +190,8 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
         const verticalFov = THREE.MathUtils.degToRad(camera.fov);
         const horizontalFov = 2 * Math.atan(Math.tan(verticalFov / 2) * aspect);
         const limitingFov = Math.min(verticalFov, horizontalFov);
-        const mobilePadding = aspect < 0.72 ? 0.82 : 0.68;
-        const distance = (radius / Math.sin(limitingFov / 2)) * mobilePadding;
+        const cameraFill = aspect < 0.72 ? 0.62 : aspect < 1 ? 0.52 : 0.44;
+        const distance = (displayRadius / Math.sin(limitingFov / 2)) * cameraFill;
         const direction = camera.position.lengthSq() > 0 ? camera.position.clone().sub(target).normalize() : cameraDirection;
 
         camera.aspect = aspect;
@@ -208,7 +205,7 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
         controls.update();
       };
 
-      camera.position.copy(target).add(cameraDirection.multiplyScalar(radius * 4));
+      camera.position.copy(target).add(cameraDirection.multiplyScalar(displayRadius * 4));
       fitCamera();
 
       const resizeObserver = new ResizeObserver(fitCamera);
@@ -314,24 +311,36 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
     overflow: hidden;
   }
 
+  :global(body) {
+    overflow-x: hidden;
+  }
+
+  :global(.site-shell > main) {
+    display: grid !important;
+    max-width: none !important;
+    min-height: 100svh !important;
+    padding: 0 !important;
+    place-items: center !important;
+    width: 100% !important;
+  }
+
   .architect-stage {
     display: grid;
-    margin: calc(-1 * clamp(6rem, 12vh, 8rem)) calc(50% - 50vw) 0;
     min-height: 100svh;
-    padding: 0 clamp(1rem, 3.8vw, 3rem);
+    overflow: hidden;
     place-items: center;
-    width: 100vw;
+    width: 100%;
   }
 
   .architect-viewer {
     cursor: grab;
-    height: min(72svh, 48rem);
-    min-height: 28rem;
+    height: 100svh;
+    min-height: 0;
     overflow: hidden;
     position: relative;
     touch-action: none;
     user-select: none;
-    width: min(90vw, 72rem);
+    width: 100%;
   }
 
   .architect-viewer:active {
@@ -355,14 +364,11 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
 
   @media (max-width: 560px) {
     .architect-stage {
-      margin-top: -5rem;
       min-height: 100svh;
-      padding: 0 0.75rem;
     }
 
     .architect-viewer {
-      height: min(74svh, 39rem);
-      min-height: 24rem;
+      height: 100svh;
       width: 100%;
     }
 
