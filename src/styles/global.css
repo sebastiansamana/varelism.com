@@ -91,7 +91,7 @@ button,
 .site-nav {
   align-items: flex-end;
   display: flex;
-  gap: clamp(1.15rem, 3vw, 2.75rem);
+  gap: clamp(1.25rem, 3.15vw, 2.9rem);
 }
 
 .site-nav a {
@@ -234,7 +234,7 @@ main {
   }
 
   .site-nav {
-    gap: clamp(0.65rem, 3.7vw, 1rem);
+    gap: clamp(0.72rem, 4vw, 1.08rem);
   }
 
   .site-nav a {
