@@ -95,6 +95,7 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
       let isModelReady = false;
       let isPreloaderHiding = false;
       let cleanupSpatialLinks = () => {};
+      let isPointCoveredByModel = () => true;
       const preloaderTimers = new Set();
 
       const videoVisibleMs = 1000;
@@ -145,22 +146,68 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
         ).filter((link) => link instanceof HTMLAnchorElement);
         const dragThreshold = 10;
         let activePointer = null;
-        let draggedLink = null;
+        let hoveredLink = null;
+        let suppressedClickLink = null;
+
+        const getEventPoint = (event) => {
+          if (typeof event.clientX === 'number' && typeof event.clientY === 'number') {
+            return { x: event.clientX, y: event.clientY };
+          }
+
+          const touch = event.changedTouches?.[0] || event.touches?.[0];
+          if (!touch) return null;
+          return { x: touch.clientX, y: touch.clientY };
+        };
+
+        const isVisibleLinkHit = (event) => {
+          const point = getEventPoint(event);
+          return Boolean(point && !isPointCoveredByModel(point.x, point.y));
+        };
+
+        const setHoveredLink = (link) => {
+          if (hoveredLink === link) return;
+          hoveredLink?.classList.remove('is-visible-hit');
+          hoveredLink = link;
+          hoveredLink?.classList.add('is-visible-hit');
+        };
 
         const onPointerDown = (event) => {
+          if (!isVisibleLinkHit(event)) {
+            suppressedClickLink = event.currentTarget;
+            setHoveredLink(null);
+            return;
+          }
+
           event.stopPropagation();
+          suppressedClickLink = null;
+          setHoveredLink(event.currentTarget);
           activePointer = {
             id: event.pointerId,
             link: event.currentTarget,
             startX: event.clientX,
             startY: event.clientY,
             hasDragged: false,
+            startedVisible: true,
           };
           event.currentTarget.setPointerCapture?.(event.pointerId);
         };
 
         const onPointerMove = (event) => {
+          const isVisible = isVisibleLinkHit(event);
+
+          if (isVisible) {
+            setHoveredLink(event.currentTarget);
+          } else if (hoveredLink === event.currentTarget) {
+            setHoveredLink(null);
+          }
+
           if (!activePointer || activePointer.id !== event.pointerId) return;
+          if (activePointer.link !== event.currentTarget) return;
+
+          if (!activePointer.startedVisible) {
+            return;
+          }
+
           event.stopPropagation();
 
           const deltaX = event.clientX - activePointer.startX;
@@ -172,13 +219,15 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
 
         const onPointerUp = (event) => {
           if (!activePointer || activePointer.id !== event.pointerId) return;
-          event.stopPropagation();
+          if (activePointer.startedVisible) {
+            event.stopPropagation();
+          }
 
           if (activePointer.hasDragged) {
             const linkToSuppress = activePointer.link;
-            draggedLink = linkToSuppress;
+            suppressedClickLink = linkToSuppress;
             window.setTimeout(() => {
-              if (draggedLink === linkToSuppress) draggedLink = null;
+              if (suppressedClickLink === linkToSuppress) suppressedClickLink = null;
             }, 0);
           }
 
@@ -186,25 +235,47 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
         };
 
         const onPointerCancel = (event) => {
-          event.stopPropagation();
+          if (activePointer?.startedVisible) {
+            event.stopPropagation();
+          }
+
           activePointer = null;
-          draggedLink = null;
+          suppressedClickLink = null;
+          setHoveredLink(null);
+        };
+
+        const onPointerEnter = (event) => {
+          if (isVisibleLinkHit(event)) {
+            setHoveredLink(event.currentTarget);
+          }
+        };
+
+        const onPointerLeave = (event) => {
+          if (hoveredLink === event.currentTarget) {
+            setHoveredLink(null);
+          }
         };
 
         const onClick = (event) => {
-          if (draggedLink !== event.currentTarget) return;
+          const isSuppressed = suppressedClickLink === event.currentTarget || !isVisibleLinkHit(event);
+          if (!isSuppressed) return;
 
           event.preventDefault();
           event.stopPropagation();
           event.stopImmediatePropagation();
-          draggedLink = null;
+          suppressedClickLink = null;
+          setHoveredLink(null);
         };
 
         const stopTouchPropagation = (event) => {
-          event.stopPropagation();
+          if (isVisibleLinkHit(event)) {
+            event.stopPropagation();
+          }
         };
 
         spatialLinks.forEach((link) => {
+          link.addEventListener('pointerenter', onPointerEnter);
+          link.addEventListener('pointerleave', onPointerLeave);
           link.addEventListener('pointerdown', onPointerDown);
           link.addEventListener('pointermove', onPointerMove);
           link.addEventListener('pointerup', onPointerUp);
@@ -217,7 +288,10 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
         });
 
         cleanupSpatialLinks = () => {
+          setHoveredLink(null);
           spatialLinks.forEach((link) => {
+            link.removeEventListener('pointerenter', onPointerEnter);
+            link.removeEventListener('pointerleave', onPointerLeave);
             link.removeEventListener('pointerdown', onPointerDown);
             link.removeEventListener('pointermove', onPointerMove);
             link.removeEventListener('pointerup', onPointerUp);
@@ -259,6 +333,8 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
         let frameId = 0;
         let controls = null;
         const preventTouchMove = (event) => event.preventDefault();
+        const raycaster = new THREE.Raycaster();
+        const rayPointer = new THREE.Vector2();
 
         const disposeObject = (object) => {
           object.traverse((child) => {
@@ -365,6 +441,25 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
         sculpture.scale.setScalar(normalizedScale);
         sculpture.add(model);
         scene.add(sculpture);
+
+        isPointCoveredByModel = (clientX, clientY) => {
+          const rect = renderer.domElement.getBoundingClientRect();
+          if (
+            rect.width <= 0 ||
+            rect.height <= 0 ||
+            clientX < rect.left ||
+            clientX > rect.right ||
+            clientY < rect.top ||
+            clientY > rect.bottom
+          ) {
+            return false;
+          }
+
+          rayPointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+          rayPointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+          raycaster.setFromCamera(rayPointer, camera);
+          return raycaster.intersectObject(sculpture, true).length > 0;
+        };
 
         const displayBox = new THREE.Box3().setFromObject(sculpture);
         const displaySphere = displayBox.getBoundingSphere(new THREE.Sphere());
@@ -574,7 +669,7 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
 
   .architect-spatial-link {
     color: #691b17;
-    cursor: pointer;
+    cursor: default;
     display: block;
     font-family: 'SF Pro Display Ultralight', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     font-size: clamp(1.35rem, 2.1vw, 2.15rem);
@@ -591,22 +686,15 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
     white-space: nowrap;
   }
 
+  .architect-spatial-link.is-visible-hit {
+    color: #000000;
+    cursor: pointer;
+  }
+
   .architect-spatial-link:focus-visible {
     color: #000000;
     outline: 1px solid #691b17;
     outline-offset: 0.45rem;
-  }
-
-  @media (hover: hover) and (pointer: fine) {
-    .architect-spatial-link:hover {
-      color: #000000;
-    }
-  }
-
-  @media (hover: none) and (pointer: coarse) {
-    .architect-spatial-link:active {
-      color: #000000;
-    }
   }
 
   .architect-spatial-link--projects {
