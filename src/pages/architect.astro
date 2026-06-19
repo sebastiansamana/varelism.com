@@ -476,7 +476,7 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
           const verticalFov = THREE.MathUtils.degToRad(camera.fov);
           const horizontalFov = 2 * Math.atan(Math.tan(verticalFov / 2) * aspect);
           const limitingFov = Math.min(verticalFov, horizontalFov);
-          const cameraFill = aspect < 0.72 ? 0.64 : aspect < 1 ? 0.54 : aspect > 2 ? 0.47 : 0.45;
+          const cameraFill = aspect < 0.72 ? 0.62 : aspect < 1 ? 0.52 : 0.44;
           const distance = (displayRadius / Math.sin(limitingFov / 2)) * cameraFill;
           const direction = hasAppliedInitialCameraBookmark
             ? camera.position.clone().sub(target).normalize()
@@ -634,6 +634,13 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
     overflow-x: hidden;
   }
 
+  :global(.site-shell) {
+    --architect-footer-offset: 7.5rem;
+    min-height: calc(100vh + var(--architect-footer-offset));
+    min-height: calc(100svh + var(--architect-footer-offset));
+    min-height: calc(100dvh + var(--architect-footer-offset));
+  }
+
   :global(.site-shell > main) {
     display: grid !important;
     max-width: none !important;
@@ -643,6 +650,19 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
     padding: 0 !important;
     place-items: center !important;
     width: 100% !important;
+  }
+
+  :global(.site-shell > .site-footer) {
+    bottom: auto;
+    left: 0;
+    pointer-events: none;
+    position: absolute;
+    right: 0;
+    top: 100vh;
+    top: 100svh;
+    top: 100dvh;
+    width: 100%;
+    z-index: 20;
   }
 
   .architect-stage {
