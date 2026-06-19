@@ -29,13 +29,6 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
         Projects
       </a>
       <a
-        class="architect-spatial-link architect-spatial-link--product-designs"
-        href="/productdesigns/"
-        data-architect-spatial-link
-      >
-        Product Designs
-      </a>
-      <a
         class="architect-spatial-link architect-spatial-link--portfolios"
         href="/portfolios/"
         data-architect-spatial-link
@@ -728,18 +721,13 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
   }
 
   .architect-spatial-link--projects {
-    --architect-link-x: 21%;
-    --architect-link-y: 43%;
-  }
-
-  .architect-spatial-link--product-designs {
-    --architect-link-x: 56%;
-    --architect-link-y: 68%;
+    --architect-link-x: 25%;
+    --architect-link-y: 52%;
   }
 
   .architect-spatial-link--portfolios {
-    --architect-link-x: 78%;
-    --architect-link-y: 57%;
+    --architect-link-x: 60%;
+    --architect-link-y: 52%;
   }
 
   .architect-viewer {
@@ -781,18 +769,25 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
 
   @media (min-width: 561px) and (max-width: 900px) {
     .architect-spatial-link--projects {
-      --architect-link-x: 19%;
-      --architect-link-y: 48%;
-    }
-
-    .architect-spatial-link--product-designs {
-      --architect-link-x: 56%;
-      --architect-link-y: 65%;
+      --architect-link-x: 25%;
+      --architect-link-y: 54%;
     }
 
     .architect-spatial-link--portfolios {
-      --architect-link-x: 78%;
-      --architect-link-y: 56%;
+      --architect-link-x: 70%;
+      --architect-link-y: 54%;
+    }
+  }
+
+  @media (min-width: 561px) and (max-width: 900px) and (max-height: 560px) {
+    .architect-spatial-link--projects {
+      --architect-link-x: 35%;
+      --architect-link-y: 60%;
+    }
+
+    .architect-spatial-link--portfolios {
+      --architect-link-x: 62%;
+      --architect-link-y: 60%;
     }
   }
 
@@ -809,17 +804,12 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
 
     .architect-spatial-link--projects {
       --architect-link-x: 22%;
-      --architect-link-y: 48%;
-    }
-
-    .architect-spatial-link--product-designs {
-      --architect-link-x: 52%;
-      --architect-link-y: 57%;
+      --architect-link-y: 51%;
     }
 
     .architect-spatial-link--portfolios {
-      --architect-link-x: 72%;
-      --architect-link-y: 53%;
+      --architect-link-x: 66%;
+      --architect-link-y: 51%;
     }
 
     .architect-viewer {
