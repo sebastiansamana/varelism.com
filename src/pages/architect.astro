@@ -305,6 +305,21 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
       const startViewer = async () => {
         if (didStart || hasDisposed) return;
         didStart = true;
+        const modelUrl = viewer.dataset.modelUrl || '/models/Processed_Rock_Model_optimized.glb';
+        const modelPath = modelUrl.slice(0, modelUrl.lastIndexOf('/') + 1);
+        const modelFetchController = new AbortController();
+        const modelBufferPromise = fetch(modelUrl, {
+          signal: modelFetchController.signal,
+        }).then((response) => {
+          if (!response.ok) {
+            throw new Error(`Architect model failed to load: ${response.status}`);
+          }
+
+          return response.arrayBuffer();
+        });
+        modelBufferPromise.catch(() => {
+          // The promise is awaited below; this prevents an abort during page swap from surfacing as unhandled.
+        });
 
         const [THREE, { GLTFLoader }, { TrackballControls }, { MeshoptDecoder }] = await Promise.all([
           import('three'),
@@ -326,6 +341,10 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
         const INITIAL_CAMERA_DIRECTION = new THREE.Vector3(0.43, 0.41, -0.8).normalize();
         let resizeObserver = null;
         let frameId = 0;
+        let resizeFrameId = 0;
+        let isRenderLoopRunning = false;
+        let requestRender = () => {};
+        let onVisibilityChange = null;
         let controls = null;
         const preventTouchMove = (event) => event.preventDefault();
         const raycaster = new THREE.Raycaster();
@@ -346,7 +365,13 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
 
         cleanup = () => {
           window.cancelAnimationFrame(frameId);
+          window.cancelAnimationFrame(resizeFrameId);
+          isRenderLoopRunning = false;
+          modelFetchController.abort();
           resizeObserver?.disconnect();
+          if (onVisibilityChange) {
+            document.removeEventListener('visibilitychange', onVisibilityChange);
+          }
           controlsElement.removeEventListener('touchmove', preventTouchMove);
           controlsElement.removeEventListener('pointerdown', onOrbitPointerDown);
           window.removeEventListener('pointermove', onOrbitPointerMove);
@@ -450,6 +475,7 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
           }
           terminalOrbit.active = true;
           terminalOrbit.paused = false;
+          requestRender();
         };
 
         const onOrbitPointerDown = (event) => {
@@ -462,6 +488,7 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
           orbitGesture.lastY = event.clientY;
           orbitGesture.hasDragged = false;
           pauseTerminalOrbit();
+          requestRender();
         };
 
         const onOrbitPointerMove = (event) => {
@@ -475,6 +502,7 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
 
           orbitGesture.hasDragged = true;
           stopTerminalOrbit();
+          requestRender();
         };
 
         const onOrbitPointerEnd = (event) => {
@@ -491,6 +519,7 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
           } else {
             resumeTerminalOrbit();
           }
+          requestRender();
         };
 
         const onOrbitPointerCancel = (event) => {
@@ -499,6 +528,7 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
           orbitGesture.activePointerId = null;
           orbitGesture.hasDragged = false;
           resumeTerminalOrbit();
+          requestRender();
         };
 
         const applyTerminalOrbit = () => {
@@ -519,7 +549,18 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
 
         const loader = new GLTFLoader();
         loader.setMeshoptDecoder(MeshoptDecoder);
-        const gltf = await loader.loadAsync(viewer.dataset.modelUrl || '/models/Processed_Rock_Model_optimized.glb');
+        let modelBuffer;
+
+        try {
+          modelBuffer = await modelBufferPromise;
+        } catch (error) {
+          if (hasDisposed) return;
+          throw error;
+        }
+
+        const gltf = await new Promise((resolve, reject) => {
+          loader.parse(modelBuffer, modelPath, resolve, reject);
+        });
         if (hasDisposed) {
           disposeObject(gltf.scene);
           return;
@@ -621,11 +662,20 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
           renderer.setSize(width, height, false);
           controls.handleResize();
           controls.update();
+          renderer.render(scene, camera);
         };
 
         fitCamera();
 
-        resizeObserver = new ResizeObserver(fitCamera);
+        const scheduleFitCamera = () => {
+          window.cancelAnimationFrame(resizeFrameId);
+          resizeFrameId = window.requestAnimationFrame(() => {
+            resizeFrameId = 0;
+            if (!hasDisposed) fitCamera();
+          });
+        };
+
+        resizeObserver = new ResizeObserver(scheduleFitCamera);
         resizeObserver.observe(viewer);
 
         const renderScene = () => {
@@ -633,6 +683,50 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
           controls.update();
           renderer.render(scene, camera);
         };
+
+        const hasResidualOrbitMotion = () => Math.abs(controls?._lastAngle || 0) > 0.00001;
+        const shouldRenderContinuously = () =>
+          !hasDisposed &&
+          !document.hidden &&
+          (orbitGesture.activePointerId !== null || terminalOrbit.active || hasResidualOrbitMotion());
+
+        const render = () => {
+          frameId = 0;
+          renderScene();
+
+          if (shouldRenderContinuously()) {
+            frameId = window.requestAnimationFrame(render);
+          } else {
+            isRenderLoopRunning = false;
+          }
+        };
+
+        requestRender = () => {
+          if (hasDisposed || document.hidden || isRenderLoopRunning) return;
+          isRenderLoopRunning = true;
+          frameId = window.requestAnimationFrame(render);
+        };
+
+        const stopRenderLoop = () => {
+          window.cancelAnimationFrame(frameId);
+          frameId = 0;
+          isRenderLoopRunning = false;
+        };
+
+        onVisibilityChange = () => {
+          if (document.hidden) {
+            stopRenderLoop();
+            return;
+          }
+
+          if (shouldRenderContinuously()) {
+            requestRender();
+          } else {
+            renderScene();
+          }
+        };
+        document.addEventListener('visibilitychange', onVisibilityChange);
+
         const positionSpatialLinksFromSilhouette = () => {
           const spatialLinks = getSpatialLinks();
           if (spatialLinks.length < 2) return;
@@ -833,10 +927,6 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
             link.style.setProperty('--architect-link-y', `${bestPlacement.y}px`);
           });
         };
-        const render = () => {
-          frameId = window.requestAnimationFrame(render);
-          renderScene();
-        };
         const renderStableFirstFrame = () =>
           new Promise((resolve) => {
             window.requestAnimationFrame(() => {
@@ -847,9 +937,10 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
 
         await renderStableFirstFrame();
         if (hasDisposed) return;
+        renderer.shadowMap.autoUpdate = false;
         positionSpatialLinksFromSilhouette();
         if (hasDisposed) return;
-        render();
+        renderScene();
         await new Promise((resolve) => {
           window.requestAnimationFrame(resolve);
         });
