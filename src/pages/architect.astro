@@ -644,9 +644,9 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
   :global(.site-shell > main) {
     display: grid !important;
     max-width: none !important;
-    min-height: 100vh !important;
-    min-height: 100svh !important;
-    min-height: 100dvh !important;
+    min-height: calc(100vh + var(--architect-footer-offset)) !important;
+    min-height: calc(100svh + var(--architect-footer-offset)) !important;
+    min-height: calc(100dvh + var(--architect-footer-offset)) !important;
     padding: 0 !important;
     place-items: center !important;
     width: 100% !important;
@@ -669,9 +669,9 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
     display: grid;
     cursor: grab;
     isolation: isolate;
-    min-height: 100vh;
-    min-height: 100svh;
-    min-height: 100dvh;
+    min-height: calc(100vh + var(--architect-footer-offset));
+    min-height: calc(100svh + var(--architect-footer-offset));
+    min-height: calc(100dvh + var(--architect-footer-offset));
     overflow: hidden;
     place-items: center;
     position: relative;
@@ -685,7 +685,10 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
   }
 
   .architect-spatial-nav {
-    inset: 0;
+    height: 100vh;
+    height: 100svh;
+    height: 100dvh;
+    inset: 0 0 auto;
     pointer-events: none;
     position: absolute;
     z-index: 1;
@@ -737,15 +740,17 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
   }
 
   .architect-viewer {
-    height: 100vh;
-    height: 100svh;
-    height: 100dvh;
-    inset: 0;
+    height: calc(100vh + var(--architect-footer-offset) + var(--architect-footer-offset));
+    height: calc(100svh + var(--architect-footer-offset) + var(--architect-footer-offset));
+    height: calc(100dvh + var(--architect-footer-offset) + var(--architect-footer-offset));
+    left: 0;
     min-height: 0;
     overflow: hidden;
     pointer-events: none;
     position: absolute;
+    right: 0;
     touch-action: none;
+    top: calc(0px - var(--architect-footer-offset));
     user-select: none;
     width: 100%;
     z-index: 2;
@@ -772,9 +777,9 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
 
   @media (max-width: 560px) {
     .architect-stage {
-      min-height: 100vh;
-      min-height: 100svh;
-      min-height: 100dvh;
+      min-height: calc(100vh + var(--architect-footer-offset));
+      min-height: calc(100svh + var(--architect-footer-offset));
+      min-height: calc(100dvh + var(--architect-footer-offset));
     }
 
     .architect-spatial-link {
@@ -797,9 +802,9 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
     }
 
     .architect-viewer {
-      height: 100vh;
-      height: 100svh;
-      height: 100dvh;
+      height: calc(100vh + var(--architect-footer-offset) + var(--architect-footer-offset));
+      height: calc(100svh + var(--architect-footer-offset) + var(--architect-footer-offset));
+      height: calc(100dvh + var(--architect-footer-offset) + var(--architect-footer-offset));
       width: 100%;
     }
 
