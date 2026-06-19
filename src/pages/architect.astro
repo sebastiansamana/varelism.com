@@ -90,6 +90,10 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
       let cleanupSpatialLinks = () => {};
       let isPointCoveredByModel = () => true;
       const preloaderTimers = new Set();
+      const getSpatialLinks = () =>
+        Array.from(controlsElement.querySelectorAll('[data-architect-spatial-link]')).filter(
+          (link) => link instanceof HTMLAnchorElement,
+        );
 
       const videoVisibleMs = 1000;
       const videoFadeMs = 300;
@@ -134,9 +138,7 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
       }, videoVisibleMs);
 
       const installSpatialLinkGuards = () => {
-        const spatialLinks = Array.from(
-          controlsElement.querySelectorAll('[data-architect-spatial-link]'),
-        ).filter((link) => link instanceof HTMLAnchorElement);
+        const spatialLinks = getSpatialLinks();
         const dragThreshold = 10;
         let activePointer = null;
         let hoveredLink = null;
@@ -497,6 +499,206 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
           controls.update();
           renderer.render(scene, camera);
         };
+        const positionSpatialLinksFromSilhouette = () => {
+          const spatialLinks = getSpatialLinks();
+          if (spatialLinks.length < 2) return;
+
+          renderScene();
+
+          const canvasRect = renderer.domElement.getBoundingClientRect();
+          const viewportWidth = window.innerWidth || canvasRect.width;
+          const viewportHeight = window.innerHeight || canvasRect.height;
+          const gl = renderer.getContext();
+          const drawingWidth = gl.drawingBufferWidth;
+          const drawingHeight = gl.drawingBufferHeight;
+
+          if (
+            !canvasRect.width ||
+            !canvasRect.height ||
+            !drawingWidth ||
+            !drawingHeight ||
+            !viewportWidth ||
+            !viewportHeight
+          ) {
+            return;
+          }
+
+          const pixels = new Uint8Array(drawingWidth * drawingHeight * 4);
+          gl.readPixels(0, 0, drawingWidth, drawingHeight, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+
+          const scaleX = drawingWidth / canvasRect.width;
+          const scaleY = drawingHeight / canvasRect.height;
+          const alphaThreshold = 96;
+          const gridStep = Math.max(2, Math.min(5, Math.round(Math.min(viewportWidth, viewportHeight) / 220)));
+          const columns = Math.max(1, Math.ceil(canvasRect.width / gridStep) + 1);
+          const rows = Math.max(1, Math.ceil(canvasRect.height / gridStep) + 1);
+          const covered = new Uint8Array(columns * rows);
+
+          const getAlphaAt = (clientX, clientY) => {
+            const bufferX = Math.floor((clientX - canvasRect.left) * scaleX);
+            const bufferYFromTop = Math.floor((clientY - canvasRect.top) * scaleY);
+            const bufferY = drawingHeight - 1 - bufferYFromTop;
+
+            if (bufferX < 0 || bufferX >= drawingWidth || bufferY < 0 || bufferY >= drawingHeight) {
+              return 0;
+            }
+
+            return pixels[(bufferY * drawingWidth + bufferX) * 4 + 3];
+          };
+
+          for (let row = 0; row < rows; row += 1) {
+            const y = canvasRect.top + row * gridStep;
+            for (let column = 0; column < columns; column += 1) {
+              const x = canvasRect.left + column * gridStep;
+              covered[row * columns + column] = getAlphaAt(x, y) >= alphaThreshold ? 1 : 0;
+            }
+          }
+
+          const integralWidth = columns + 1;
+          const integral = new Uint32Array((rows + 1) * integralWidth);
+
+          for (let row = 1; row <= rows; row += 1) {
+            let rowSum = 0;
+            for (let column = 1; column <= columns; column += 1) {
+              rowSum += covered[(row - 1) * columns + (column - 1)];
+              integral[row * integralWidth + column] =
+                integral[(row - 1) * integralWidth + column] + rowSum;
+            }
+          }
+
+          const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+          const getCoveredCount = (left, top, right, bottom) => {
+            const x1 = clamp(Math.floor((left - canvasRect.left) / gridStep), 0, columns - 1);
+            const y1 = clamp(Math.floor((top - canvasRect.top) / gridStep), 0, rows - 1);
+            const x2 = clamp(Math.ceil((right - canvasRect.left) / gridStep), 0, columns - 1);
+            const y2 = clamp(Math.ceil((bottom - canvasRect.top) / gridStep), 0, rows - 1);
+            const area = (x2 - x1 + 1) * (y2 - y1 + 1);
+            const coveredArea =
+              integral[(y2 + 1) * integralWidth + (x2 + 1)] -
+              integral[y1 * integralWidth + (x2 + 1)] -
+              integral[(y2 + 1) * integralWidth + x1] +
+              integral[y1 * integralWidth + x1];
+
+            return { area, coveredArea };
+          };
+
+          const isRectInsideSilhouette = (rect, safetyInset) => {
+            const left = rect.left - safetyInset;
+            const top = rect.top - safetyInset;
+            const right = rect.right + safetyInset;
+            const bottom = rect.bottom + safetyInset;
+
+            if (
+              left < canvasRect.left ||
+              top < canvasRect.top ||
+              right > canvasRect.right ||
+              bottom > canvasRect.bottom
+            ) {
+              return false;
+            }
+
+            const corners = [
+              [left, top],
+              [right, top],
+              [left, bottom],
+              [right, bottom],
+            ];
+
+            if (corners.some(([x, y]) => getAlphaAt(x, y) < alphaThreshold)) {
+              return false;
+            }
+
+            const { area, coveredArea } = getCoveredCount(left, top, right, bottom);
+            return area > 0 && area === coveredArea;
+          };
+
+          const getValidCenters = (labelRect, centerY, safetyInset) => {
+            const halfWidth = labelRect.width / 2;
+            const halfHeight = labelRect.height / 2;
+            const minCenterX = canvasRect.left + halfWidth + safetyInset;
+            const maxCenterX = canvasRect.right - halfWidth - safetyInset;
+            const centers = [];
+
+            for (let centerX = minCenterX; centerX <= maxCenterX; centerX += gridStep) {
+              const candidateRect = {
+                left: centerX - halfWidth,
+                right: centerX + halfWidth,
+                top: centerY - halfHeight,
+                bottom: centerY + halfHeight,
+              };
+
+              if (isRectInsideSilhouette(candidateRect, safetyInset)) {
+                centers.push(centerX);
+              }
+            }
+
+            return centers;
+          };
+
+          const labelRects = spatialLinks.map((link) => link.getBoundingClientRect());
+          const baseSafetyInset = clamp(Math.round(Math.min(viewportWidth, viewportHeight) * 0.045), 20, 40);
+          const safetyAttempts = [
+            baseSafetyInset,
+            Math.round(baseSafetyInset * 0.8),
+            Math.round(baseSafetyInset * 0.65),
+            Math.round(baseSafetyInset * 0.5),
+          ];
+          const preferredY = viewportHeight * 0.55;
+          const minCenterGap = Math.max(
+            24,
+            labelRects[0].width / 2 + labelRects[1].width / 2 + baseSafetyInset,
+          );
+          let bestPlacement = null;
+
+          for (const safetyInset of safetyAttempts) {
+            const minY =
+              canvasRect.top +
+              Math.max(
+                labelRects[0].height / 2 + safetyInset,
+                labelRects[1].height / 2 + safetyInset,
+                viewportHeight * 0.24,
+              );
+            const maxY =
+              canvasRect.top +
+              Math.min(
+                canvasRect.height - Math.max(labelRects[0].height, labelRects[1].height) / 2 - safetyInset,
+                viewportHeight * 0.78,
+              );
+
+            for (let centerY = minY; centerY <= maxY; centerY += gridStep) {
+              const leftCenters = getValidCenters(labelRects[0], centerY, safetyInset);
+              const rightCenters = getValidCenters(labelRects[1], centerY, safetyInset);
+              if (!leftCenters.length || !rightCenters.length) continue;
+
+              const leftCenter = leftCenters[0];
+              const rightCenter = [...rightCenters].reverse().find((centerX) => {
+                return centerX - leftCenter >= minCenterGap;
+              });
+
+              if (typeof rightCenter !== 'number') continue;
+
+              const separation = rightCenter - leftCenter;
+              const score = separation - Math.abs(centerY - preferredY) * 0.12 + safetyInset * 0.4;
+
+              if (!bestPlacement || score > bestPlacement.score) {
+                bestPlacement = {
+                  centers: [leftCenter, rightCenter],
+                  score,
+                  y: centerY,
+                };
+              }
+            }
+
+            if (bestPlacement) break;
+          }
+
+          if (!bestPlacement) return;
+
+          spatialLinks.slice(0, 2).forEach((link, index) => {
+            link.style.setProperty('--architect-link-x', `${bestPlacement.centers[index]}px`);
+            link.style.setProperty('--architect-link-y', `${bestPlacement.y}px`);
+          });
+        };
         const render = () => {
           frameId = window.requestAnimationFrame(render);
           renderScene();
@@ -510,6 +712,8 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
           });
 
         await renderStableFirstFrame();
+        if (hasDisposed) return;
+        positionSpatialLinksFromSilhouette();
         if (hasDisposed) return;
         render();
         await new Promise((resolve) => {
