@@ -348,6 +348,10 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
           window.cancelAnimationFrame(frameId);
           resizeObserver?.disconnect();
           controlsElement.removeEventListener('touchmove', preventTouchMove);
+          controlsElement.removeEventListener('pointerdown', onOrbitPointerDown);
+          window.removeEventListener('pointermove', onOrbitPointerMove);
+          window.removeEventListener('pointerup', onOrbitPointerEnd);
+          window.removeEventListener('pointercancel', onOrbitPointerCancel);
           controls?.dispose();
           disposeScene();
           renderer.dispose();
@@ -382,7 +386,136 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
         controls.dynamicDampingFactor = 0.055;
         controls.target.set(0, 0, 0);
 
+        const terminalOrbit = {
+          active: false,
+          paused: false,
+          axis: new THREE.Vector3(),
+        };
+        const orbitGesture = {
+          activePointerId: null,
+          startX: 0,
+          startY: 0,
+          lastX: 0,
+          lastY: 0,
+          hasDragged: false,
+        };
+        const orbitDragThreshold = 5;
+        const terminalOrbitAngle = 0.00115;
+        const minimumCapturedOrbitAngle = 0.00008;
+
+        const pauseTerminalOrbit = () => {
+          if (terminalOrbit.active) terminalOrbit.paused = true;
+        };
+
+        const resumeTerminalOrbit = () => {
+          terminalOrbit.paused = false;
+        };
+
+        const stopTerminalOrbit = () => {
+          terminalOrbit.active = false;
+          terminalOrbit.paused = false;
+        };
+
+        const getFallbackOrbitAxis = () => {
+          const deltaX = orbitGesture.lastX - orbitGesture.startX;
+          const deltaY = orbitGesture.lastY - orbitGesture.startY;
+          if (Math.hypot(deltaX, deltaY) <= orbitDragThreshold) return null;
+
+          const eye = new THREE.Vector3().subVectors(camera.position, controls.target);
+          const eyeDirection = eye.clone().normalize();
+          const upDirection = camera.up.clone().normalize().setLength(deltaY);
+          const sidewaysDirection = camera.up.clone().cross(eyeDirection).normalize().setLength(deltaX);
+          const moveDirection = upDirection.add(sidewaysDirection);
+          const axis = new THREE.Vector3().crossVectors(moveDirection, eye).normalize();
+
+          return axis.lengthSq() > 0.000001 ? axis : null;
+        };
+
+        const captureTerminalOrbit = () => {
+          const angle = Math.abs(controls?._lastAngle || 0);
+          const axis = controls?._lastAxis;
+          const hasTrackedAxis = axis && typeof axis.lengthSq === 'function' && axis.lengthSq() > 0.000001;
+          const fallbackAxis = getFallbackOrbitAxis();
+          const capturedAxis =
+            hasTrackedAxis && angle > terminalOrbitAngle * 1.2 ? axis : fallbackAxis || axis;
+
+          if (!capturedAxis || capturedAxis.lengthSq() <= 0.000001) {
+            stopTerminalOrbit();
+            return;
+          }
+
+          terminalOrbit.axis.copy(capturedAxis).normalize();
+          if (angle < Math.max(minimumCapturedOrbitAngle, terminalOrbitAngle)) {
+            controls._lastAngle = terminalOrbitAngle;
+          }
+          terminalOrbit.active = true;
+          terminalOrbit.paused = false;
+        };
+
+        const onOrbitPointerDown = (event) => {
+          if (event.button !== undefined && event.button !== 0) return;
+
+          orbitGesture.activePointerId = event.pointerId;
+          orbitGesture.startX = event.clientX;
+          orbitGesture.startY = event.clientY;
+          orbitGesture.lastX = event.clientX;
+          orbitGesture.lastY = event.clientY;
+          orbitGesture.hasDragged = false;
+          pauseTerminalOrbit();
+        };
+
+        const onOrbitPointerMove = (event) => {
+          if (orbitGesture.activePointerId !== event.pointerId) return;
+
+          const deltaX = event.clientX - orbitGesture.startX;
+          const deltaY = event.clientY - orbitGesture.startY;
+          orbitGesture.lastX = event.clientX;
+          orbitGesture.lastY = event.clientY;
+          if (Math.hypot(deltaX, deltaY) <= orbitDragThreshold) return;
+
+          orbitGesture.hasDragged = true;
+          stopTerminalOrbit();
+        };
+
+        const onOrbitPointerEnd = (event) => {
+          if (orbitGesture.activePointerId !== event.pointerId) return;
+
+          const didDrag = orbitGesture.hasDragged;
+          orbitGesture.lastX = event.clientX;
+          orbitGesture.lastY = event.clientY;
+          orbitGesture.activePointerId = null;
+          orbitGesture.hasDragged = false;
+
+          if (didDrag) {
+            captureTerminalOrbit();
+          } else {
+            resumeTerminalOrbit();
+          }
+        };
+
+        const onOrbitPointerCancel = (event) => {
+          if (orbitGesture.activePointerId !== event.pointerId) return;
+
+          orbitGesture.activePointerId = null;
+          orbitGesture.hasDragged = false;
+          resumeTerminalOrbit();
+        };
+
+        const applyTerminalOrbit = () => {
+          if (!terminalOrbit.active || terminalOrbit.paused || orbitGesture.activePointerId !== null) return;
+          if (!controls?._lastAxis || typeof controls._lastAngle !== 'number') return;
+
+          controls._lastAxis.copy(terminalOrbit.axis);
+          if (Math.abs(controls._lastAngle) < terminalOrbitAngle) {
+            controls._lastAngle = terminalOrbitAngle;
+          }
+        };
+
         controlsElement.addEventListener('touchmove', preventTouchMove, { passive: false });
+        controlsElement.addEventListener('pointerdown', onOrbitPointerDown);
+        window.addEventListener('pointermove', onOrbitPointerMove);
+        window.addEventListener('pointerup', onOrbitPointerEnd);
+        window.addEventListener('pointercancel', onOrbitPointerCancel);
 
         const loader = new GLTFLoader();
         loader.setMeshoptDecoder(MeshoptDecoder);
@@ -496,6 +629,7 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
         resizeObserver.observe(viewer);
 
         const renderScene = () => {
+          applyTerminalOrbit();
           controls.update();
           renderer.render(scene, camera);
         };
