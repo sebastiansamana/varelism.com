@@ -703,11 +703,13 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
     font-size: clamp(1.35rem, 2.1vw, 2.15rem);
     font-weight: 300;
     letter-spacing: 0;
+    left: var(--architect-link-x);
     line-height: 1;
     pointer-events: auto;
     position: absolute;
     text-align: center;
     text-decoration: none;
+    top: var(--architect-link-y);
     touch-action: none;
     transform: translate(-50%, -50%);
     transition: color 180ms ease;
@@ -726,18 +728,18 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
   }
 
   .architect-spatial-link--projects {
-    left: 25%;
-    top: 40%;
+    --architect-link-x: 21%;
+    --architect-link-y: 43%;
   }
 
   .architect-spatial-link--product-designs {
-    left: 56.5%;
-    top: 74%;
+    --architect-link-x: 56%;
+    --architect-link-y: 68%;
   }
 
   .architect-spatial-link--portfolios {
-    left: 78.5%;
-    top: 60%;
+    --architect-link-x: 78%;
+    --architect-link-y: 57%;
   }
 
   .architect-viewer {
@@ -777,6 +779,23 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
     visibility: visible;
   }
 
+  @media (min-width: 561px) and (max-width: 900px) {
+    .architect-spatial-link--projects {
+      --architect-link-x: 19%;
+      --architect-link-y: 48%;
+    }
+
+    .architect-spatial-link--product-designs {
+      --architect-link-x: 56%;
+      --architect-link-y: 65%;
+    }
+
+    .architect-spatial-link--portfolios {
+      --architect-link-x: 78%;
+      --architect-link-y: 56%;
+    }
+  }
+
   @media (max-width: 560px) {
     .architect-stage {
       min-height: calc(100vh + var(--architect-footer-offset));
@@ -789,18 +808,18 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
     }
 
     .architect-spatial-link--projects {
-      left: 22%;
-      top: 48%;
+      --architect-link-x: 22%;
+      --architect-link-y: 48%;
     }
 
     .architect-spatial-link--product-designs {
-      left: 52%;
-      top: 57%;
+      --architect-link-x: 52%;
+      --architect-link-y: 57%;
     }
 
     .architect-spatial-link--portfolios {
-      left: 72%;
-      top: 53%;
+      --architect-link-x: 72%;
+      --architect-link-y: 53%;
     }
 
     .architect-viewer {
