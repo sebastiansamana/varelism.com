@@ -134,34 +134,58 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       const edgeInsetX = clamp(minDimension * 0.09, 26, 90);
       const edgeInsetY = clamp(minDimension * 0.1, 28, 84);
       const textPadding = clamp(typographyScale * 0.14, width <= 560 ? 3 : 4, width <= 560 ? 5 : 6);
+      const safeRect = {
+        bottom: height - edgeInsetY,
+        left: edgeInsetX,
+        right: width - edgeInsetX,
+        top: edgeInsetY,
+      };
+      const viewportSplitX = clamp(window.innerWidth / 2 - canvasRect.left, safeRect.left, safeRect.right);
 
       return {
+        anchorPadding: 10,
         canvasRect,
         edgeInsetX,
         edgeInsetY,
         height,
         minDimension,
-        safeRect: {
-          bottom: height - edgeInsetY,
-          left: edgeInsetX,
-          right: width - edgeInsetX,
-          top: edgeInsetY,
-        },
+        safeRect,
         textPadding,
+        viewportSplitX,
         width,
       };
     };
 
     const calculateRandomTextPositions = (sizes, margins) => {
-      const { minDimension, safeRect, textPadding, width, height } = margins;
-      const centerRange = (size) => ({
-        maxX: Math.max(safeRect.left + size.width / 2, safeRect.right - size.width / 2),
-        maxY: Math.max(safeRect.top + size.height / 2, safeRect.bottom - size.height / 2),
-        minX: safeRect.left + size.width / 2,
-        minY: safeRect.top + size.height / 2,
-      });
-      const createPlacement = (size) => {
-        const range = centerRange(size);
+      const { minDimension, safeRect, textPadding, viewportSplitX, width, height } = margins;
+      const splitX = clamp(viewportSplitX, safeRect.left, safeRect.right);
+      const booksBounds = {
+        bottom: safeRect.bottom,
+        left: safeRect.left,
+        right: Math.min(safeRect.right, splitX),
+        top: safeRect.top,
+      };
+      const archivesBounds = {
+        bottom: safeRect.bottom,
+        left: Math.max(safeRect.left, splitX),
+        right: safeRect.right,
+        top: safeRect.top,
+      };
+      const centerRange = (size, bounds) => {
+        const minX = bounds.left + size.width / 2;
+        const maxX = bounds.right - size.width / 2;
+        const minY = bounds.top + size.height / 2;
+        const maxY = bounds.bottom - size.height / 2;
+
+        return {
+          maxX: Math.max(minX, maxX),
+          maxY: Math.max(minY, maxY),
+          minX,
+          minY,
+        };
+      };
+      const createPlacement = (size, bounds) => {
+        const range = centerRange(size, bounds);
 
         return {
           height: size.height,
@@ -175,8 +199,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       const maxDistance = Math.hypot(width, height) * 0.88;
 
       for (let attempt = 0; attempt < 900; attempt += 1) {
-        const books = createPlacement(sizes[0]);
-        const archives = createPlacement(sizes[1]);
+        const books = createPlacement(sizes[0], booksBounds);
+        const archives = createPlacement(sizes[1], archivesBounds);
         const booksRect = getPaddedRect(getPlacementRect(books), textPadding);
         const archivesRect = getPaddedRect(getPlacementRect(archives), textPadding);
         const gap = getRectGap(booksRect, archivesRect);
@@ -187,70 +211,66 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         }
       }
 
-      const firstRange = centerRange(sizes[0]);
-      const secondRange = centerRange(sizes[1]);
-      const horizontal = width >= height;
+      const firstRange = centerRange(sizes[0], booksBounds);
+      const secondRange = centerRange(sizes[1], archivesBounds);
 
       return [
         {
           height: sizes[0].height,
           width: sizes[0].width,
-          x: horizontal ? firstRange.minX : randomBetween(firstRange.minX, firstRange.maxX),
-          y: horizontal ? randomBetween(firstRange.minY, firstRange.maxY) : firstRange.minY,
+          x: firstRange.minX,
+          y: randomBetween(firstRange.minY, firstRange.maxY),
         },
         {
           height: sizes[1].height,
           width: sizes[1].width,
-          x: horizontal ? secondRange.maxX : randomBetween(secondRange.minX, secondRange.maxX),
-          y: horizontal ? randomBetween(secondRange.minY, secondRange.maxY) : secondRange.maxY,
+          x: secondRange.maxX,
+          y: randomBetween(secondRange.minY, secondRange.maxY),
         },
       ];
     };
 
-    const getClosestPointsBetweenRects = (first, second) => {
-      let firstX;
-      let secondX;
-      let firstY;
-      let secondY;
-
-      if (first.right < second.left) {
-        firstX = first.right;
-        secondX = second.left;
-      } else if (second.right < first.left) {
-        firstX = first.left;
-        secondX = second.right;
-      } else {
-        firstX = (Math.max(first.left, second.left) + Math.min(first.right, second.right)) / 2;
-        secondX = firstX;
-      }
-
-      if (first.bottom < second.top) {
-        firstY = first.bottom;
-        secondY = second.top;
-      } else if (second.bottom < first.top) {
-        firstY = first.top;
-        secondY = second.bottom;
-      } else {
-        firstY = (Math.max(first.top, second.top) + Math.min(first.bottom, second.bottom)) / 2;
-        secondY = firstY;
-      }
-
-      return {
-        end: { x: secondX, y: secondY },
-        start: { x: firstX, y: firstY },
+    const getCompassAnchorPoint = (rect, anchor) => {
+      const center = getRectCenter(rect);
+      const anchors = {
+        E: { x: rect.right, y: center.y },
+        N: { x: center.x, y: rect.top },
+        NE: { x: rect.right, y: rect.top },
+        NW: { x: rect.left, y: rect.top },
+        S: { x: center.x, y: rect.bottom },
+        SE: { x: rect.right, y: rect.bottom },
+        SW: { x: rect.left, y: rect.bottom },
+        W: { x: rect.left, y: center.y },
       };
+
+      return anchors[anchor] || center;
+    };
+
+    const getCompassAnchorPair = (booksRect, archivesRect) => {
+      const booksCenter = getRectCenter(booksRect);
+      const archivesCenter = getRectCenter(archivesRect);
+      const deltaX = Math.max(1, archivesCenter.x - booksCenter.x);
+      const deltaY = archivesCenter.y - booksCenter.y;
+      const angle = (Math.atan2(deltaY, deltaX) * 180) / Math.PI;
+
+      if (angle < -60) return { archives: 'SW', books: 'N' };
+      if (angle < -22) return { archives: 'SW', books: 'NE' };
+      if (angle <= 22) return { archives: 'W', books: 'E' };
+      if (angle <= 60) return { archives: 'NW', books: 'SE' };
+
+      return { archives: 'NW', books: 'S' };
     };
 
     const getClosestAnchorPoints = (booksRect, archivesRect, padding) => {
       const booksSafeRect = getPaddedRect(booksRect, padding);
       const archivesSafeRect = getPaddedRect(archivesRect, padding);
-      const anchors = getClosestPointsBetweenRects(booksSafeRect, archivesSafeRect);
+      const anchors = getCompassAnchorPair(booksSafeRect, archivesSafeRect);
 
       return {
         archivesSafeRect,
         booksSafeRect,
-        endPoint: anchors.end,
-        startPoint: anchors.start,
+        endPoint: getCompassAnchorPoint(archivesSafeRect, anchors.archives),
+        startPoint: getCompassAnchorPoint(booksSafeRect, anchors.books),
       };
     };
 
@@ -515,7 +535,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         const canvasRect = stage.getBoundingClientRect();
         const booksRect = getTextRect(links[0], canvasRect);
         const archivesRect = getTextRect(links[1], canvasRect);
-        const anchorData = getClosestAnchorPoints(booksRect, archivesRect, margins.textPadding);
+        const anchorData = getClosestAnchorPoints(booksRect, archivesRect, margins.anchorPadding);
         const curve = generateOrganicSingleStrokePath(
           {
             endPoint: anchorData.endPoint,
