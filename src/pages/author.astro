@@ -93,6 +93,26 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       top: rect.top - canvasRect.top,
       width: rect.width,
     });
+    let textMetricsContext = null;
+    const getTextMetricsContext = () => {
+      if (textMetricsContext) return textMetricsContext;
+
+      textMetricsContext = document.createElement('canvas').getContext('2d');
+      return textMetricsContext;
+    };
+    const getCanvasFont = (styles) =>
+      [styles.fontStyle, styles.fontVariant, styles.fontWeight, styles.fontSize, styles.fontFamily]
+        .filter(Boolean)
+        .join(' ');
+    const applyTextMetricsStyles = (context, styles) => {
+      context.font = getCanvasFont(styles);
+      context.textAlign = 'left';
+      context.textBaseline = 'alphabetic';
+
+      if ('direction' in context) context.direction = styles.direction;
+      if ('fontKerning' in context) context.fontKerning = styles.fontKerning;
+      if ('letterSpacing' in context) context.letterSpacing = styles.letterSpacing;
+    };
 
     const createConnectorPath = (svg) => {
       const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
@@ -115,8 +135,106 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       return path;
     };
 
-    const getTextRect = (link, canvasRect) => {
-      return toCanvasRect(link.getBoundingClientRect(), canvasRect);
+    const getTextGeometry = (link, canvasRect) => {
+      const fallbackRect = toCanvasRect(link.getBoundingClientRect(), canvasRect);
+      const context = getTextMetricsContext();
+      const fallbackGeometry = {
+        getSupportPoint: (anchor) => getCompassAnchorPoint(fallbackRect, anchor),
+        rect: fallbackRect,
+      };
+
+      if (!context) return fallbackGeometry;
+
+      const styles = window.getComputedStyle(link);
+      const text = link.textContent?.trim() || '';
+
+      applyTextMetricsStyles(context, styles);
+      const metrics = context.measureText(text);
+      const measuredWidth = Number.isFinite(metrics.width) && metrics.width > 0 ? metrics.width : fallbackRect.width;
+      const leftBearing = Number.isFinite(metrics.actualBoundingBoxLeft) ? metrics.actualBoundingBoxLeft : 0;
+      const rightBearing =
+        Number.isFinite(metrics.actualBoundingBoxRight) && metrics.actualBoundingBoxRight > 0
+          ? metrics.actualBoundingBoxRight
+          : measuredWidth;
+      const ascent =
+        Number.isFinite(metrics.actualBoundingBoxAscent) && metrics.actualBoundingBoxAscent > 0
+          ? metrics.actualBoundingBoxAscent
+          : fallbackRect.height;
+      const descent =
+        Number.isFinite(metrics.actualBoundingBoxDescent) && metrics.actualBoundingBoxDescent > 0
+          ? metrics.actualBoundingBoxDescent
+          : 0;
+      const widthOffset = (fallbackRect.width - measuredWidth) / 2;
+      const inkHeight = Math.max(1, ascent + descent);
+      const top = fallbackRect.top + (fallbackRect.height - inkHeight) / 2;
+      const left = fallbackRect.left + widthOffset - leftBearing;
+      const right = fallbackRect.left + widthOffset + rightBearing;
+      const bottom = top + inkHeight;
+
+      if (right <= left || bottom <= top) return fallbackGeometry;
+
+      const rect = {
+        bottom,
+        height: bottom - top,
+        left,
+        right,
+        top,
+        width: right - left,
+      };
+      const padding = Math.ceil(Math.max(ascent, descent, 12) + 8);
+      const bitmapWidth = Math.max(1, Math.ceil(measuredWidth + padding * 2));
+      const bitmapHeight = Math.max(1, Math.ceil(inkHeight + padding * 2));
+
+      context.canvas.width = bitmapWidth;
+      context.canvas.height = bitmapHeight;
+      applyTextMetricsStyles(context, styles);
+      context.clearRect(0, 0, bitmapWidth, bitmapHeight);
+      context.fillStyle = '#000000';
+      context.fillText(text, padding, padding + ascent);
+
+      const imageData = context.getImageData(0, 0, bitmapWidth, bitmapHeight).data;
+      const originX = fallbackRect.left + widthOffset;
+      const baselineY = top + ascent;
+      const inkPixels = [];
+
+      for (let y = 0; y < bitmapHeight; y += 1) {
+        for (let x = 0; x < bitmapWidth; x += 1) {
+          const alpha = imageData[(y * bitmapWidth + x) * 4 + 3];
+
+          if (alpha <= 24) continue;
+
+          inkPixels.push({
+            x: originX + x + 0.5 - padding,
+            y: baselineY + y + 0.5 - padding - ascent,
+          });
+        }
+      }
+
+      if (inkPixels.length === 0) return fallbackGeometry;
+
+      return {
+        getSupportPoint: (anchor) => {
+          const direction = getCompassAnchorDirection(anchor);
+          let maxProjection = Number.NEGATIVE_INFINITY;
+
+          inkPixels.forEach((point) => {
+            maxProjection = Math.max(maxProjection, point.x * direction.x + point.y * direction.y);
+          });
+
+          const supportPoints = inkPixels.filter(
+            (point) => maxProjection - (point.x * direction.x + point.y * direction.y) <= 0.75,
+          );
+
+          return supportPoints.reduce(
+            (point, current) => ({
+              x: point.x + current.x / supportPoints.length,
+              y: point.y + current.y / supportPoints.length,
+            }),
+            { x: 0, y: 0 },
+          );
+        },
+        rect,
+      };
     };
 
     const calculateSafeMargins = (stage, links) => {
@@ -272,14 +390,14 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       return { archives: 'NW', books: 'S' };
     };
 
-    const getClosestAnchorPoints = (booksRect, archivesRect, padding) => {
-      const booksSafeRect = getPaddedRect(booksRect, padding);
-      const archivesSafeRect = getPaddedRect(archivesRect, padding);
+    const getClosestAnchorPoints = (booksGeometry, archivesGeometry, padding) => {
+      const booksSafeRect = getPaddedRect(booksGeometry.rect, padding);
+      const archivesSafeRect = getPaddedRect(archivesGeometry.rect, padding);
       const anchors = getCompassAnchorPair(booksSafeRect, archivesSafeRect);
       const booksDirection = getCompassAnchorDirection(anchors.books);
       const archivesDirection = getCompassAnchorDirection(anchors.archives);
-      const booksReferencePoint = getCompassAnchorPoint(booksRect, anchors.books);
-      const archivesReferencePoint = getCompassAnchorPoint(archivesRect, anchors.archives);
+      const booksReferencePoint = booksGeometry.getSupportPoint(anchors.books);
+      const archivesReferencePoint = archivesGeometry.getSupportPoint(anchors.archives);
 
       return {
         archiveAnchor: anchors.archives,
@@ -624,9 +742,9 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         stage.classList.add('is-positioned');
 
         const canvasRect = stage.getBoundingClientRect();
-        const booksRect = getTextRect(links[0], canvasRect);
-        const archivesRect = getTextRect(links[1], canvasRect);
-        const anchorData = getClosestAnchorPoints(booksRect, archivesRect, margins.textToLineGap);
+        const booksGeometry = getTextGeometry(links[0], canvasRect);
+        const archivesGeometry = getTextGeometry(links[1], canvasRect);
+        const anchorData = getClosestAnchorPoints(booksGeometry, archivesGeometry, margins.textToLineGap);
         const curve = generateOrganicSingleStrokePath(
           {
             endPoint: anchorData.endPoint,
