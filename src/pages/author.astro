@@ -76,11 +76,6 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       };
     };
 
-    const getClosestPointOnRect = (rect, point) => ({
-      x: clamp(point.x, rect.left, rect.right),
-      y: clamp(point.y, rect.top, rect.bottom),
-    });
-
     const getUnionRect = (rects) => {
       const left = Math.min(...rects.map((rect) => rect.left));
       const right = Math.max(...rects.map((rect) => rect.right));
@@ -156,43 +151,49 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       };
     };
 
-    const getWordAnchor = (wordGeometry, targetPoint, padding) => {
-      let closestRect = wordGeometry.letterRects[0];
-      let reference = getClosestPointOnRect(closestRect, targetPoint);
-      let closestDistance = Math.hypot(targetPoint.x - reference.x, targetPoint.y - reference.y);
+    const getRayRectIntersection = (rect, direction) => {
+      const center = getRectCenter(rect);
+      const candidates = [];
 
-      wordGeometry.letterRects.slice(1).forEach((rect) => {
-        const candidateReference = getClosestPointOnRect(rect, targetPoint);
-        const candidateDistance = Math.hypot(
-          targetPoint.x - candidateReference.x,
-          targetPoint.y - candidateReference.y,
-        );
+      if (Math.abs(direction.x) > 0.001) {
+        const edgeX = direction.x > 0 ? rect.right : rect.left;
+        const t = (edgeX - center.x) / direction.x;
+        const y = center.y + direction.y * t;
 
-        if (candidateDistance < closestDistance) {
-          closestDistance = candidateDistance;
-          closestRect = rect;
-          reference = candidateReference;
+        if (t >= 0 && y >= rect.top - 0.5 && y <= rect.bottom + 0.5) {
+          candidates.push({
+            point: { x: edgeX, y: clamp(y, rect.top, rect.bottom) },
+            t,
+          });
         }
-      });
+      }
 
-      const closestRectCenter = getRectCenter(closestRect);
-      const wordCenter = getRectCenter(wordGeometry.wordRect);
-      const normal = normalizeVector(
-        {
-          x: targetPoint.x - reference.x,
-          y: targetPoint.y - reference.y,
-        },
-        normalizeVector(
-          {
-            x: targetPoint.x - closestRectCenter.x,
-            y: targetPoint.y - closestRectCenter.y,
-          },
-          normalizeVector({
-            x: targetPoint.x - wordCenter.x,
-            y: targetPoint.y - wordCenter.y,
-          }),
-        ),
-      );
+      if (Math.abs(direction.y) > 0.001) {
+        const edgeY = direction.y > 0 ? rect.bottom : rect.top;
+        const t = (edgeY - center.y) / direction.y;
+        const x = center.x + direction.x * t;
+
+        if (t >= 0 && x >= rect.left - 0.5 && x <= rect.right + 0.5) {
+          candidates.push({
+            point: { x: clamp(x, rect.left, rect.right), y: edgeY },
+            t,
+          });
+        }
+      }
+
+      candidates.sort((first, second) => first.t - second.t);
+
+      return candidates[0]?.point || center;
+    };
+
+    const getWordAnchor = (wordGeometry, targetPoint, padding) => {
+      const wordRect = wordGeometry.wordRect;
+      const wordCenter = getRectCenter(wordRect);
+      const normal = normalizeVector({
+        x: targetPoint.x - wordCenter.x,
+        y: targetPoint.y - wordCenter.y,
+      });
+      const reference = getRayRectIntersection(wordRect, normal);
 
       return {
         normal,
@@ -237,15 +238,15 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       let bestScore = Number.NEGATIVE_INFINITY;
 
       for (let attempt = 0; attempt < 24; attempt += 1) {
-        const amplitude = clamp(distance * randomBetween(0.024, 0.052), 5, minDimension * 0.062);
-        const cycles = clamp(distance / (minDimension * randomBetween(0.44, 0.68)), 0.85, 2.25);
+        const amplitude = clamp(distance * randomBetween(0.018, 0.04), 4, minDimension * 0.05);
+        const cycles = clamp(distance / (minDimension * randomBetween(0.58, 0.86)), 0.65, 1.55);
         const phase = randomBetween(-0.28, 0.28) * Math.PI;
         const normalPolarity = attempt % 2 === 0 ? 1 : -1;
         const points = [];
 
         for (let index = 0; index <= sampleCount; index += 1) {
           const t = index / sampleCount;
-          const taper = Math.sin(Math.PI * t);
+          const taper = Math.sin(Math.PI * t) ** 2;
           const primary = Math.sin(t * cycles * Math.PI * 2 + phase);
           const secondary = Math.sin(t * (cycles * 0.58 + 0.65) * Math.PI * 2 - phase * 0.45);
           const amplitudeDrift = 0.84 + 0.14 * Math.sin(Math.PI * 2 * t + phase * 0.3);
@@ -273,6 +274,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         return length + Math.hypot(point.x - previous.x, point.y - previous.y);
       }, 0);
       let pathData = `M ${points[0].x.toFixed(2)} ${points[0].y.toFixed(2)}`;
+      let cubicLength = 0;
 
       for (let index = 0; index < points.length - 1; index += 1) {
         const previous = points[index - 1] || points[index];
@@ -300,13 +302,34 @@ import BaseLayout from '../layouts/BaseLayout.astro';
                 y: next.y - (afterNext.y - current.y) / 6,
               };
 
+        let previousSample = current;
+        for (let sample = 1; sample <= 12; sample += 1) {
+          const t = sample / 12;
+          const inverseT = 1 - t;
+          const samplePoint = {
+            x:
+              inverseT ** 3 * current.x +
+              3 * inverseT ** 2 * t * controlOne.x +
+              3 * inverseT * t ** 2 * controlTwo.x +
+              t ** 3 * next.x,
+            y:
+              inverseT ** 3 * current.y +
+              3 * inverseT ** 2 * t * controlOne.y +
+              3 * inverseT * t ** 2 * controlTwo.y +
+              t ** 3 * next.y,
+          };
+
+          cubicLength += Math.hypot(samplePoint.x - previousSample.x, samplePoint.y - previousSample.y);
+          previousSample = samplePoint;
+        }
+
         pathData += ` C ${controlOne.x.toFixed(2)} ${controlOne.y.toFixed(2)}, ${controlTwo.x.toFixed(
           2,
         )} ${controlTwo.y.toFixed(2)}, ${next.x.toFixed(2)} ${next.y.toFixed(2)}`;
       }
 
       return {
-        length: approximateLength,
+        length: Math.max(approximateLength, cubicLength) * 1.01,
         pathData,
       };
     };
@@ -333,13 +356,14 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         (link) => link instanceof HTMLAnchorElement,
       );
       const rootLine = stage.querySelector('[data-author-root-line]');
-      const rootPath = stage.querySelector('[data-author-root-path]');
+      let rootPath = stage.querySelector('[data-author-root-path]');
 
-      if (links.length < 2 || !(rootLine instanceof SVGSVGElement) || !(rootPath instanceof SVGPathElement)) return;
+      if (links.length < 2 || !(rootLine instanceof SVGSVGElement)) return;
 
       let resizeFrame = 0;
       let disposed = false;
       const timers = new Set();
+      let lineCompletionCleanup = () => {};
 
       const clearTimers = () => {
         timers.forEach((timer) => window.clearTimeout(timer));
@@ -352,6 +376,15 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           if (!disposed) callback();
         }, delay);
         timers.add(timer);
+      };
+
+      const createRootPath = () => {
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('data-author-root-path', '');
+        rootLine.replaceChildren(path);
+        rootPath = path;
+
+        return path;
       };
 
       const getLinkSizes = () =>
@@ -489,6 +522,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         const startAnchor = getWordAnchor(bookGeometry, archiveCenter, wordMarginPadding);
         const endAnchor = getWordAnchor(archiveGeometry, bookCenter, wordMarginPadding);
 
+        const path = createRootPath();
         rootLine.setAttribute('viewBox', `0 0 ${safeRect.width} ${safeRect.height}`);
         rootLine.setAttribute('width', `${safeRect.width}`);
         rootLine.setAttribute('height', `${safeRect.height}`);
@@ -496,30 +530,34 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           bookMarginRect,
           archiveMarginRect,
         ]);
-        rootPath.setAttribute('d', curve.pathData);
-        rootPath.style.transition = 'none';
-        rootPath.style.opacity = '0';
-        rootPath.style.strokeDasharray = '1';
-        rootPath.style.strokeDashoffset = '1';
+        path.setAttribute('d', curve.pathData);
+        path.style.transition = 'none';
+        path.style.opacity = '0';
+        path.style.strokeDasharray = '1';
+        path.style.strokeDashoffset = '1';
 
-        const pathLength = Math.max(1, curve.length);
-        rootPath.style.strokeDasharray = `${pathLength}`;
-        rootPath.style.strokeDashoffset = `${pathLength}`;
+        const pathLength = Math.max(1, path.getTotalLength?.() || curve.length);
+        path.style.strokeDasharray = `${pathLength}`;
+        path.style.strokeDashoffset = `${pathLength}`;
 
         return pathLength;
       };
 
       const resetStage = () => {
         clearTimers();
+        lineCompletionCleanup();
+        lineCompletionCleanup = () => {};
         stage.classList.remove('is-positioned');
         stage.classList.remove('is-books-visible');
         stage.classList.remove('is-line-drawing');
         stage.classList.remove('is-line-complete');
         stage.classList.remove('is-archives-visible');
-        rootPath.style.transition = 'none';
-        rootPath.style.opacity = '0';
-        rootPath.style.strokeDasharray = '1';
-        rootPath.style.strokeDashoffset = '1';
+        if (rootPath instanceof SVGPathElement) {
+          rootPath.style.transition = 'none';
+          rootPath.style.opacity = '0';
+          rootPath.style.strokeDasharray = '1';
+          rootPath.style.strokeDashoffset = '1';
+        }
       };
 
       const positionAndPlay = () => {
@@ -550,17 +588,40 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         }, booksDelay);
 
         setTimer(() => {
-          stage.classList.add('is-line-drawing');
-          rootPath.style.opacity = '1';
-          rootPath.getBoundingClientRect();
-          rootPath.style.transition = `stroke-dashoffset ${lineDuration}ms cubic-bezier(0.5, 0, 0.16, 1)`;
-          rootPath.style.strokeDashoffset = '0';
-        }, lineDelay);
+          if (!(rootPath instanceof SVGPathElement)) return;
 
-        setTimer(() => {
-          stage.classList.add('is-line-complete');
-          stage.classList.add('is-archives-visible');
-        }, lineDelay + lineDuration + archiveDelay);
+          const drawingPath = rootPath;
+          let completedLine = false;
+          const revealArchives = () => {
+            if (completedLine || disposed) return;
+
+            completedLine = true;
+            lineCompletionCleanup();
+            lineCompletionCleanup = () => {};
+            stage.classList.add('is-line-complete');
+            setTimer(() => {
+              stage.classList.add('is-archives-visible');
+            }, archiveDelay);
+          };
+          const onLineTransitionEnd = (event) => {
+            if (event.target === drawingPath && event.propertyName === 'stroke-dashoffset') {
+              revealArchives();
+            }
+          };
+
+          drawingPath.addEventListener('transitionend', onLineTransitionEnd);
+          lineCompletionCleanup = () => {
+            drawingPath.removeEventListener('transitionend', onLineTransitionEnd);
+          };
+
+          stage.classList.add('is-line-drawing');
+          drawingPath.style.opacity = '1';
+          drawingPath.getBoundingClientRect();
+          drawingPath.style.transition = `stroke-dashoffset ${lineDuration}ms cubic-bezier(0.5, 0, 0.16, 1)`;
+          drawingPath.style.strokeDashoffset = '0';
+
+          setTimer(revealArchives, lineDuration + 120);
+        }, lineDelay);
       };
 
       const schedulePositionAndPlay = () => {
@@ -699,23 +760,20 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     text-decoration: none;
     top: var(--author-link-y, 50%);
     transform: translate(-50%, -50%);
-    transition: color 180ms ease, opacity 1020ms ease, visibility 0ms linear 1020ms;
-    visibility: hidden;
+    transition: color 180ms ease, opacity 1020ms ease;
     white-space: nowrap;
   }
 
   .author-stage.is-positioned.is-books-visible [data-author-link='books'] {
     opacity: 1;
     pointer-events: auto;
-    transition: color 180ms ease, opacity 1020ms ease, visibility 0ms linear;
-    visibility: visible;
+    transition: color 180ms ease, opacity 1020ms ease;
   }
 
   .author-stage.is-positioned.is-archives-visible [data-author-link='archives'] {
     opacity: 1;
     pointer-events: auto;
-    transition: color 180ms ease, opacity 1190ms ease, visibility 0ms linear;
-    visibility: visible;
+    transition: color 180ms ease, opacity 1190ms ease;
   }
 
   .author-random-link:focus-visible {
