@@ -4,6 +4,7 @@ interface Props {
   completeEvent?: string;
   playOnce?: boolean;
   sessionKey?: string;
+  timingScale?: number;
 }
 
 const videoSrc = '/videos/Logo_Animation_Preloader.mp4';
@@ -12,6 +13,7 @@ const {
   completeEvent = 'varelism:preloader-complete',
   playOnce = true,
   sessionKey = 'varelism-home-preloader-seen',
+  timingScale = 1,
 } = Astro.props;
 ---
 
@@ -22,6 +24,7 @@ const {
   data-complete-event={completeEvent}
   data-play-once={playOnce ? 'true' : 'false'}
   data-session-key={sessionKey}
+  data-timing-scale={timingScale}
   aria-hidden="true"
 >
   <video
@@ -44,11 +47,12 @@ const {
     const completeEvent = overlay.dataset.completeEvent || 'varelism:preloader-complete';
     const activePaths = (overlay.dataset.activePaths || '/|/index.html').split('|').filter(Boolean);
     const playOnce = overlay.dataset.playOnce !== 'false';
-    const videoVisibleMs = 3000;
-    const videoFadeMs = 300;
-    const whiteHoldMs = 300;
-    const overlayFadeMs = 300;
-    const fallbackMs = 10000;
+    const timingScale = Math.max(0.1, Number.parseFloat(overlay.dataset.timingScale || '1') || 1);
+    const videoVisibleMs = Math.round(3000 * timingScale);
+    const videoFadeMs = Math.round(300 * timingScale);
+    const whiteHoldMs = Math.round(300 * timingScale);
+    const overlayFadeMs = Math.round(300 * timingScale);
+    const fallbackMs = Math.round(10000 * timingScale);
     const isActivePath = activePaths.includes(window.location.pathname);
     let hasRemoved = false;
     const storage = {

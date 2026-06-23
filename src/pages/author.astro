@@ -9,6 +9,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     completeEvent="varelism:author-preloader-complete"
     playOnce={false}
     sessionKey="varelism-author-preloader-seen"
+    timingScale={0.25}
   />
 
   <section class="author-stage" data-author-stage aria-label="Author">
@@ -132,7 +133,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       const typographyScale = Math.max(...textHeights, ...fontSizes, 1);
       const edgeInsetX = clamp(minDimension * 0.09, 26, 90);
       const edgeInsetY = clamp(minDimension * 0.1, 28, 84);
-      const textPadding = clamp(typographyScale * 0.56, width <= 560 ? 10 : 14, width <= 560 ? 16 : 23);
+      const textPadding = clamp(typographyScale * 0.14, width <= 560 ? 3 : 4, width <= 560 ? 5 : 6);
 
       return {
         canvasRect,
@@ -169,8 +170,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           y: randomBetween(range.minY, range.maxY),
         };
       };
-      const minGap = Math.max(textPadding * 2.8, minDimension * 0.16);
-      const minDistance = Math.max(minDimension * 0.42, (sizes[0].width + sizes[1].width) / 2 + textPadding * 4);
+      const minGap = Math.max(textPadding * 4.2, minDimension * 0.24);
+      const minDistance = Math.max(minDimension * 0.63, (sizes[0].width + sizes[1].width) / 2 + textPadding * 6);
       const maxDistance = Math.hypot(width, height) * 0.88;
 
       for (let attempt = 0; attempt < 900; attempt += 1) {
@@ -271,14 +272,14 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     };
 
     const generateVariableWaveParameters = (distance, minDimension) => ({
-      amplitude: clamp(distance * randomBetween(0.032, 0.06), 7, minDimension * 0.105),
+      amplitude: clamp(distance * randomBetween(0.032, 0.06), 7, minDimension * 0.131),
       amplitudeDrift: randomBetween(0.26, 0.58),
       amplitudePhase: randomBetween(-Math.PI, Math.PI),
       cycles: clamp(distance / (minDimension * randomBetween(0.48, 0.78)), 0.65, 2.45),
-      centerAmplitudeBoost: randomBetween(0.45, 0.95),
+      centerAmplitudeBoost: randomBetween(0.75, 1.35),
       phase: randomBetween(-Math.PI, Math.PI),
-      phaseDrift: randomBetween(0.32, 0.78),
-      wavelengthDrift: randomBetween(0.34, 0.72),
+      phaseDrift: randomBetween(0.4, 0.98),
+      wavelengthDrift: randomBetween(0.43, 0.9),
       wavelengthPhase: randomBetween(-Math.PI, Math.PI),
     });
 
@@ -462,7 +463,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       let hasStarted = false;
       let preloaderComplete = !document.querySelector('[data-home-preloader]');
       let resizeFrame = 0;
-      const blankDelay = 950;
+      const blankDelay = 240;
       const booksFadeDuration = 1040;
       const lineDelay = 180;
 
