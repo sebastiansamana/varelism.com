@@ -339,12 +339,12 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         if (!placements) return;
         const pathLength = prepareCurve(placements);
         const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        const booksDelay = prefersReducedMotion ? 160 : 1100;
+        const booksDelay = prefersReducedMotion ? 80 : 550;
         const lineDelay = prefersReducedMotion ? 360 : 2400;
         const lineDuration = prefersReducedMotion
-          ? 1100
-          : Math.round(clamp(pathLength * 7.2, 4200, 7600));
-        const archiveDelay = prefersReducedMotion ? 60 : 244;
+          ? 550
+          : Math.round(clamp(pathLength * 3.6, 2100, 3800));
+        const archiveDelay = prefersReducedMotion ? 45 : 183;
 
         links.slice(0, 2).forEach((link, index) => {
           link.style.setProperty('--author-link-x', `${placements[index].x}px`);
