@@ -42,15 +42,6 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       y: rect.top + rect.height / 2,
     });
 
-    const getRectRadiusInDirection = (rect, direction) => {
-      const halfWidth = rect.width / 2;
-      const halfHeight = rect.height / 2;
-      const xLimit = Math.abs(direction.x) > 0.001 ? halfWidth / Math.abs(direction.x) : Number.POSITIVE_INFINITY;
-      const yLimit = Math.abs(direction.y) > 0.001 ? halfHeight / Math.abs(direction.y) : Number.POSITIVE_INFINITY;
-
-      return Math.min(xLimit, yLimit);
-    };
-
     const getPlacementRect = (placement) => ({
       bottom: placement.y + placement.height / 2,
       height: placement.height,
@@ -60,7 +51,45 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       width: placement.width,
     });
 
-    const getSinusoidalPath = (start, end, minDimension) => {
+    const getPaddedRect = (rect, padding) => ({
+      bottom: rect.bottom + padding,
+      height: rect.height + padding * 2,
+      left: rect.left - padding,
+      right: rect.right + padding,
+      top: rect.top - padding,
+      width: rect.width + padding * 2,
+    });
+
+    const getCornerToward = (rect, target) => {
+      const center = getRectCenter(rect);
+
+      return {
+        x: target.x < center.x ? rect.left : rect.right,
+        y: target.y < center.y ? rect.top : rect.bottom,
+      };
+    };
+
+    const getPointRectDistance = (point, rect) => {
+      const dx = Math.max(rect.left - point.x, 0, point.x - rect.right);
+      const dy = Math.max(rect.top - point.y, 0, point.y - rect.bottom);
+
+      return Math.hypot(dx, dy);
+    };
+
+    const getMinimumPathDistance = (points, rects) => {
+      if (points.length <= 2) return 0;
+
+      return points.slice(1, -1).reduce((minimum, point) => {
+        const pointMinimum = rects.reduce(
+          (rectMinimum, rect) => Math.min(rectMinimum, getPointRectDistance(point, rect)),
+          Number.POSITIVE_INFINITY,
+        );
+
+        return Math.min(minimum, pointMinimum);
+      }, Number.POSITIVE_INFINITY);
+    };
+
+    const getSinusoidalPath = (start, end, minDimension, avoidRects = []) => {
       const deltaX = end.x - start.x;
       const deltaY = end.y - start.y;
       const distance = Math.max(1, Math.hypot(deltaX, deltaY));
@@ -72,25 +101,41 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         x: -direction.y,
         y: direction.x,
       };
-      const amplitude = clamp(distance * randomBetween(0.034, 0.065), 7, minDimension * 0.075);
-      const cycles = clamp(distance / (minDimension * randomBetween(0.38, 0.55)), 1.05, 2.7);
-      const phase = randomBetween(-0.35, 0.35) * Math.PI;
       const sampleCount = Math.round(clamp(distance / 28, 18, 52));
-      const points = [];
+      let bestPoints = null;
+      let bestScore = Number.NEGATIVE_INFINITY;
 
-      for (let index = 0; index <= sampleCount; index += 1) {
-        const t = index / sampleCount;
-        const taper = Math.sin(Math.PI * t);
-        const primary = Math.sin(t * cycles * Math.PI * 2 + phase);
-        const secondary = Math.sin(t * (cycles * 0.62 + 0.7) * Math.PI * 2 - phase * 0.45);
-        const amplitudeDrift = 0.82 + 0.16 * Math.sin(Math.PI * 2 * t + phase * 0.3);
-        const offset = taper * amplitude * (primary * amplitudeDrift + secondary * 0.18);
+      for (let attempt = 0; attempt < 24; attempt += 1) {
+        const amplitude = clamp(distance * randomBetween(0.024, 0.052), 5, minDimension * 0.062);
+        const cycles = clamp(distance / (minDimension * randomBetween(0.44, 0.68)), 0.85, 2.25);
+        const phase = randomBetween(-0.28, 0.28) * Math.PI;
+        const normalPolarity = attempt % 2 === 0 ? 1 : -1;
+        const points = [];
 
-        points.push({
-          x: start.x + deltaX * t + normal.x * offset,
-          y: start.y + deltaY * t + normal.y * offset,
-        });
+        for (let index = 0; index <= sampleCount; index += 1) {
+          const t = index / sampleCount;
+          const taper = Math.sin(Math.PI * t);
+          const primary = Math.sin(t * cycles * Math.PI * 2 + phase);
+          const secondary = Math.sin(t * (cycles * 0.58 + 0.65) * Math.PI * 2 - phase * 0.45);
+          const amplitudeDrift = 0.84 + 0.14 * Math.sin(Math.PI * 2 * t + phase * 0.3);
+          const offset = taper * amplitude * normalPolarity * (primary * amplitudeDrift + secondary * 0.14);
+
+          points.push({
+            x: start.x + deltaX * t + normal.x * offset,
+            y: start.y + deltaY * t + normal.y * offset,
+          });
+        }
+
+        const minimumDistance = getMinimumPathDistance(points, avoidRects);
+        const score = minimumDistance - amplitude * 0.08;
+
+        if (score > bestScore) {
+          bestPoints = points;
+          bestScore = score;
+        }
       }
+
+      const points = bestPoints || [start, end];
 
       const approximateLength = points.slice(1).reduce((length, point, index) => {
         const previous = points[index];
@@ -198,6 +243,18 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         };
       };
 
+      const getWordMarginPadding = (safeRect) => {
+        if (safeRect.width <= 560) {
+          return clamp(safeRect.minDimension * 0.04, 14, 22);
+        }
+
+        if (safeRect.width <= 900) {
+          return clamp(safeRect.minDimension * 0.035, 18, 26);
+        }
+
+        return clamp(safeRect.minDimension * 0.03, 22, 32);
+      };
+
       const getCenterRange = (safeRect, size) => {
         const minX = safeRect.left + size.width / 2;
         const maxX = safeRect.right - size.width / 2;
@@ -280,31 +337,18 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         const safeRect = getSafeRect(getLinkSizes());
         const bookRect = getPlacementRect(placements[0]);
         const archiveRect = getPlacementRect(placements[1]);
+        const wordMarginPadding = getWordMarginPadding(safeRect);
+        const bookMarginRect = getPaddedRect(bookRect, wordMarginPadding);
+        const archiveMarginRect = getPaddedRect(archiveRect, wordMarginPadding);
         const bookCenter = getRectCenter(bookRect);
         const archiveCenter = getRectCenter(archiveRect);
-        const deltaX = archiveCenter.x - bookCenter.x;
-        const deltaY = archiveCenter.y - bookCenter.y;
-        const distance = Math.max(1, Math.hypot(deltaX, deltaY));
-        const direction = {
-          x: deltaX / distance,
-          y: deltaY / distance,
-        };
-        const endpointPad = clamp(safeRect.minDimension * 0.014, 5, 12);
-        const startRadius = getRectRadiusInDirection(bookRect, direction) + endpointPad;
-        const endRadius = getRectRadiusInDirection(archiveRect, direction) + endpointPad;
-        const start = {
-          x: bookCenter.x + direction.x * startRadius,
-          y: bookCenter.y + direction.y * startRadius,
-        };
-        const end = {
-          x: archiveCenter.x - direction.x * endRadius,
-          y: archiveCenter.y - direction.y * endRadius,
-        };
+        const start = getCornerToward(bookMarginRect, archiveCenter);
+        const end = getCornerToward(archiveMarginRect, bookCenter);
 
         rootLine.setAttribute('viewBox', `0 0 ${safeRect.width} ${safeRect.height}`);
         rootLine.setAttribute('width', `${safeRect.width}`);
         rootLine.setAttribute('height', `${safeRect.height}`);
-        const curve = getSinusoidalPath(start, end, safeRect.minDimension);
+        const curve = getSinusoidalPath(start, end, safeRect.minDimension, [bookMarginRect, archiveMarginRect]);
         rootPath.setAttribute('d', curve.pathData);
         rootPath.style.transition = 'none';
         rootPath.style.opacity = '0';
@@ -339,12 +383,12 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         if (!placements) return;
         const pathLength = prepareCurve(placements);
         const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        const booksDelay = prefersReducedMotion ? 80 : 550;
-        const lineDelay = prefersReducedMotion ? 360 : 2400;
+        const booksDelay = prefersReducedMotion ? 68 : 468;
+        const lineDelay = prefersReducedMotion ? 306 : 2040;
         const lineDuration = prefersReducedMotion
-          ? 550
-          : Math.round(clamp(pathLength * 3.6, 2100, 3800));
-        const archiveDelay = prefersReducedMotion ? 45 : 183;
+          ? 468
+          : Math.round(clamp(pathLength * 3.06, 1785, 3230));
+        const archiveDelay = prefersReducedMotion ? 38 : 156;
 
         links.slice(0, 2).forEach((link, index) => {
           link.style.setProperty('--author-link-x', `${placements[index].x}px`);
@@ -507,7 +551,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     text-decoration: none;
     top: var(--author-link-y, 50%);
     transform: translate(-50%, -50%);
-    transition: color 180ms ease, opacity 1200ms ease, visibility 0ms linear 1200ms;
+    transition: color 180ms ease, opacity 1020ms ease, visibility 0ms linear 1020ms;
     visibility: hidden;
     white-space: nowrap;
   }
@@ -515,14 +559,14 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   .author-stage.is-positioned.is-books-visible [data-author-link='books'] {
     opacity: 1;
     pointer-events: auto;
-    transition: color 180ms ease, opacity 1200ms ease, visibility 0ms linear;
+    transition: color 180ms ease, opacity 1020ms ease, visibility 0ms linear;
     visibility: visible;
   }
 
   .author-stage.is-positioned.is-archives-visible [data-author-link='archives'] {
     opacity: 1;
     pointer-events: auto;
-    transition: color 180ms ease, opacity 1400ms ease, visibility 0ms linear;
+    transition: color 180ms ease, opacity 1190ms ease, visibility 0ms linear;
     visibility: visible;
   }
 
