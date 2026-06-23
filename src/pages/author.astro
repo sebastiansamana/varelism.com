@@ -214,6 +214,56 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
       return {
         getSupportPoint: (anchor) => {
+          const center = getRectCenter(rect);
+
+          if (anchor === 'E' || anchor === 'W') {
+            const maxBand = Math.max(2, rect.height * 0.45);
+            let candidates = [];
+
+            for (let band = 1.5; band <= maxBand && candidates.length === 0; band += 1.5) {
+              candidates = inkPixels.filter((point) => Math.abs(point.y - center.y) <= band);
+            }
+
+            if (candidates.length > 0) {
+              const targetX =
+                anchor === 'E'
+                  ? Math.max(...candidates.map((point) => point.x))
+                  : Math.min(...candidates.map((point) => point.x));
+              const sidePoints = candidates.filter((point) => Math.abs(point.x - targetX) <= 0.75);
+              const x =
+                sidePoints.reduce((total, point) => total + point.x, 0) / Math.max(1, sidePoints.length);
+
+              return {
+                x,
+                y: center.y,
+              };
+            }
+          }
+
+          if (anchor === 'N' || anchor === 'S') {
+            const maxBand = Math.max(2, rect.width * 0.45);
+            let candidates = [];
+
+            for (let band = 1.5; band <= maxBand && candidates.length === 0; band += 1.5) {
+              candidates = inkPixels.filter((point) => Math.abs(point.x - center.x) <= band);
+            }
+
+            if (candidates.length > 0) {
+              const targetY =
+                anchor === 'S'
+                  ? Math.max(...candidates.map((point) => point.y))
+                  : Math.min(...candidates.map((point) => point.y));
+              const sidePoints = candidates.filter((point) => Math.abs(point.y - targetY) <= 0.75);
+              const y =
+                sidePoints.reduce((total, point) => total + point.y, 0) / Math.max(1, sidePoints.length);
+
+              return {
+                x: center.x,
+                y,
+              };
+            }
+          }
+
           const direction = getCompassAnchorDirection(anchor);
           let maxProjection = Number.NEGATIVE_INFINITY;
 
