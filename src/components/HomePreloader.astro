@@ -1,8 +1,29 @@
 ---
+interface Props {
+  activePaths?: string[];
+  completeEvent?: string;
+  playOnce?: boolean;
+  sessionKey?: string;
+}
+
 const videoSrc = '/videos/Logo_Animation_Preloader.mp4';
+const {
+  activePaths = ['/', '/index.html'],
+  completeEvent = 'varelism:preloader-complete',
+  playOnce = true,
+  sessionKey = 'varelism-home-preloader-seen',
+} = Astro.props;
 ---
 
-<div class="home-preloader" data-home-preloader aria-hidden="true">
+<div
+  class="home-preloader"
+  data-home-preloader
+  data-active-paths={activePaths.join('|')}
+  data-complete-event={completeEvent}
+  data-play-once={playOnce ? 'true' : 'false'}
+  data-session-key={sessionKey}
+  aria-hidden="true"
+>
   <video
     class="home-preloader__video"
     src={videoSrc}
@@ -19,13 +40,17 @@ const videoSrc = '/videos/Logo_Animation_Preloader.mp4';
     const overlay = document.querySelector('[data-home-preloader]');
     if (!overlay) return;
 
-    const sessionKey = 'varelism-home-preloader-seen';
+    const sessionKey = overlay.dataset.sessionKey || 'varelism-home-preloader-seen';
+    const completeEvent = overlay.dataset.completeEvent || 'varelism:preloader-complete';
+    const activePaths = (overlay.dataset.activePaths || '/|/index.html').split('|').filter(Boolean);
+    const playOnce = overlay.dataset.playOnce !== 'false';
     const videoVisibleMs = 3000;
     const videoFadeMs = 300;
     const whiteHoldMs = 300;
     const overlayFadeMs = 300;
     const fallbackMs = 10000;
-    const isHome = window.location.pathname === '/' || window.location.pathname === '/index.html';
+    const isActivePath = activePaths.includes(window.location.pathname);
+    let hasRemoved = false;
     const storage = {
       get() {
         try {
@@ -44,16 +69,19 @@ const videoSrc = '/videos/Logo_Animation_Preloader.mp4';
     };
 
     const removeOverlay = () => {
+      if (hasRemoved) return;
+      hasRemoved = true;
       overlay.remove();
       document.documentElement.classList.remove('home-preloader-active');
+      window.dispatchEvent(new CustomEvent(completeEvent));
     };
 
-    if (!isHome || storage.get() === 'true') {
+    if (!isActivePath || (playOnce && storage.get() === 'true')) {
       removeOverlay();
       return;
     }
 
-    storage.set();
+    if (playOnce) storage.set();
     document.documentElement.classList.add('home-preloader-active');
     overlay.classList.add('is-visible');
 
