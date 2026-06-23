@@ -226,6 +226,23 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       }, Number.POSITIVE_INFINITY);
     };
 
+    const getCubicPoint = (start, controlOne, controlTwo, end, t) => {
+      const inverseT = 1 - t;
+
+      return {
+        x:
+          inverseT ** 3 * start.x +
+          3 * inverseT ** 2 * t * controlOne.x +
+          3 * inverseT * t ** 2 * controlTwo.x +
+          t ** 3 * end.x,
+        y:
+          inverseT ** 3 * start.y +
+          3 * inverseT ** 2 * t * controlOne.y +
+          3 * inverseT * t ** 2 * controlTwo.y +
+          t ** 3 * end.y,
+      };
+    };
+
     const getSinusoidalPath = (startAnchor, endAnchor, minDimension, avoidRects = []) => {
       const start = startAnchor.point;
       const end = endAnchor.point;
@@ -240,104 +257,113 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         x: -direction.y,
         y: direction.x,
       };
-      const sampleCount = Math.round(clamp(distance / 28, 18, 52));
-      const handleLength = clamp(distance * 0.15, 24, minDimension * 0.18);
-      let bestPoints = null;
+      const endpointHandleLength = clamp(distance * 0.22, 32, minDimension * 0.24);
+      const midpointHandleLength = clamp(distance * 0.16, 24, minDimension * 0.18);
+      const sampleCount = 36;
+      let bestCurve = null;
       let bestScore = Number.NEGATIVE_INFINITY;
 
-      for (let attempt = 0; attempt < 24; attempt += 1) {
-        const amplitude = clamp(distance * randomBetween(0.018, 0.04), 4, minDimension * 0.05);
-        const cycles = clamp(distance / (minDimension * randomBetween(0.58, 0.86)), 0.65, 1.55);
-        const phase = randomBetween(-0.28, 0.28) * Math.PI;
+      for (let attempt = 0; attempt < 16; attempt += 1) {
+        const midpointT = clamp(0.5 + randomBetween(-0.08, 0.08), 0.38, 0.62);
+        const amplitude = clamp(distance * randomBetween(0.018, 0.036), 5, minDimension * 0.045);
+        const taper = Math.sin(Math.PI * midpointT) ** 2;
         const normalPolarity = attempt % 2 === 0 ? 1 : -1;
+        const midpoint = {
+          x: start.x + deltaX * midpointT + normal.x * amplitude * taper * normalPolarity,
+          y: start.y + deltaY * midpointT + normal.y * amplitude * taper * normalPolarity,
+        };
+        const controlOne = {
+          x: start.x + startAnchor.normal.x * endpointHandleLength,
+          y: start.y + startAnchor.normal.y * endpointHandleLength,
+        };
+        const controlTwo = {
+          x: midpoint.x - direction.x * midpointHandleLength,
+          y: midpoint.y - direction.y * midpointHandleLength,
+        };
+        const controlThree = {
+          x: midpoint.x + direction.x * midpointHandleLength,
+          y: midpoint.y + direction.y * midpointHandleLength,
+        };
+        const controlFour = {
+          x: end.x + endAnchor.normal.x * endpointHandleLength,
+          y: end.y + endAnchor.normal.y * endpointHandleLength,
+        };
         const points = [];
+        let length = 0;
+        let previousPoint = start;
 
         for (let index = 0; index <= sampleCount; index += 1) {
           const t = index / sampleCount;
-          const taper = Math.sin(Math.PI * t) ** 2;
-          const primary = Math.sin(t * cycles * Math.PI * 2 + phase);
-          const secondary = Math.sin(t * (cycles * 0.58 + 0.65) * Math.PI * 2 - phase * 0.45);
-          const amplitudeDrift = 0.84 + 0.14 * Math.sin(Math.PI * 2 * t + phase * 0.3);
-          const offset = taper * amplitude * normalPolarity * (primary * amplitudeDrift + secondary * 0.14);
+          const point =
+            t <= 0.5
+              ? getCubicPoint(start, controlOne, controlTwo, midpoint, t * 2)
+              : getCubicPoint(midpoint, controlThree, controlFour, end, (t - 0.5) * 2);
 
-          points.push({
-            x: start.x + deltaX * t + normal.x * offset,
-            y: start.y + deltaY * t + normal.y * offset,
-          });
+          if (index > 0) {
+            length += Math.hypot(point.x - previousPoint.x, point.y - previousPoint.y);
+          }
+
+          points.push(point);
+          previousPoint = point;
         }
 
         const minimumDistance = getMinimumPathDistance(points, avoidRects);
         const score = minimumDistance - amplitude * 0.08;
 
         if (score > bestScore) {
-          bestPoints = points;
+          bestCurve = {
+            controlFour,
+            controlOne,
+            controlThree,
+            controlTwo,
+            length,
+            midpoint,
+          };
           bestScore = score;
         }
       }
 
-      const points = bestPoints || [start, end];
-
-      const approximateLength = points.slice(1).reduce((length, point, index) => {
-        const previous = points[index];
-        return length + Math.hypot(point.x - previous.x, point.y - previous.y);
-      }, 0);
-      let pathData = `M ${points[0].x.toFixed(2)} ${points[0].y.toFixed(2)}`;
-      let cubicLength = 0;
-
-      for (let index = 0; index < points.length - 1; index += 1) {
-        const previous = points[index - 1] || points[index];
-        const current = points[index];
-        const next = points[index + 1];
-        const afterNext = points[index + 2] || next;
-        const controlOne =
-          index === 0
-            ? {
-                x: current.x + startAnchor.normal.x * handleLength,
-                y: current.y + startAnchor.normal.y * handleLength,
-              }
-            : {
-                x: current.x + (next.x - previous.x) / 6,
-                y: current.y + (next.y - previous.y) / 6,
-              };
-        const controlTwo =
-          index === points.length - 2
-            ? {
-                x: next.x + endAnchor.normal.x * handleLength,
-                y: next.y + endAnchor.normal.y * handleLength,
-              }
-            : {
-                x: next.x - (afterNext.x - current.x) / 6,
-                y: next.y - (afterNext.y - current.y) / 6,
-              };
-
-        let previousSample = current;
-        for (let sample = 1; sample <= 12; sample += 1) {
-          const t = sample / 12;
-          const inverseT = 1 - t;
-          const samplePoint = {
-            x:
-              inverseT ** 3 * current.x +
-              3 * inverseT ** 2 * t * controlOne.x +
-              3 * inverseT * t ** 2 * controlTwo.x +
-              t ** 3 * next.x,
-            y:
-              inverseT ** 3 * current.y +
-              3 * inverseT ** 2 * t * controlOne.y +
-              3 * inverseT * t ** 2 * controlTwo.y +
-              t ** 3 * next.y,
+      const curve =
+        bestCurve ||
+        (() => {
+          const midpoint = {
+            x: start.x + deltaX * 0.5,
+            y: start.y + deltaY * 0.5,
           };
 
-          cubicLength += Math.hypot(samplePoint.x - previousSample.x, samplePoint.y - previousSample.y);
-          previousSample = samplePoint;
-        }
-
-        pathData += ` C ${controlOne.x.toFixed(2)} ${controlOne.y.toFixed(2)}, ${controlTwo.x.toFixed(
-          2,
-        )} ${controlTwo.y.toFixed(2)}, ${next.x.toFixed(2)} ${next.y.toFixed(2)}`;
-      }
+          return {
+            controlFour: {
+              x: end.x + endAnchor.normal.x * endpointHandleLength,
+              y: end.y + endAnchor.normal.y * endpointHandleLength,
+            },
+            controlOne: {
+              x: start.x + startAnchor.normal.x * endpointHandleLength,
+              y: start.y + startAnchor.normal.y * endpointHandleLength,
+            },
+            controlThree: {
+              x: midpoint.x + direction.x * midpointHandleLength,
+              y: midpoint.y + direction.y * midpointHandleLength,
+            },
+            controlTwo: {
+              x: midpoint.x - direction.x * midpointHandleLength,
+              y: midpoint.y - direction.y * midpointHandleLength,
+            },
+            length: distance,
+            midpoint,
+          };
+        })();
+      const pathData = `M ${start.x.toFixed(2)} ${start.y.toFixed(2)} C ${curve.controlOne.x.toFixed(
+        2,
+      )} ${curve.controlOne.y.toFixed(2)}, ${curve.controlTwo.x.toFixed(2)} ${curve.controlTwo.y.toFixed(
+        2,
+      )}, ${curve.midpoint.x.toFixed(2)} ${curve.midpoint.y.toFixed(2)} C ${curve.controlThree.x.toFixed(
+        2,
+      )} ${curve.controlThree.y.toFixed(2)}, ${curve.controlFour.x.toFixed(2)} ${curve.controlFour.y.toFixed(
+        2,
+      )}, ${end.x.toFixed(2)} ${end.y.toFixed(2)}`;
 
       return {
-        length: Math.max(approximateLength, cubicLength) * 1.01,
+        length: curve.length * 1.01,
         pathData,
       };
     };
@@ -579,12 +605,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         stage.classList.remove('is-line-drawing');
         stage.classList.remove('is-line-complete');
         stage.classList.remove('is-archives-visible');
-        if (rootPath instanceof SVGPathElement) {
-          rootPath.style.transition = 'none';
-          rootPath.style.opacity = '0';
-          rootPath.style.strokeDasharray = '1 1';
-          rootPath.style.strokeDashoffset = '1';
-        }
+        rootLine.replaceChildren();
+        rootPath = null;
       };
 
       const positionAndPlay = () => {
@@ -599,13 +621,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           link.style.setProperty('--author-link-y', `${placements[index].y}px`);
         });
 
-        const pathLength = prepareCurve();
         const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         const booksDelay = prefersReducedMotion ? 68 : 468;
-        const lineDelay = prefersReducedMotion ? 306 : 2040;
-        const lineDuration = prefersReducedMotion
-          ? 468
-          : Math.round(clamp(pathLength * 3.06, 1785, 3230));
+        const booksFadeDuration = prefersReducedMotion ? 1020 : 1020;
+        const lineDelay = prefersReducedMotion ? 90 : 220;
+        const lineSpeed = prefersReducedMotion ? 2.1 : 5.2;
         const archiveDelay = prefersReducedMotion ? 38 : 156;
 
         stage.classList.add('is-positioned');
@@ -615,9 +635,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         }, booksDelay);
 
         setTimer(() => {
+          const pathLength = prepareCurve();
           if (!(rootPath instanceof SVGPathElement)) return;
 
           const drawingPath = rootPath;
+          const lineDuration = Math.max(220, Math.round(pathLength * lineSpeed));
           let completedLine = false;
           const revealArchives = () => {
             if (completedLine || disposed) return;
@@ -644,11 +666,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           stage.classList.add('is-line-drawing');
           drawingPath.style.opacity = '1';
           drawingPath.getBoundingClientRect();
-          drawingPath.style.transition = `stroke-dashoffset ${lineDuration}ms cubic-bezier(0.5, 0, 0.16, 1)`;
+          drawingPath.style.transition = `stroke-dashoffset ${lineDuration}ms linear`;
           drawingPath.style.strokeDashoffset = '0';
 
           setTimer(revealArchives, lineDuration + 120);
-        }, lineDelay);
+        }, booksDelay + booksFadeDuration + lineDelay);
       };
 
       const schedulePositionAndPlay = () => {
