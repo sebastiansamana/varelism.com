@@ -9,9 +9,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     </svg>
     <nav class="author-random-nav" aria-label="Author sections">
       <a class="author-random-link" href="/books/" data-author-random-link data-author-link="books">Books</a>
-      <a class="author-random-link" href="/archives/" data-author-random-link data-author-link="archives">
-        Archives
-      </a>
+      <a class="author-random-link" href="/archives/" data-author-random-link data-author-link="archives">Archives</a>
     </nav>
   </section>
 </BaseLayout>
@@ -60,20 +58,150 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       width: rect.width + padding * 2,
     });
 
-    const getCornerToward = (rect, target) => {
-      const center = getRectCenter(rect);
-
-      return {
-        x: target.x < center.x ? rect.left : rect.right,
-        y: target.y < center.y ? rect.top : rect.bottom,
-      };
-    };
-
     const getPointRectDistance = (point, rect) => {
       const dx = Math.max(rect.left - point.x, 0, point.x - rect.right);
       const dy = Math.max(rect.top - point.y, 0, point.y - rect.bottom);
 
       return Math.hypot(dx, dy);
+    };
+
+    const normalizeVector = (vector, fallback = { x: 1, y: 0 }) => {
+      const length = Math.hypot(vector.x, vector.y);
+
+      if (length < 0.001) return fallback;
+
+      return {
+        x: vector.x / length,
+        y: vector.y / length,
+      };
+    };
+
+    const getClosestPointOnRect = (rect, point) => ({
+      x: clamp(point.x, rect.left, rect.right),
+      y: clamp(point.y, rect.top, rect.bottom),
+    });
+
+    const getUnionRect = (rects) => {
+      const left = Math.min(...rects.map((rect) => rect.left));
+      const right = Math.max(...rects.map((rect) => rect.right));
+      const top = Math.min(...rects.map((rect) => rect.top));
+      const bottom = Math.max(...rects.map((rect) => rect.bottom));
+
+      return {
+        bottom,
+        height: bottom - top,
+        left,
+        right,
+        top,
+        width: right - left,
+      };
+    };
+
+    const getTextNodeCharacters = (node, textNodes = []) => {
+      node.childNodes.forEach((child) => {
+        if (child.nodeType === Node.TEXT_NODE) {
+          textNodes.push(child);
+          return;
+        }
+
+        getTextNodeCharacters(child, textNodes);
+      });
+
+      return textNodes;
+    };
+
+    const toStageRect = (rect, stageRect) => ({
+      bottom: rect.bottom - stageRect.top,
+      height: rect.height,
+      left: rect.left - stageRect.left,
+      right: rect.right - stageRect.left,
+      top: rect.top - stageRect.top,
+      width: rect.width,
+    });
+
+    const getMeasuredWordGeometry = (link, stageRect) => {
+      const letterRects = [];
+
+      getTextNodeCharacters(link).forEach((textNode) => {
+        const text = textNode.textContent || '';
+
+        for (let index = 0; index < text.length; index += 1) {
+          if (!text[index] || /\s/.test(text[index])) continue;
+
+          const range = document.createRange();
+          range.setStart(textNode, index);
+          range.setEnd(textNode, index + 1);
+
+          const rect = range.getBoundingClientRect();
+          range.detach?.();
+
+          if (rect.width > 0 && rect.height > 0) {
+            letterRects.push(toStageRect(rect, stageRect));
+          }
+        }
+      });
+
+      if (letterRects.length) {
+        return {
+          letterRects,
+          wordRect: getUnionRect(letterRects),
+        };
+      }
+
+      const wordRect = toStageRect(link.getBoundingClientRect(), stageRect);
+
+      return {
+        letterRects: [wordRect],
+        wordRect,
+      };
+    };
+
+    const getWordAnchor = (wordGeometry, targetPoint, padding) => {
+      let closestRect = wordGeometry.letterRects[0];
+      let reference = getClosestPointOnRect(closestRect, targetPoint);
+      let closestDistance = Math.hypot(targetPoint.x - reference.x, targetPoint.y - reference.y);
+
+      wordGeometry.letterRects.slice(1).forEach((rect) => {
+        const candidateReference = getClosestPointOnRect(rect, targetPoint);
+        const candidateDistance = Math.hypot(
+          targetPoint.x - candidateReference.x,
+          targetPoint.y - candidateReference.y,
+        );
+
+        if (candidateDistance < closestDistance) {
+          closestDistance = candidateDistance;
+          closestRect = rect;
+          reference = candidateReference;
+        }
+      });
+
+      const closestRectCenter = getRectCenter(closestRect);
+      const wordCenter = getRectCenter(wordGeometry.wordRect);
+      const normal = normalizeVector(
+        {
+          x: targetPoint.x - reference.x,
+          y: targetPoint.y - reference.y,
+        },
+        normalizeVector(
+          {
+            x: targetPoint.x - closestRectCenter.x,
+            y: targetPoint.y - closestRectCenter.y,
+          },
+          normalizeVector({
+            x: targetPoint.x - wordCenter.x,
+            y: targetPoint.y - wordCenter.y,
+          }),
+        ),
+      );
+
+      return {
+        normal,
+        point: {
+          x: reference.x + normal.x * padding,
+          y: reference.y + normal.y * padding,
+        },
+        reference,
+      };
     };
 
     const getMinimumPathDistance = (points, rects) => {
@@ -89,7 +217,9 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       }, Number.POSITIVE_INFINITY);
     };
 
-    const getSinusoidalPath = (start, end, minDimension, avoidRects = []) => {
+    const getSinusoidalPath = (startAnchor, endAnchor, minDimension, avoidRects = []) => {
+      const start = startAnchor.point;
+      const end = endAnchor.point;
       const deltaX = end.x - start.x;
       const deltaY = end.y - start.y;
       const distance = Math.max(1, Math.hypot(deltaX, deltaY));
@@ -102,6 +232,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         y: direction.x,
       };
       const sampleCount = Math.round(clamp(distance / 28, 18, 52));
+      const handleLength = clamp(distance * 0.15, 24, minDimension * 0.18);
       let bestPoints = null;
       let bestScore = Number.NEGATIVE_INFINITY;
 
@@ -148,14 +279,26 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         const current = points[index];
         const next = points[index + 1];
         const afterNext = points[index + 2] || next;
-        const controlOne = {
-          x: current.x + (next.x - previous.x) / 6,
-          y: current.y + (next.y - previous.y) / 6,
-        };
-        const controlTwo = {
-          x: next.x - (afterNext.x - current.x) / 6,
-          y: next.y - (afterNext.y - current.y) / 6,
-        };
+        const controlOne =
+          index === 0
+            ? {
+                x: current.x + startAnchor.normal.x * handleLength,
+                y: current.y + startAnchor.normal.y * handleLength,
+              }
+            : {
+                x: current.x + (next.x - previous.x) / 6,
+                y: current.y + (next.y - previous.y) / 6,
+              };
+        const controlTwo =
+          index === points.length - 2
+            ? {
+                x: next.x + endAnchor.normal.x * handleLength,
+                y: next.y + endAnchor.normal.y * handleLength,
+              }
+            : {
+                x: next.x - (afterNext.x - current.x) / 6,
+                y: next.y - (afterNext.y - current.y) / 6,
+              };
 
         pathData += ` C ${controlOne.x.toFixed(2)} ${controlOne.y.toFixed(2)}, ${controlTwo.x.toFixed(
           2,
@@ -333,22 +476,26 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         return getFallbackPlacement(safeRect, sizes[0], sizes[1]);
       };
 
-      const prepareCurve = (placements) => {
+      const prepareCurve = () => {
+        const stageRect = stage.getBoundingClientRect();
         const safeRect = getSafeRect(getLinkSizes());
-        const bookRect = getPlacementRect(placements[0]);
-        const archiveRect = getPlacementRect(placements[1]);
+        const bookGeometry = getMeasuredWordGeometry(links[0], stageRect);
+        const archiveGeometry = getMeasuredWordGeometry(links[1], stageRect);
         const wordMarginPadding = getWordMarginPadding(safeRect);
-        const bookMarginRect = getPaddedRect(bookRect, wordMarginPadding);
-        const archiveMarginRect = getPaddedRect(archiveRect, wordMarginPadding);
-        const bookCenter = getRectCenter(bookRect);
-        const archiveCenter = getRectCenter(archiveRect);
-        const start = getCornerToward(bookMarginRect, archiveCenter);
-        const end = getCornerToward(archiveMarginRect, bookCenter);
+        const bookMarginRect = getPaddedRect(bookGeometry.wordRect, wordMarginPadding);
+        const archiveMarginRect = getPaddedRect(archiveGeometry.wordRect, wordMarginPadding);
+        const bookCenter = getRectCenter(bookGeometry.wordRect);
+        const archiveCenter = getRectCenter(archiveGeometry.wordRect);
+        const startAnchor = getWordAnchor(bookGeometry, archiveCenter, wordMarginPadding);
+        const endAnchor = getWordAnchor(archiveGeometry, bookCenter, wordMarginPadding);
 
         rootLine.setAttribute('viewBox', `0 0 ${safeRect.width} ${safeRect.height}`);
         rootLine.setAttribute('width', `${safeRect.width}`);
         rootLine.setAttribute('height', `${safeRect.height}`);
-        const curve = getSinusoidalPath(start, end, safeRect.minDimension, [bookMarginRect, archiveMarginRect]);
+        const curve = getSinusoidalPath(startAnchor, endAnchor, safeRect.minDimension, [
+          bookMarginRect,
+          archiveMarginRect,
+        ]);
         rootPath.setAttribute('d', curve.pathData);
         rootPath.style.transition = 'none';
         rootPath.style.opacity = '0';
@@ -381,7 +528,13 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         resetStage();
         const placements = getRandomPlacement();
         if (!placements) return;
-        const pathLength = prepareCurve(placements);
+
+        links.slice(0, 2).forEach((link, index) => {
+          link.style.setProperty('--author-link-x', `${placements[index].x}px`);
+          link.style.setProperty('--author-link-y', `${placements[index].y}px`);
+        });
+
+        const pathLength = prepareCurve();
         const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         const booksDelay = prefersReducedMotion ? 68 : 468;
         const lineDelay = prefersReducedMotion ? 306 : 2040;
@@ -389,11 +542,6 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           ? 468
           : Math.round(clamp(pathLength * 3.06, 1785, 3230));
         const archiveDelay = prefersReducedMotion ? 38 : 156;
-
-        links.slice(0, 2).forEach((link, index) => {
-          link.style.setProperty('--author-link-x', `${placements[index].x}px`);
-          link.style.setProperty('--author-link-y', `${placements[index].y}px`);
-        });
 
         stage.classList.add('is-positioned');
 
