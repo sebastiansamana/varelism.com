@@ -344,7 +344,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         const lineDuration = prefersReducedMotion
           ? 1100
           : Math.round(clamp(pathLength * 7.2, 4200, 7600));
-        const archiveDelay = prefersReducedMotion ? 320 : 1300;
+        const archiveDelay = prefersReducedMotion ? 240 : 975;
 
         links.slice(0, 2).forEach((link, index) => {
           link.style.setProperty('--author-link-x', `${placements[index].x}px`);
