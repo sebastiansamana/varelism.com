@@ -57,6 +57,18 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         y: vector.y / length,
       };
     };
+    const getTextMeasureContext = (() => {
+      let context = null;
+
+      return () => {
+        if (context) return context;
+
+        const canvas = document.createElement('canvas');
+        context = canvas.getContext('2d');
+
+        return context;
+      };
+    })();
     const getPlacementRect = (placement) => ({
       bottom: placement.y + placement.height / 2,
       height: placement.height,
@@ -93,6 +105,57 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       top: rect.top - canvasRect.top,
       width: rect.width,
     });
+    const getGlyphSideFactor = (character) => {
+      if (!character) return 0.055;
+      if (/^[AaVvWwYy]$/.test(character)) return 0.12;
+      if (/^[CcGgOoQqSs]$/.test(character)) return 0.075;
+      if (/^[Ee]$/.test(character)) return 0.06;
+      if (/^[IiJjLlTt]$/.test(character)) return 0.035;
+      return 0.055;
+    };
+    const getOpticalInsets = (link, rect) => {
+      const styles = window.getComputedStyle(link);
+      const fontSize = Number.parseFloat(styles.fontSize) || rect.height || 1;
+      const text = link.textContent?.trim() || '';
+
+      return {
+        bottom: clamp(fontSize * 0.075, 0.85, 3),
+        left: clamp(fontSize * getGlyphSideFactor(text[0]), 0.8, 5),
+        right: clamp(fontSize * getGlyphSideFactor(text[text.length - 1]), 0.8, 4),
+        top: clamp(fontSize * 0.055, 0.75, 2.4),
+      };
+    };
+    const getMeasuredInkRect = (link, rect, fallbackInsets) => {
+      const styles = window.getComputedStyle(link);
+      const text = link.textContent?.trim() || '';
+      const context = getTextMeasureContext();
+
+      if (!context || !text) {
+        return {
+          bottom: rect.bottom - fallbackInsets.bottom,
+          left: rect.left + fallbackInsets.left,
+          right: rect.right - fallbackInsets.right,
+          top: rect.top + fallbackInsets.top,
+        };
+      }
+
+      context.font = `${styles.fontStyle} ${styles.fontWeight} ${styles.fontSize} ${styles.fontFamily}`;
+      const metrics = context.measureText(text);
+      const measuredWidth = Number.isFinite(metrics.width) && metrics.width > 0 ? metrics.width : rect.width;
+      const layoutStart = rect.left + (rect.width - measuredWidth) / 2;
+      const actualLeft = Number.isFinite(metrics.actualBoundingBoxLeft) ? metrics.actualBoundingBoxLeft : 0;
+      const actualRight =
+        Number.isFinite(metrics.actualBoundingBoxRight) && metrics.actualBoundingBoxRight > 0
+          ? metrics.actualBoundingBoxRight
+          : measuredWidth;
+
+      return {
+        bottom: rect.bottom - fallbackInsets.bottom,
+        left: clamp(layoutStart - actualLeft, rect.left, rect.right),
+        right: clamp(layoutStart + actualRight, rect.left, rect.right),
+        top: rect.top + fallbackInsets.top,
+      };
+    };
     const createConnectorPath = (svg) => {
       const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
       path.setAttribute('data-author-connector-path', '');
@@ -116,10 +179,29 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
     const getTextGeometry = (link, canvasRect) => {
       const rect = toCanvasRect(link.getBoundingClientRect(), canvasRect);
+      const opticalInsets = getOpticalInsets(link, rect);
+      const inkRect = getMeasuredInkRect(link, rect, opticalInsets);
+      const getOpticalAnchorPoint = (anchor) => {
+        const center = getRectCenter(rect);
+        const inkCenter = getRectCenter(inkRect);
+        const anchors = {
+          E: { x: inkRect.right, y: center.y },
+          N: { x: inkCenter.x, y: inkRect.top },
+          NE: { x: inkRect.right, y: inkRect.top },
+          NW: { x: inkRect.left, y: inkRect.top },
+          S: { x: inkCenter.x, y: inkRect.bottom },
+          SE: { x: inkRect.right, y: inkRect.bottom },
+          SW: { x: inkRect.left, y: inkRect.bottom },
+          W: { x: inkRect.left, y: center.y },
+        };
+
+        return anchors[anchor] || center;
+      };
 
       return {
-        getSupportPoint: (anchor) => getCompassAnchorPoint(rect, anchor),
+        getSupportPoint: getOpticalAnchorPoint,
         rect,
+        visualRect: rect,
       };
     };
 
@@ -231,21 +313,6 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       ];
     };
 
-    const getCompassAnchorPoint = (rect, anchor) => {
-      const center = getRectCenter(rect);
-      const anchors = {
-        E: { x: rect.right, y: center.y },
-        N: { x: center.x, y: rect.top },
-        NE: { x: rect.right, y: rect.top },
-        NW: { x: rect.left, y: rect.top },
-        S: { x: center.x, y: rect.bottom },
-        SE: { x: rect.right, y: rect.bottom },
-        SW: { x: rect.left, y: rect.bottom },
-        W: { x: rect.left, y: center.y },
-      };
-
-      return anchors[anchor] || center;
-    };
     const getCompassAnchorDirection = (anchor) => {
       const directions = {
         E: { x: 1, y: 0 },
@@ -261,20 +328,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       return directions[anchor] || { x: 1, y: 0 };
     };
 
-    const getCompassAnchorPair = (booksRect, archivesRect) => {
-      const booksCenter = getRectCenter(booksRect);
-      const archivesCenter = getRectCenter(archivesRect);
-      const deltaX = Math.max(1, archivesCenter.x - booksCenter.x);
-      const deltaY = archivesCenter.y - booksCenter.y;
-      const angle = (Math.atan2(deltaY, deltaX) * 180) / Math.PI;
-
-      if (angle < -60) return { archives: 'SW', books: 'N' };
-      if (angle < -22) return { archives: 'SW', books: 'NE' };
-      if (angle <= 22) return { archives: 'W', books: 'E' };
-      if (angle <= 60) return { archives: 'NW', books: 'SE' };
-
-      return { archives: 'NW', books: 'S' };
-    };
+    const getCompassAnchorPair = () => ({ archives: 'W', books: 'E' });
 
     const getClosestAnchorPoints = (booksGeometry, archivesGeometry, padding) => {
       const booksSafeRect = getPaddedRect(booksGeometry.rect, padding);
