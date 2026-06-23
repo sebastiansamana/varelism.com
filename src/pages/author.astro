@@ -339,11 +339,12 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         if (!placements) return;
         const pathLength = prepareCurve(placements);
         const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        const booksDelay = prefersReducedMotion ? 80 : 320;
-        const lineDelay = prefersReducedMotion ? 180 : 780;
+        const booksDelay = prefersReducedMotion ? 160 : 1100;
+        const lineDelay = prefersReducedMotion ? 360 : 2400;
         const lineDuration = prefersReducedMotion
-          ? 700
-          : Math.round(clamp(pathLength * 3.2, 1750, 3200));
+          ? 1100
+          : Math.round(clamp(pathLength * 7.2, 4200, 7600));
+        const archiveDelay = prefersReducedMotion ? 320 : 1300;
 
         links.slice(0, 2).forEach((link, index) => {
           link.style.setProperty('--author-link-x', `${placements[index].x}px`);
@@ -367,7 +368,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         setTimer(() => {
           stage.classList.add('is-line-complete');
           stage.classList.add('is-archives-visible');
-        }, lineDelay + lineDuration + 80);
+        }, lineDelay + lineDuration + archiveDelay);
       };
 
       const schedulePositionAndPlay = () => {
@@ -506,7 +507,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     text-decoration: none;
     top: var(--author-link-y, 50%);
     transform: translate(-50%, -50%);
-    transition: color 180ms ease, opacity 520ms ease, visibility 0ms linear 520ms;
+    transition: color 180ms ease, opacity 1200ms ease, visibility 0ms linear 1200ms;
     visibility: hidden;
     white-space: nowrap;
   }
@@ -514,14 +515,14 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   .author-stage.is-positioned.is-books-visible [data-author-link='books'] {
     opacity: 1;
     pointer-events: auto;
-    transition: color 180ms ease, visibility 0ms linear;
+    transition: color 180ms ease, opacity 1200ms ease, visibility 0ms linear;
     visibility: visible;
   }
 
   .author-stage.is-positioned.is-archives-visible [data-author-link='archives'] {
     opacity: 1;
     pointer-events: auto;
-    transition: color 180ms ease, visibility 0ms linear;
+    transition: color 180ms ease, opacity 1400ms ease, visibility 0ms linear;
     visibility: visible;
   }
 
