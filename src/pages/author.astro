@@ -116,12 +116,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     };
 
     const getTextRect = (link, canvasRect) => {
-      const range = document.createRange();
-      range.selectNodeContents(link);
-      const rect = range.getBoundingClientRect();
-      range.detach?.();
-
-      return toCanvasRect(rect.width > 0 && rect.height > 0 ? rect : link.getBoundingClientRect(), canvasRect);
+      return toCanvasRect(link.getBoundingClientRect(), canvasRect);
     };
 
     const calculateSafeMargins = (stage, links) => {
