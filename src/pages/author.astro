@@ -5,7 +5,15 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 <BaseLayout title="Author | Varelism" description="Author.">
   <section class="author-stage" data-author-stage aria-label="Author">
     <svg class="author-root-line" data-author-root-line aria-hidden="true" focusable="false">
-      <path data-author-root-path></path>
+      <path
+        data-author-root-path
+        fill="none"
+        stroke="#691b17"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        stroke-width="1.1"
+        vector-effect="non-scaling-stroke"
+      ></path>
     </svg>
     <nav class="author-random-nav" aria-label="Author sections">
       <a class="author-random-link" href="/books/" data-author-random-link data-author-link="books">Books</a>
@@ -381,6 +389,18 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       const createRootPath = () => {
         const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
         path.setAttribute('data-author-root-path', '');
+        path.setAttribute('fill', 'none');
+        path.setAttribute('stroke', '#691b17');
+        path.setAttribute('stroke-linecap', 'round');
+        path.setAttribute('stroke-linejoin', 'round');
+        path.setAttribute('stroke-width', '1.1');
+        path.setAttribute('vector-effect', 'non-scaling-stroke');
+        path.style.fill = 'none';
+        path.style.stroke = '#691b17';
+        path.style.strokeLinecap = 'round';
+        path.style.strokeLinejoin = 'round';
+        path.style.strokeWidth = '1.1px';
+        path.style.vectorEffect = 'non-scaling-stroke';
         rootLine.replaceChildren(path);
         rootPath = path;
 
@@ -419,16 +439,23 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         };
       };
 
-      const getWordMarginPadding = (safeRect) => {
+      const getWordMarginPadding = (safeRect, wordGeometries) => {
+        const measuredTextHeight = Math.max(...wordGeometries.map((geometry) => geometry.wordRect.height));
+        const computedFontSize = Math.max(
+          ...links.slice(0, 2).map((link) => Number.parseFloat(window.getComputedStyle(link).fontSize) || 0),
+        );
+        const typographyScale = Math.max(measuredTextHeight, computedFontSize, 1);
+        const preferredPadding = typographyScale * 0.68;
+
         if (safeRect.width <= 560) {
-          return clamp(safeRect.minDimension * 0.04, 14, 22);
+          return clamp(preferredPadding, 14, 22);
         }
 
         if (safeRect.width <= 900) {
-          return clamp(safeRect.minDimension * 0.035, 18, 26);
+          return clamp(preferredPadding, 18, 26);
         }
 
-        return clamp(safeRect.minDimension * 0.03, 22, 32);
+        return clamp(preferredPadding, 22, 32);
       };
 
       const getCenterRange = (safeRect, size) => {
@@ -514,7 +541,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         const safeRect = getSafeRect(getLinkSizes());
         const bookGeometry = getMeasuredWordGeometry(links[0], stageRect);
         const archiveGeometry = getMeasuredWordGeometry(links[1], stageRect);
-        const wordMarginPadding = getWordMarginPadding(safeRect);
+        const wordMarginPadding = getWordMarginPadding(safeRect, [bookGeometry, archiveGeometry]);
         const bookMarginRect = getPaddedRect(bookGeometry.wordRect, wordMarginPadding);
         const archiveMarginRect = getPaddedRect(archiveGeometry.wordRect, wordMarginPadding);
         const bookCenter = getRectCenter(bookGeometry.wordRect);
@@ -533,11 +560,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         path.setAttribute('d', curve.pathData);
         path.style.transition = 'none';
         path.style.opacity = '0';
-        path.style.strokeDasharray = '1';
+        path.style.strokeDasharray = '1 1';
         path.style.strokeDashoffset = '1';
 
         const pathLength = Math.max(1, path.getTotalLength?.() || curve.length);
-        path.style.strokeDasharray = `${pathLength}`;
+        path.style.strokeDasharray = `${pathLength} ${pathLength}`;
         path.style.strokeDashoffset = `${pathLength}`;
 
         return pathLength;
@@ -555,7 +582,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         if (rootPath instanceof SVGPathElement) {
           rootPath.style.transition = 'none';
           rootPath.style.opacity = '0';
-          rootPath.style.strokeDasharray = '1';
+          rootPath.style.strokeDasharray = '1 1';
           rootPath.style.strokeDashoffset = '1';
         }
       };
@@ -725,13 +752,13 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     z-index: 0;
   }
 
-  .author-root-line path {
+  :global(.author-root-line path) {
     fill: none;
     opacity: 0;
     stroke: #691b17;
     stroke-linecap: round;
     stroke-linejoin: round;
-    stroke-width: 0.9;
+    stroke-width: 1.1;
     vector-effect: non-scaling-stroke;
   }
 
