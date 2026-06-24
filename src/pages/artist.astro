@@ -1,7 +1,14 @@
 ---
+import HomePreloader from '../components/HomePreloader.astro';
 import BaseLayout from '../layouts/BaseLayout.astro';
 ---
 
 <BaseLayout title="Artist | Varelism" description="Artist.">
+  <HomePreloader
+    activePaths={['/artist/', '/artist']}
+    completeEvent="varelism:artist-preloader-complete"
+    sessionKey="varelism-artist-preloader-seen"
+  />
+
   <section aria-label="Artist"></section>
 </BaseLayout>

@@ -26,8 +26,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     </svg>
 
     <nav class="author-links" aria-label="Author sections">
-      <a class="author-link" href="/books/" data-author-link="books">Books </a>
-      <a class="author-link" href="/memories/" data-author-link="archives">Memories</a>
+      <a class="author-link" href="/booklist/" data-author-link="books">Books </a>
+      <a class="author-link" href="/archives/" data-author-link="archives">Archives</a>
     </nav>
   </section>
 </BaseLayout>
@@ -44,15 +44,14 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     const TEXT_TO_LINE_GAP = 10;
     const DEFAULT_HORIZONTAL_LEAD_LENGTH = 64;
     const DESKTOP_BOOKS_SPACE_QUERY = '(min-width: 1200px)';
+    const MOBILE_AUTHOR_VIEWPORT_QUERY = '(max-width: 1199px)';
+    const TOUCH_VIEWPORT_QUERY = '(any-pointer: coarse), (pointer: coarse)';
+    const VIEWPORT_RESIZE_EPSILON = 1;
     const DEBUG_AUTHOR_CONNECTOR = false;
 
     const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
     const randomBetween = (min, max) => (max <= min ? min : min + Math.random() * (max - min));
     const formatPathNumber = (value) => (Number.isFinite(value) ? String(value) : '0');
-    const getPointBetween = (start, end, t) => ({
-      x: start.x + (end.x - start.x) * t,
-      y: start.y + (end.y - start.y) * t,
-    });
 
     function getTextNode(link) {
       return Array.from(link.childNodes).find(
@@ -73,6 +72,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       };
     }
 
+    // DOM Range keeps connector endpoints tied to the rendered glyph bounds.
     function getCharacterRect(link, charIndex, stageRect, { preserveWhitespace = false } = {}) {
       const textNode = getTextNode(link);
 
@@ -341,85 +341,29 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       const bodyStart = startLeadPoint;
       const bodyEnd = endLeadPoint;
       const dx = bodyEnd.x - bodyStart.x;
-      const dy = bodyEnd.y - bodyStart.y;
-      const distance = Math.hypot(dx, dy);
-      const bodyDirection = distance > 0.001
-        ? {
-            x: dx / distance,
-            y: dy / distance,
-          }
-        : horizontalDirection;
-      const normal = {
-        x: -bodyDirection.y,
-        y: bodyDirection.x,
-      };
-      const amplitude = clamp(distance * randomBetween(0.1, 0.16), 24, 140);
-      const firstBendSign = Math.random() < 0.5 ? -1 : 1;
       const startTangent = horizontalDirection;
       const endTangent = horizontalDirection;
-      const segmentCount = Math.round(clamp(distance / randomBetween(220, 340), 3, 7));
-      const pointWeights = Array.from({ length: Math.max(0, segmentCount - 1) }, () =>
-        randomBetween(0.68, 1.36)
+      const horizontalBodyDistance = Math.abs(dx);
+      const maxHandleLength = horizontalBodyDistance * 0.46;
+      const minHandleLength = Math.min(24, maxHandleLength);
+      const handleOneLength = clamp(
+        horizontalBodyDistance * randomBetween(0.32, 0.46),
+        minHandleLength,
+        maxHandleLength
       );
-      const totalWeight = pointWeights.reduce((total, weight) => total + weight, 0) || 1;
-      const bodyPoints = [bodyStart];
-      let accumulatedWeight = 0;
-
-      pointWeights.forEach((weight, index) => {
-        accumulatedWeight += weight;
-
-        const evenT = (index + 1) / segmentCount;
-        const weightedT = accumulatedWeight / totalWeight;
-        const t = clamp(evenT * 0.54 + weightedT * 0.46, 0.12, 0.88);
-        const taper = Math.sin(Math.PI * t) ** 0.72;
-        const directionSign = index % 2 === 0 ? firstBendSign : -firstBendSign;
-        const localAmplitude = amplitude * randomBetween(0.52, 1.18) * taper;
-        const drift = amplitude * randomBetween(-0.18, 0.18) * taper;
-        const basePoint = getPointBetween(bodyStart, bodyEnd, t);
-
-        bodyPoints.push({
-          x: basePoint.x + normal.x * localAmplitude * directionSign + bodyDirection.x * drift,
-          y: basePoint.y + normal.y * localAmplitude * directionSign + bodyDirection.y * drift,
-        });
-      });
-
-      bodyPoints.push(bodyEnd);
-
-      const cubicCommands = bodyPoints.slice(0, -1).map((currentPoint, index) => {
-        const nextPoint = bodyPoints[index + 1];
-        const previousPoint = bodyPoints[index - 1];
-        const afterNextPoint = bodyPoints[index + 2];
-        const segmentLength = Math.hypot(nextPoint.x - currentPoint.x, nextPoint.y - currentPoint.y);
-        const handleLength = clamp(segmentLength * 0.42, 18, Math.max(18, distance * 0.18));
-        const controlOne = index === 0
-          ? {
-              x: currentPoint.x + startTangent.x * handleLength,
-              y: currentPoint.y + startTangent.y * handleLength,
-            }
-          : {
-              x: currentPoint.x + (nextPoint.x - previousPoint.x) / 6,
-              y: currentPoint.y + (nextPoint.y - previousPoint.y) / 6,
-            };
-        const controlTwo = index === bodyPoints.length - 2
-          ? {
-              x: nextPoint.x - endTangent.x * handleLength,
-              y: nextPoint.y - endTangent.y * handleLength,
-            }
-          : {
-              x: nextPoint.x - (afterNextPoint.x - currentPoint.x) / 6,
-              y: nextPoint.y - (afterNextPoint.y - currentPoint.y) / 6,
-            };
-
-        return [
-          'C',
-          formatPathNumber(controlOne.x),
-          formatPathNumber(controlOne.y),
-          formatPathNumber(controlTwo.x),
-          formatPathNumber(controlTwo.y),
-          formatPathNumber(nextPoint.x),
-          formatPathNumber(nextPoint.y),
-        ].join(' ');
-      });
+      const handleTwoLength = clamp(
+        horizontalBodyDistance * randomBetween(0.32, 0.46),
+        minHandleLength,
+        maxHandleLength
+      );
+      const controlOne = {
+        x: bodyStart.x + startTangent.x * handleOneLength,
+        y: bodyStart.y,
+      };
+      const controlTwo = {
+        x: bodyEnd.x - endTangent.x * handleTwoLength,
+        y: bodyEnd.y,
+      };
       const d = [
         'M',
         formatPathNumber(pathStartPoint.x),
@@ -427,7 +371,13 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         'L',
         formatPathNumber(startLeadPoint.x),
         formatPathNumber(startLeadPoint.y),
-        ...cubicCommands,
+        'C',
+        formatPathNumber(controlOne.x),
+        formatPathNumber(controlOne.y),
+        formatPathNumber(controlTwo.x),
+        formatPathNumber(controlTwo.y),
+        formatPathNumber(endLeadPoint.x),
+        formatPathNumber(endLeadPoint.y),
         'L',
         formatPathNumber(endPoint.x),
         formatPathNumber(endPoint.y),
@@ -436,8 +386,6 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       return {
         d,
         endLeadPoint,
-        finalLeadLength,
-        bodyPoints,
         pathStartPoint,
         startLeadPoint,
       };
@@ -494,6 +442,34 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       let pathLength = 0;
       let preloaderComplete = !document.querySelector('[data-home-preloader]');
       let sequenceComplete = false;
+
+      const getViewportSnapshot = () => ({
+        height: window.innerHeight || document.documentElement.clientHeight || 0,
+        width: window.innerWidth || document.documentElement.clientWidth || 0,
+      });
+
+      let viewportSnapshot = getViewportSnapshot();
+
+      const isTouchViewport = () =>
+        Boolean(
+          window.navigator?.maxTouchPoints > 0 ||
+          window.matchMedia?.(TOUCH_VIEWPORT_QUERY)?.matches
+        );
+
+      const isMobileAuthorViewport = () =>
+        Boolean(window.matchMedia?.(MOBILE_AUTHOR_VIEWPORT_QUERY)?.matches);
+
+      const getViewportDelta = (nextViewport) => ({
+        heightChanged: Math.abs(nextViewport.height - viewportSnapshot.height) > VIEWPORT_RESIZE_EPSILON,
+        widthChanged: Math.abs(nextViewport.width - viewportSnapshot.width) > VIEWPORT_RESIZE_EPSILON,
+      });
+
+      const isIgnoredMobileHeightResize = (eventType, nextViewport) => {
+        if (eventType === 'orientationchange') return false;
+
+        const { heightChanged, widthChanged } = getViewportDelta(nextViewport);
+        return (isTouchViewport() || isMobileAuthorViewport()) && heightChanged && !widthChanged;
+      };
 
       const clearTimers = () => {
         timers.forEach((timer) => window.clearTimeout(timer));
@@ -622,6 +598,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       };
 
       const clearInlinePositions = () => {
+        stage.style.removeProperty('--author-stage-height');
         booklistLink.style.removeProperty('--author-link-x');
         booklistLink.style.removeProperty('--author-link-y');
         archivesLink.style.removeProperty('--author-link-x');
@@ -736,6 +713,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         }
 
         resetPathStyles(path);
+        stage.style.removeProperty('--author-stage-height');
 
         try {
           if (document.fonts?.ready) {
@@ -748,6 +726,10 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         await waitForAnimationFrame();
 
         if (disposed || token !== layoutToken) return;
+
+        const measuredStageRect = stage.getBoundingClientRect();
+        const measuredStageHeight = Math.max(measuredStageRect.height, 1);
+        stage.style.setProperty('--author-stage-height', `${measuredStageHeight}px`);
 
         const placements = placeAuthorLinks(stage, booklistLink, archivesLink);
 
@@ -774,6 +756,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         pathLength = path.getTotalLength();
         setPathHidden(path, pathLength);
         verifyConnectorGeometry(endpointData, pathData);
+        viewportSnapshot = getViewportSnapshot();
 
         if (continueRevealAfterRebuild(revealSnapshot)) return;
 
@@ -785,7 +768,22 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         tryStartSequence();
       };
 
-      const onResize = () => {
+      const onResize = (event) => {
+        const nextViewport = getViewportSnapshot();
+        const eventType = event?.type || 'resize';
+        const { heightChanged, widthChanged } = getViewportDelta(nextViewport);
+
+        if (eventType !== 'orientationchange' && !heightChanged && !widthChanged) {
+          return;
+        }
+
+        // Mobile browser chrome can change only viewport height while scrolling.
+        // Ignoring that keeps the random placement and connector frozen after spawn.
+        if (isIgnoredMobileHeightResize(eventType, nextViewport)) {
+          return;
+        }
+
+        viewportSnapshot = nextViewport;
         const revealSnapshot = getRevealSnapshot();
 
         ++layoutToken;
@@ -880,7 +878,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     display: block;
     height: calc(100vh - var(--author-main-top));
     height: calc(100svh - var(--author-main-top));
-    height: calc(100dvh - var(--author-main-top));
+    height: var(--author-stage-height, calc(100dvh - var(--author-main-top)));
     isolation: isolate;
     min-height: 24rem;
     overflow: hidden;

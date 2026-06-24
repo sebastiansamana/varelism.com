@@ -3,20 +3,19 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
 const basePath = import.meta.env.BASE_URL === '/' ? '' : import.meta.env.BASE_URL.replace(/\/$/, '');
 const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
-const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
+const preloaderImageUrl = `${basePath}/images/Logo_Animation_Preloader.gif`;
 ---
 
 <BaseLayout title="Architect | Varelism" description="Interactive architectural object.">
   <div class="architect-preloader" data-architect-preloader aria-hidden="true">
-    <video
-      class="architect-preloader__video"
-      src={preloaderVideoUrl}
-      autoplay
-      muted
-      playsinline
-      loop
-      preload="auto"
-    ></video>
+    <img
+      class="architect-preloader__image"
+      src={preloaderImageUrl}
+      alt=""
+      decoding="async"
+      draggable="false"
+      loading="eager"
+    />
   </div>
   <div class="architect-viewer" data-architect-viewer data-model-url={modelUrl}></div>
   <section class="architect-stage" data-architect-stage aria-label="Architect">
@@ -71,14 +70,6 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
       disposeCurrentViewer();
       viewer.dataset.viewerBooted = 'true';
       document.documentElement.classList.add('architect-preloader-active');
-      const preloaderVideo = preloader?.querySelector('video');
-
-      if (preloaderVideo instanceof HTMLVideoElement) {
-        preloaderVideo.muted = true;
-        preloaderVideo.play().catch(() => {
-          // Muted autoplay can still be delayed by the browser; the white overlay remains the fallback holding state.
-        });
-      }
 
       let didStart = false;
       let hasDisposed = false;
@@ -95,8 +86,8 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
           (link) => link instanceof HTMLAnchorElement,
         );
 
-      const videoVisibleMs = 1000;
-      const videoFadeMs = 300;
+      const imageVisibleMs = 1000;
+      const imageFadeMs = 300;
       const whiteHoldMs = 300;
       const overlayFadeMs = 300;
 
@@ -121,7 +112,7 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
         if (hasDisposed || isPreloaderHiding || !isModelReady || !hasMetMinimumDuration) return;
 
         isPreloaderHiding = true;
-        preloader?.classList.add('is-video-fading');
+        preloader?.classList.add('is-image-fading');
 
         setPreloaderTimer(() => {
           unlockPageBehindPreloader();
@@ -129,13 +120,13 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
             preloader?.classList.add('is-overlay-fading');
             setPreloaderTimer(removePreloader, overlayFadeMs);
           }, whiteHoldMs);
-        }, videoFadeMs);
+        }, imageFadeMs);
       };
 
       setPreloaderTimer(() => {
         hasMetMinimumDuration = true;
         hidePreloaderWhenReady();
-      }, videoVisibleMs);
+      }, imageVisibleMs);
 
       const installSpatialLinkGuards = () => {
         const spatialLinks = getSpatialLinks();
@@ -1091,7 +1082,7 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
     visibility: hidden;
   }
 
-  .architect-preloader__video {
+  .architect-preloader__image {
     display: block;
     height: auto;
     max-height: min(34vh, 18rem);
@@ -1102,7 +1093,7 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
     width: min(48vw, 22rem);
   }
 
-  .architect-preloader.is-video-fading .architect-preloader__video {
+  .architect-preloader.is-image-fading .architect-preloader__image {
     opacity: 0;
   }
 
@@ -1307,7 +1298,7 @@ const preloaderVideoUrl = `${basePath}/videos/Logo_Animation_Preloader.mp4`;
       width: 100vw;
     }
 
-    .architect-preloader__video {
+    .architect-preloader__image {
       max-height: min(28vh, 13rem);
       max-width: min(62vw, 16rem);
       width: min(62vw, 16rem);

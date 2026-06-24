@@ -7,7 +7,7 @@ interface Props {
   timingScale?: number;
 }
 
-const videoSrc = '/videos/Logo_Animation_Preloader.mp4';
+const imageSrc = '/images/Logo_Animation_Preloader.gif';
 const {
   activePaths = ['/', '/index.html'],
   completeEvent = 'varelism:preloader-complete',
@@ -27,23 +27,24 @@ const {
   data-timing-scale={timingScale}
   aria-hidden="true"
 >
-  <video
-    class="home-preloader__video"
-    src={videoSrc}
-    autoplay
-    muted
-    playsinline
-    loop
-    preload="auto"
-  ></video>
+  <img
+    class="home-preloader__image"
+    src={imageSrc}
+    alt=""
+    decoding="async"
+    draggable="false"
+    loading="eager"
+  />
 </div>
 
 <script is:inline>
   (() => {
     const stateKey = '__varelismHomePreloader';
     const state = (window[stateKey] ||= {
+      cleanups: new Set(),
       listenersAttached: false,
     });
+    state.cleanups ||= new Set();
 
     const initOverlay = (overlay) => {
       if (!(overlay instanceof HTMLElement) || overlay.dataset.homePreloaderBooted === 'true') return;
@@ -55,13 +56,15 @@ const {
       const activePaths = (overlay.dataset.activePaths || '/|/index.html').split('|').filter(Boolean);
       const playOnce = overlay.dataset.playOnce !== 'false';
       const timingScale = Math.max(0.1, Number.parseFloat(overlay.dataset.timingScale || '1') || 1);
-      const videoVisibleMs = Math.round(3000 * timingScale);
-      const videoFadeMs = Math.round(300 * timingScale);
+      const imageVisibleMs = Math.round(3000 * timingScale);
+      const imageFadeMs = Math.round(300 * timingScale);
       const whiteHoldMs = Math.round(300 * timingScale);
       const overlayFadeMs = Math.round(300 * timingScale);
       const fallbackMs = Math.round(10000 * timingScale);
       const isActivePath = activePaths.includes(window.location.pathname);
       let hasRemoved = false;
+      let onLoad = null;
+      const timers = new Set();
       const storage = {
         get() {
           try {
@@ -79,9 +82,34 @@ const {
         },
       };
 
+      const setTimer = (callback, delay) => {
+        const timer = window.setTimeout(() => {
+          timers.delete(timer);
+          callback();
+        }, delay);
+
+        timers.add(timer);
+        return timer;
+      };
+
+      const cleanupOverlay = () => {
+        timers.forEach((timer) => window.clearTimeout(timer));
+        timers.clear();
+
+        if (onLoad) {
+          window.removeEventListener('load', onLoad);
+          onLoad = null;
+        }
+
+        state.cleanups.delete(cleanupOverlay);
+      };
+
+      state.cleanups.add(cleanupOverlay);
+
       const removeOverlay = () => {
         if (hasRemoved) return;
         hasRemoved = true;
+        cleanupOverlay();
         overlay.remove();
         document.documentElement.classList.remove('home-preloader-active');
         window.dispatchEvent(new CustomEvent(completeEvent));
@@ -97,43 +125,42 @@ const {
       overlay.classList.add('is-visible');
 
       let isPageReady = document.readyState === 'complete';
-      let hasMetVideoDuration = false;
+      let hasMetImageDuration = false;
       let isHiding = false;
 
       const hideOverlay = () => {
-        if (isHiding || !isPageReady || !hasMetVideoDuration) return;
+        if (isHiding || !isPageReady || !hasMetImageDuration) return;
 
         isHiding = true;
-        overlay.classList.add('is-video-fading');
-        window.setTimeout(() => {
+        overlay.classList.add('is-image-fading');
+        setTimer(() => {
           overlay.classList.add('is-overlay-fading');
-          window.setTimeout(removeOverlay, overlayFadeMs);
-        }, videoFadeMs + whiteHoldMs);
+          setTimer(removeOverlay, overlayFadeMs);
+        }, imageFadeMs + whiteHoldMs);
       };
 
-      window.setTimeout(() => {
-        hasMetVideoDuration = true;
+      setTimer(() => {
+        hasMetImageDuration = true;
         hideOverlay();
-      }, videoVisibleMs);
+      }, imageVisibleMs);
 
-      const fallbackTimer = window.setTimeout(() => {
+      const fallbackTimer = setTimer(() => {
         isPageReady = true;
-        hasMetVideoDuration = true;
+        hasMetImageDuration = true;
         hideOverlay();
       }, fallbackMs);
 
       if (document.readyState === 'complete') {
         hideOverlay();
       } else {
-        window.addEventListener(
-          'load',
-          () => {
-            isPageReady = true;
-            window.clearTimeout(fallbackTimer);
-            hideOverlay();
-          },
-          { once: true },
-        );
+        onLoad = () => {
+          isPageReady = true;
+          window.clearTimeout(fallbackTimer);
+          timers.delete(fallbackTimer);
+          hideOverlay();
+        };
+
+        window.addEventListener('load', onLoad, { once: true });
       }
     };
 
@@ -144,6 +171,8 @@ const {
     if (!state.listenersAttached) {
       document.addEventListener('astro:page-load', initPreloaders);
       document.addEventListener('astro:before-swap', () => {
+        state.cleanups.forEach((cleanup) => cleanup());
+        state.cleanups.clear();
         document.documentElement.classList.remove('home-preloader-active');
       });
       state.listenersAttached = true;
@@ -184,7 +213,7 @@ const {
     visibility: hidden;
   }
 
-  .home-preloader__video {
+  .home-preloader__image {
     display: block;
     height: auto;
     max-height: min(34vh, 18rem);
@@ -195,7 +224,7 @@ const {
     width: min(48vw, 22rem);
   }
 
-  .home-preloader.is-video-fading .home-preloader__video {
+  .home-preloader.is-image-fading .home-preloader__image {
     opacity: 0;
   }
 
@@ -205,7 +234,7 @@ const {
   }
 
   @media (max-width: 720px) {
-    .home-preloader__video {
+    .home-preloader__image {
       max-height: min(28vh, 13rem);
       max-width: min(62vw, 16rem);
       width: min(62vw, 16rem);
