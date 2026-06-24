@@ -43,6 +43,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     const preloaderCompleteEvent = 'varelism:author-preloader-complete';
     const TEXT_TO_LINE_GAP = 10;
     const DEFAULT_HORIZONTAL_LEAD_LENGTH = 64;
+    const DESKTOP_BOOKS_SPACE_QUERY = '(min-width: 1200px)';
     const DEBUG_AUTHOR_CONNECTOR = false;
 
     const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
@@ -72,7 +73,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       };
     }
 
-    function getCharacterRect(link, charIndex, stageRect) {
+    function getCharacterRect(link, charIndex, stageRect, { preserveWhitespace = false } = {}) {
       const textNode = getTextNode(link);
 
       if (!textNode || !textNode.nodeValue) {
@@ -80,20 +81,25 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       }
 
       const raw = textNode.nodeValue;
-      const trimmed = raw.trim();
-      const trimStart = raw.indexOf(trimmed);
+      const measuredText = preserveWhitespace ? raw : raw.trim();
+
+      if (!measuredText.length) {
+        return toStageRect(link.getBoundingClientRect(), stageRect);
+      }
+
+      const textStart = preserveWhitespace ? 0 : raw.indexOf(measuredText);
 
       const safeIndex = Math.min(
         Math.max(charIndex, 0),
-        Math.max(trimmed.length - 1, 0)
+        Math.max(measuredText.length - 1, 0)
       );
 
       const range = document.createRange();
-      range.setStart(textNode, trimStart + safeIndex);
-      range.setEnd(textNode, trimStart + safeIndex + 1);
+      range.setStart(textNode, textStart + safeIndex);
+      range.setEnd(textNode, textStart + safeIndex + 1);
 
       const browserRect = range.getBoundingClientRect();
-      range.detach();
+      range.detach?.();
 
       if (!browserRect.width || !browserRect.height) {
         return toStageRect(link.getBoundingClientRect(), stageRect);
@@ -102,19 +108,35 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       return toStageRect(browserRect, stageRect);
     }
 
+    function shouldMeasureDesktopBooksSpace(booklistLink, archivesIsRight) {
+      return Boolean(
+        archivesIsRight &&
+        booklistLink.dataset.authorLink === 'books' &&
+        booklistLink.textContent?.endsWith(' ') &&
+        window.matchMedia?.(DESKTOP_BOOKS_SPACE_QUERY)?.matches &&
+        getComputedStyle(booklistLink).whiteSpace === 'pre'
+      );
+    }
+
     function computeConnectorEndpoints(booklistLink, archivesLink, stageRect) {
       const booklistRect = toStageRect(booklistLink.getBoundingClientRect(), stageRect);
       const archivesRect = toStageRect(archivesLink.getBoundingClientRect(), stageRect);
 
       const archivesIsRight = archivesRect.centerX >= booklistRect.centerX;
+      const measureBooklistSpace = shouldMeasureDesktopBooksSpace(booklistLink, archivesIsRight);
 
+      const booklistRawText = booklistLink.textContent || '';
       const booklistText = booklistLink.textContent.trim();
       const archivesText = archivesLink.textContent.trim();
 
-      const booklistCharIndex = archivesIsRight ? booklistText.length - 1 : 0;
+      const booklistCharIndex = measureBooklistSpace
+        ? Math.max(booklistRawText.length - 1, 0)
+        : archivesIsRight ? booklistText.length - 1 : 0;
       const archivesCharIndex = archivesIsRight ? 0 : archivesText.length - 1;
 
-      const booklistCharRect = getCharacterRect(booklistLink, booklistCharIndex, stageRect);
+      const booklistCharRect = getCharacterRect(booklistLink, booklistCharIndex, stageRect, {
+        preserveWhitespace: measureBooklistSpace,
+      });
       const archivesCharRect = getCharacterRect(archivesLink, archivesCharIndex, stageRect);
 
       const horizontalDirection = archivesIsRight
