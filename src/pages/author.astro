@@ -614,8 +614,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         started: hasStartedSequence,
       });
 
-      const finishMemoriesReveal = () => {
-        stage.classList.add('is-memories-visible');
+      const finishLineReveal = () => {
+        stage.classList.add('is-books-visible', 'is-memories-visible');
         sequenceComplete = true;
       };
 
@@ -632,23 +632,23 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         if (revealSnapshot.lineDrawing) {
           hasStartedSequence = true;
           sequenceComplete = false;
-          stage.classList.add('is-positioned', 'is-books-visible', 'is-line-drawing');
+          stage.classList.add('is-positioned', 'is-books-visible', 'is-memories-visible', 'is-line-drawing');
           path.style.opacity = '1';
           path.style.strokeDasharray = `${pathLength} ${pathLength}`;
           path.style.strokeDashoffset = '0';
           path.style.transition = 'none';
-          setTimer(finishMemoriesReveal, 220);
+          setTimer(finishLineReveal, 220);
           return true;
         }
 
-        if (revealSnapshot.booksVisible || revealSnapshot.started) {
+        if (revealSnapshot.memoriesVisible || revealSnapshot.booksVisible || revealSnapshot.started) {
           hasStartedSequence = true;
           sequenceComplete = false;
-          stage.classList.add('is-books-visible');
+          stage.classList.add('is-books-visible', 'is-memories-visible');
           setTimer(() => {
             stage.classList.add('is-line-drawing');
             cleanupAnimation = animatePath(() => {
-              setTimer(finishMemoriesReveal, 220);
+              finishLineReveal();
             });
           }, 180);
           return true;
@@ -728,13 +728,13 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         hasStartedSequence = true;
 
         setTimer(() => {
-          stage.classList.add('is-books-visible');
+          stage.classList.add('is-books-visible', 'is-memories-visible');
         }, 240);
 
         setTimer(() => {
           stage.classList.add('is-line-drawing');
           cleanupAnimation = animatePath(() => {
-            setTimer(finishMemoriesReveal, 220);
+            finishLineReveal();
           });
         }, 1320);
       };
