@@ -407,13 +407,27 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         x: -bodyDirection.y,
         y: bodyDirection.x,
       };
-      const amplitude = clamp(distance * 0.08, 18, 90);
+      const amplitude = clamp(distance * randomBetween(0.08, 0.11), 18, 98);
       const bendSign = Math.random() < 0.5 ? -1 : 1;
       const maxHandleLength = Math.max(0, distance * 0.82);
-      const baseHandleLength = clamp(distance * randomBetween(0.36, 0.44), 0, maxHandleLength);
-      const handleJitter = normal.x * amplitude * bendSign * 0.18;
-      const cp1HandleLength = clamp(baseHandleLength + handleJitter, 0, maxHandleLength);
-      const cp2HandleLength = clamp(baseHandleLength - handleJitter, 0, maxHandleLength);
+      const minHandleLength = Math.min(maxHandleLength, distance * 0.22);
+      const baseHandleLength = clamp(
+        distance * randomBetween(0.34, 0.48),
+        minHandleLength,
+        maxHandleLength
+      );
+      const handleVariation =
+        amplitude * randomBetween(0.2, 0.36) * Math.max(Math.abs(normal.y), 0.35);
+      const cp1HandleLength = clamp(
+        baseHandleLength + handleVariation * bendSign,
+        minHandleLength,
+        maxHandleLength
+      );
+      const cp2HandleLength = clamp(
+        baseHandleLength - handleVariation * bendSign,
+        minHandleLength,
+        maxHandleLength
+      );
       const cp1 = {
         x: bodyStart.x + horizontalDirection.x * cp1HandleLength,
         y: bodyStart.y,
