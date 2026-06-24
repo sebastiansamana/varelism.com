@@ -27,7 +27,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
     <nav class="author-links" aria-label="Author sections">
       <a class="author-link" href="/booklist/" data-author-link="books">Books </a>
-      <a class="author-link" href="/archives/" data-author-link="archives">Archives</a>
+      <a class="author-link" href="/memories/" data-author-link="memories">Memories</a>
     </nav>
   </section>
 </BaseLayout>
@@ -108,9 +108,9 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       return toStageRect(browserRect, stageRect);
     }
 
-    function shouldMeasureDesktopBooksSpace(booklistLink, archivesIsRight) {
+    function shouldMeasureDesktopBooksSpace(booklistLink, memoriesIsRight) {
       return Boolean(
-        archivesIsRight &&
+        memoriesIsRight &&
         booklistLink.dataset.authorLink === 'books' &&
         booklistLink.textContent?.endsWith(' ') &&
         window.matchMedia?.(DESKTOP_BOOKS_SPACE_QUERY)?.matches &&
@@ -118,32 +118,32 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       );
     }
 
-    function computeConnectorEndpoints(booklistLink, archivesLink, stageRect) {
+    function computeConnectorEndpoints(booklistLink, memoriesLink, stageRect) {
       const booklistRect = toStageRect(booklistLink.getBoundingClientRect(), stageRect);
-      const archivesRect = toStageRect(archivesLink.getBoundingClientRect(), stageRect);
+      const memoriesRect = toStageRect(memoriesLink.getBoundingClientRect(), stageRect);
 
-      const archivesIsRight = archivesRect.centerX >= booklistRect.centerX;
-      const measureBooklistSpace = shouldMeasureDesktopBooksSpace(booklistLink, archivesIsRight);
+      const memoriesIsRight = memoriesRect.centerX >= booklistRect.centerX;
+      const measureBooklistSpace = shouldMeasureDesktopBooksSpace(booklistLink, memoriesIsRight);
 
       const booklistRawText = booklistLink.textContent || '';
       const booklistText = booklistLink.textContent.trim();
-      const archivesText = archivesLink.textContent.trim();
+      const memoriesText = memoriesLink.textContent.trim();
 
       const booklistCharIndex = measureBooklistSpace
         ? Math.max(booklistRawText.length - 1, 0)
-        : archivesIsRight ? booklistText.length - 1 : 0;
-      const archivesCharIndex = archivesIsRight ? 0 : archivesText.length - 1;
+        : memoriesIsRight ? booklistText.length - 1 : 0;
+      const memoriesCharIndex = memoriesIsRight ? 0 : memoriesText.length - 1;
 
       const booklistCharRect = getCharacterRect(booklistLink, booklistCharIndex, stageRect, {
         preserveWhitespace: measureBooklistSpace,
       });
-      const archivesCharRect = getCharacterRect(archivesLink, archivesCharIndex, stageRect);
+      const memoriesCharRect = getCharacterRect(memoriesLink, memoriesCharIndex, stageRect);
 
-      const horizontalDirection = archivesIsRight
+      const horizontalDirection = memoriesIsRight
         ? { x: 1, y: 0 }
         : { x: -1, y: 0 };
 
-      const startPoint = archivesIsRight
+      const startPoint = memoriesIsRight
         ? {
             x: booklistCharRect.right + TEXT_TO_LINE_GAP,
             y: booklistRect.centerY,
@@ -153,14 +153,14 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             y: booklistRect.centerY,
           };
 
-      const endPoint = archivesIsRight
+      const endPoint = memoriesIsRight
         ? {
-            x: archivesCharRect.left - TEXT_TO_LINE_GAP,
-            y: archivesRect.centerY,
+            x: memoriesCharRect.left - TEXT_TO_LINE_GAP,
+            y: memoriesRect.centerY,
           }
         : {
-            x: archivesCharRect.right + TEXT_TO_LINE_GAP,
-            y: archivesRect.centerY,
+            x: memoriesCharRect.right + TEXT_TO_LINE_GAP,
+            y: memoriesRect.centerY,
           };
 
       return {
@@ -168,10 +168,10 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         endPoint,
         horizontalDirection,
         booklistRect,
-        archivesRect,
+        memoriesRect,
         booklistCharRect,
-        archivesCharRect,
-        archivesIsRight,
+        memoriesCharRect,
+        memoriesIsRight,
       };
     }
 
@@ -205,14 +205,14 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       y: randomBetween(range.minY, range.maxY),
     });
 
-    function placeAuthorLinks(stage, booklistLink, archivesLink) {
+    function placeAuthorLinks(stage, booklistLink, memoriesLink) {
       const stageRect = stage.getBoundingClientRect();
       const stageWidth = Math.max(stageRect.width, 1);
       const stageHeight = Math.max(stageRect.height, 1);
       const safeX = clamp(stageWidth * 0.08, 32, 96);
       const safeY = clamp(stageHeight * 0.12, 48, 120);
       const booklistSize = getLinkSize(booklistLink);
-      const archivesSize = getLinkSize(archivesLink);
+      const memoriesSize = getLinkSize(memoriesLink);
       const booklistRange = getCenterRange({
         maxX: stageWidth * 0.45,
         maxY: stageHeight - safeY,
@@ -222,35 +222,35 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         stageHeight,
         stageWidth,
       });
-      const archivesRange = getCenterRange({
+      const memoriesRange = getCenterRange({
         maxX: stageWidth - safeX,
         maxY: stageHeight - safeY,
         minX: stageWidth * 0.55,
         minY: safeY,
-        size: archivesSize,
+        size: memoriesSize,
         stageHeight,
         stageWidth,
       });
       const minimumHorizontalDistance = Math.max(
         96,
         Math.min(stageWidth * 0.28, 220),
-        (booklistSize.width + archivesSize.width) / 2 + 40
+        (booklistSize.width + memoriesSize.width) / 2 + 40
       );
 
       for (let attempt = 0; attempt < 80; attempt += 1) {
         const booklistPoint = getRandomPointInRange(booklistRange);
-        const archivesPoint = getRandomPointInRange(archivesRange);
+        const memoriesPoint = getRandomPointInRange(memoriesRange);
 
-        if (Math.abs(archivesPoint.x - booklistPoint.x) >= minimumHorizontalDistance) {
+        if (Math.abs(memoriesPoint.x - booklistPoint.x) >= minimumHorizontalDistance) {
           return {
-            archives: archivesPoint,
+            memories: memoriesPoint,
             books: booklistPoint,
           };
         }
       }
 
       return {
-        archives: {
+        memories: {
           x: stageWidth * 0.65,
           y: stageHeight * 0.42,
         },
@@ -265,20 +265,20 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       if (!DEBUG_AUTHOR_CONNECTOR) return;
 
       const {
-        archivesCharRect,
-        archivesIsRight,
-        archivesRect,
+        memoriesCharRect,
+        memoriesIsRight,
+        memoriesRect,
         booklistRect,
         booklistCharRect,
         endPoint,
         startPoint,
       } = endpointData;
-      const startGap = archivesIsRight
+      const startGap = memoriesIsRight
         ? startPoint.x - booklistCharRect.right
         : booklistCharRect.left - startPoint.x;
-      const endGap = archivesIsRight
-        ? archivesCharRect.left - endPoint.x
-        : endPoint.x - archivesCharRect.right;
+      const endGap = memoriesIsRight
+        ? memoriesCharRect.left - endPoint.x
+        : endPoint.x - memoriesCharRect.right;
       const startLeadLength = Math.hypot(
         pathData.startLeadPoint.x - pathData.pathStartPoint.x,
         pathData.startLeadPoint.y - pathData.pathStartPoint.y
@@ -294,14 +294,14 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       const hasLeadError = Math.abs(startLeadLength - endLeadLength) > tolerance;
       const hasAlignmentError =
         Math.abs(pathData.pathStartPoint.y - booklistRect.centerY) > tolerance ||
-        Math.abs(endPoint.y - archivesRect.centerY) > tolerance;
+        Math.abs(endPoint.y - memoriesRect.centerY) > tolerance;
 
       if (hasGapError || hasLeadError || hasAlignmentError) {
         console.warn('[author connector]', {
           endGap,
           endLeadLength,
           endY: endPoint.y,
-          archivesCenterY: archivesRect.centerY,
+          memoriesCenterY: memoriesRect.centerY,
           startGap,
           startLeadLength,
           startY: pathData.pathStartPoint.y,
@@ -422,13 +422,13 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       const connector = stage.querySelector('[data-author-connector]');
       const path = stage.querySelector('[data-author-connector-path]');
       const booklistLink = stage.querySelector('[data-author-link="books"]');
-      const archivesLink = stage.querySelector('[data-author-link="archives"]');
+      const memoriesLink = stage.querySelector('[data-author-link="memories"]');
 
       if (
         !(connector instanceof SVGSVGElement) ||
         !(path instanceof SVGPathElement) ||
         !(booklistLink instanceof HTMLAnchorElement) ||
-        !(archivesLink instanceof HTMLAnchorElement)
+        !(memoriesLink instanceof HTMLAnchorElement)
       ) {
         return;
       }
@@ -527,7 +527,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
       const resetRevealClasses = () => {
         stage.classList.remove(
-          'is-archives-visible',
+          'is-memories-visible',
           'is-books-visible',
           'is-line-drawing',
           'is-positioned'
@@ -539,7 +539,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           'is-positioned',
           'is-books-visible',
           'is-line-drawing',
-          'is-archives-visible'
+          'is-memories-visible'
         );
         path.style.opacity = '1';
         path.style.strokeDashoffset = '0';
@@ -547,22 +547,22 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       };
 
       const getRevealSnapshot = () => ({
-        archivesVisible: stage.classList.contains('is-archives-visible'),
+        memoriesVisible: stage.classList.contains('is-memories-visible'),
         booksVisible: stage.classList.contains('is-books-visible'),
         complete: sequenceComplete,
         lineDrawing: stage.classList.contains('is-line-drawing'),
         started: hasStartedSequence,
       });
 
-      const finishArchivesReveal = () => {
-        stage.classList.add('is-archives-visible');
+      const finishMemoriesReveal = () => {
+        stage.classList.add('is-memories-visible');
         sequenceComplete = true;
       };
 
       const continueRevealAfterRebuild = (revealSnapshot) => {
         if (!revealSnapshot) return false;
 
-        if (revealSnapshot.complete || revealSnapshot.archivesVisible) {
+        if (revealSnapshot.complete || revealSnapshot.memoriesVisible) {
           hasStartedSequence = true;
           sequenceComplete = true;
           showCompletedReveal();
@@ -577,7 +577,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           path.style.strokeDasharray = `${pathLength} ${pathLength}`;
           path.style.strokeDashoffset = '0';
           path.style.transition = 'none';
-          setTimer(finishArchivesReveal, 220);
+          setTimer(finishMemoriesReveal, 220);
           return true;
         }
 
@@ -588,7 +588,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           setTimer(() => {
             stage.classList.add('is-line-drawing');
             cleanupAnimation = animatePath(() => {
-              setTimer(finishArchivesReveal, 220);
+              setTimer(finishMemoriesReveal, 220);
             });
           }, 180);
           return true;
@@ -601,8 +601,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         stage.style.removeProperty('--author-stage-height');
         booklistLink.style.removeProperty('--author-link-x');
         booklistLink.style.removeProperty('--author-link-y');
-        archivesLink.style.removeProperty('--author-link-x');
-        archivesLink.style.removeProperty('--author-link-y');
+        memoriesLink.style.removeProperty('--author-link-x');
+        memoriesLink.style.removeProperty('--author-link-y');
       };
 
       const resetStage = () => {
@@ -674,7 +674,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         setTimer(() => {
           stage.classList.add('is-line-drawing');
           cleanupAnimation = animatePath(() => {
-            setTimer(finishArchivesReveal, 220);
+            setTimer(finishMemoriesReveal, 220);
           });
         }, 1320);
       };
@@ -682,7 +682,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       const rebuildConnector = async ({ revealSnapshot = null } = {}) => {
         const token = ++layoutToken;
         const shouldContinueReveal = Boolean(
-          revealSnapshot?.archivesVisible ||
+          revealSnapshot?.memoriesVisible ||
           revealSnapshot?.booksVisible ||
           revealSnapshot?.complete ||
           revealSnapshot?.lineDrawing ||
@@ -699,13 +699,13 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           resetRevealClasses();
         } else {
           stage.classList.remove('is-line-drawing');
-          if (!revealSnapshot?.archivesVisible && !revealSnapshot?.complete) {
-            stage.classList.remove('is-archives-visible');
+          if (!revealSnapshot?.memoriesVisible && !revealSnapshot?.complete) {
+            stage.classList.remove('is-memories-visible');
           }
           if (
             !revealSnapshot?.booksVisible &&
             !revealSnapshot?.lineDrawing &&
-            !revealSnapshot?.archivesVisible &&
+            !revealSnapshot?.memoriesVisible &&
             !revealSnapshot?.complete
           ) {
             stage.classList.remove('is-books-visible');
@@ -731,12 +731,12 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         const measuredStageHeight = Math.max(measuredStageRect.height, 1);
         stage.style.setProperty('--author-stage-height', `${measuredStageHeight}px`);
 
-        const placements = placeAuthorLinks(stage, booklistLink, archivesLink);
+        const placements = placeAuthorLinks(stage, booklistLink, memoriesLink);
 
         booklistLink.style.setProperty('--author-link-x', `${placements.books.x}px`);
         booklistLink.style.setProperty('--author-link-y', `${placements.books.y}px`);
-        archivesLink.style.setProperty('--author-link-x', `${placements.archives.x}px`);
-        archivesLink.style.setProperty('--author-link-y', `${placements.archives.y}px`);
+        memoriesLink.style.setProperty('--author-link-x', `${placements.memories.x}px`);
+        memoriesLink.style.setProperty('--author-link-y', `${placements.memories.y}px`);
         stage.classList.add('is-positioned');
 
         await waitForAnimationFrame();
@@ -746,7 +746,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         const stageRect = stage.getBoundingClientRect();
         const stageWidth = Math.max(stageRect.width, 1);
         const stageHeight = Math.max(stageRect.height, 1);
-        const endpointData = computeConnectorEndpoints(booklistLink, archivesLink, stageRect);
+        const endpointData = computeConnectorEndpoints(booklistLink, memoriesLink, stageRect);
         const pathData = buildConnectorPath(endpointData);
 
         connector.setAttribute('height', `${stageHeight}`);
@@ -948,7 +948,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   }
 
   .author-stage.is-positioned.is-books-visible [data-author-link='books'],
-  .author-stage.is-positioned.is-archives-visible [data-author-link='archives'] {
+  .author-stage.is-positioned.is-memories-visible [data-author-link='memories'] {
     opacity: 1;
     pointer-events: auto;
     transition:
