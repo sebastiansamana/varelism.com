@@ -369,27 +369,42 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         y: bodyDirection.x,
       };
       const bendSign = Math.random() < 0.5 ? -1 : 1;
-      const bodyPointCount = horizontalBodyDistance > 560 ? 6 : 5;
-      const waveCount = bodyPointCount - 1;
-      const amplitude = clamp(distance * randomBetween(0.1, 0.18), 28, 118);
-      const phase = randomBetween(-0.28, 0.28);
+      const shoulderInset = horizontalBodyDistance > 560 ? 0.18 : 0.22;
+      const wavePointCount = horizontalBodyDistance > 620 ? 5 : 4;
+      const waveStart = shoulderInset + 0.1;
+      const waveEnd = 1 - shoulderInset - 0.1;
+      const amplitude = clamp(distance * randomBetween(0.12, 0.2), 32, 132);
       const bodyPoints = [bodyStart];
+      const bodyAnchors = [
+        { t: shoulderInset, wave: 0 },
+        ...Array.from({ length: wavePointCount }, (_, index) => {
+          const progress = wavePointCount === 1 ? 0.5 : index / (wavePointCount - 1);
+          const t = clamp(
+            waveStart + (waveEnd - waveStart) * progress + randomBetween(-0.035, 0.035),
+            waveStart,
+            waveEnd
+          );
+          const waveSign = (index % 2 === 0 ? 1 : -1) * bendSign;
 
-      for (let index = 1; index < bodyPointCount; index += 1) {
-        const baseT = index / bodyPointCount;
-        const spacingJitter = randomBetween(-0.055, 0.055);
-        const t = clamp(baseT + spacingJitter, 0.12, 0.88);
-        const edgeTaper = Math.sin(Math.PI * t) ** 1.45;
-        const wave = Math.sin(t * Math.PI * waveCount + phase) * bendSign;
-        const amplitudeDrift = randomBetween(0.74, 1.26);
+          return {
+            t,
+            wave: waveSign * randomBetween(0.72, 1.28),
+          };
+        }),
+        { t: 1 - shoulderInset, wave: 0 },
+      ].sort((left, right) => left.t - right.t);
+
+      bodyAnchors.forEach(({ t, wave }) => {
+        const waveEnvelope = Math.sin(Math.PI * t) ** 1.15;
         const basePoint = getPointBetween(bodyStart, bodyEnd, smoothstep(t));
-        const wavelengthDrift = distance * randomBetween(-0.014, 0.014) * edgeTaper;
+        const wavelengthDrift = distance * randomBetween(-0.012, 0.012) * waveEnvelope * Math.abs(wave);
 
         bodyPoints.push({
+          t,
           x: basePoint.x + bodyDirection.x * wavelengthDrift,
-          y: basePoint.y + bodyDirection.y * wavelengthDrift + normal.y * amplitude * edgeTaper * amplitudeDrift * wave,
+          y: basePoint.y + bodyDirection.y * wavelengthDrift + normal.y * amplitude * waveEnvelope * wave,
         });
-      }
+      });
 
       bodyPoints.push(bodyEnd);
 
@@ -410,11 +425,13 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
         const previousPoint = bodyPoints[index - 1];
         const nextPoint = bodyPoints[index + 1];
+        const t = bodyPoints[index].t ?? index / (bodyPoints.length - 1);
+        const endEase = Math.sin(Math.PI * t) ** 0.6;
         const tension = randomBetween(0.2, 0.28);
 
         return {
           x: (nextPoint.x - previousPoint.x) * tension,
-          y: (nextPoint.y - previousPoint.y) * tension,
+          y: (nextPoint.y - previousPoint.y) * tension * endEase,
         };
       };
       const tangents = bodyPoints.map((_, index) => getPointTangent(index));
