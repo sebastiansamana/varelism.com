@@ -48,6 +48,9 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     const TOUCH_VIEWPORT_QUERY = '(any-pointer: coarse), (pointer: coarse)';
     const VIEWPORT_RESIZE_EPSILON = 1;
     const DEBUG_AUTHOR_CONNECTOR = false;
+    const BOOKS_REVEAL_DELAY_MS = 240;
+    const MEMORIES_REVEAL_DELAY_MS = BOOKS_REVEAL_DELAY_MS + 1500;
+    const CONNECTOR_DRAW_DELAY_MS = MEMORIES_REVEAL_DELAY_MS + 900;
 
     const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
     const randomBetween = (min, max) => (max <= min ? min : min + Math.random() * (max - min));
@@ -602,7 +605,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       const continueRevealAfterRebuild = (revealSnapshot) => {
         if (!revealSnapshot) return false;
 
-        if (revealSnapshot.complete || revealSnapshot.memoriesVisible) {
+        if (revealSnapshot.complete) {
           hasStartedSequence = true;
           sequenceComplete = true;
           showCompletedReveal();
@@ -621,7 +624,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           return true;
         }
 
-        if (revealSnapshot.memoriesVisible || revealSnapshot.booksVisible || revealSnapshot.started) {
+        if (revealSnapshot.memoriesVisible) {
           hasStartedSequence = true;
           sequenceComplete = false;
           stage.classList.add('is-books-visible', 'is-memories-visible');
@@ -631,6 +634,22 @@ import BaseLayout from '../layouts/BaseLayout.astro';
               finishLineReveal();
             });
           }, 180);
+          return true;
+        }
+
+        if (revealSnapshot.booksVisible || revealSnapshot.started) {
+          hasStartedSequence = true;
+          sequenceComplete = false;
+          stage.classList.add('is-books-visible');
+          setTimer(() => {
+            stage.classList.add('is-memories-visible');
+          }, MEMORIES_REVEAL_DELAY_MS - BOOKS_REVEAL_DELAY_MS);
+          setTimer(() => {
+            stage.classList.add('is-line-drawing');
+            cleanupAnimation = animatePath(() => {
+              finishLineReveal();
+            });
+          }, CONNECTOR_DRAW_DELAY_MS - BOOKS_REVEAL_DELAY_MS);
           return true;
         }
 
@@ -708,15 +727,19 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         hasStartedSequence = true;
 
         setTimer(() => {
-          stage.classList.add('is-books-visible', 'is-memories-visible');
-        }, 240);
+          stage.classList.add('is-books-visible');
+        }, BOOKS_REVEAL_DELAY_MS);
+
+        setTimer(() => {
+          stage.classList.add('is-memories-visible');
+        }, MEMORIES_REVEAL_DELAY_MS);
 
         setTimer(() => {
           stage.classList.add('is-line-drawing');
           cleanupAnimation = animatePath(() => {
             finishLineReveal();
           });
-        }, 1320);
+        }, CONNECTOR_DRAW_DELAY_MS);
       };
 
       const rebuildConnector = async ({ revealSnapshot = null } = {}) => {
