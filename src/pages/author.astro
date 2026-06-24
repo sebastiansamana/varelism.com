@@ -59,6 +59,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       x: start.x + (end.x - start.x) * t,
       y: start.y + (end.y - start.y) * t,
     });
+    const smoothstep = (value) => {
+      const t = clamp(value, 0, 1);
+
+      return t * t * (3 - 2 * t);
+    };
 
     function getTextNode(link) {
       return Array.from(link.childNodes).find(
@@ -364,49 +369,80 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         y: bodyDirection.x,
       };
       const bendSign = Math.random() < 0.5 ? -1 : 1;
-      const bendAmplitude = clamp(distance * randomBetween(0.14, 0.22), 32, 136);
-      const midpoint = {
-        x: (bodyStart.x + bodyEnd.x) / 2 + normal.x * bendAmplitude * bendSign,
-        y: (bodyStart.y + bodyEnd.y) / 2 + normal.y * bendAmplitude * bendSign,
+      const bodyPointCount = horizontalBodyDistance > 560 ? 6 : 5;
+      const waveCount = bodyPointCount - 1;
+      const amplitude = clamp(distance * randomBetween(0.1, 0.18), 28, 118);
+      const phase = randomBetween(-0.28, 0.28);
+      const bodyPoints = [bodyStart];
+
+      for (let index = 1; index < bodyPointCount; index += 1) {
+        const baseT = index / bodyPointCount;
+        const spacingJitter = randomBetween(-0.055, 0.055);
+        const t = clamp(baseT + spacingJitter, 0.12, 0.88);
+        const edgeTaper = Math.sin(Math.PI * t) ** 1.45;
+        const wave = Math.sin(t * Math.PI * waveCount + phase) * bendSign;
+        const amplitudeDrift = randomBetween(0.74, 1.26);
+        const basePoint = getPointBetween(bodyStart, bodyEnd, smoothstep(t));
+        const wavelengthDrift = distance * randomBetween(-0.014, 0.014) * edgeTaper;
+
+        bodyPoints.push({
+          x: basePoint.x + bodyDirection.x * wavelengthDrift,
+          y: basePoint.y + bodyDirection.y * wavelengthDrift + normal.y * amplitude * edgeTaper * amplitudeDrift * wave,
+        });
+      }
+
+      bodyPoints.push(bodyEnd);
+
+      const getPointTangent = (index) => {
+        if (index === 0) {
+          return {
+            x: startTangent.x * clamp(distance * randomBetween(0.18, 0.28), 38, 170),
+            y: 0,
+          };
+        }
+
+        if (index === bodyPoints.length - 1) {
+          return {
+            x: endTangent.x * clamp(distance * randomBetween(0.18, 0.28), 38, 170),
+            y: 0,
+          };
+        }
+
+        const previousPoint = bodyPoints[index - 1];
+        const nextPoint = bodyPoints[index + 1];
+        const tension = randomBetween(0.2, 0.28);
+
+        return {
+          x: (nextPoint.x - previousPoint.x) * tension,
+          y: (nextPoint.y - previousPoint.y) * tension,
+        };
       };
-      const edgeHandleLength = clamp(distance * randomBetween(0.24, 0.34), 42, 210);
-      const middleHandleLength = clamp(distance * randomBetween(0.18, 0.28), 36, 170);
-      const startControlPoint = {
-        x: bodyStart.x + startTangent.x * edgeHandleLength,
-        y: bodyStart.y,
-      };
-      const firstMiddleControlPoint = {
-        x: midpoint.x - bodyDirection.x * middleHandleLength,
-        y: midpoint.y - bodyDirection.y * middleHandleLength,
-      };
-      const secondMiddleControlPoint = {
-        x: midpoint.x + bodyDirection.x * middleHandleLength,
-        y: midpoint.y + bodyDirection.y * middleHandleLength,
-      };
-      const endControlPoint = {
-        x: bodyEnd.x - endTangent.x * edgeHandleLength,
-        y: bodyEnd.y,
-      };
-      const cubicCommands = [
-        [
+      const tangents = bodyPoints.map((_, index) => getPointTangent(index));
+      const clampControlX = (controlX, currentPoint, nextPoint) =>
+        clamp(controlX, Math.min(currentPoint.x, nextPoint.x), Math.max(currentPoint.x, nextPoint.x));
+      const cubicCommands = bodyPoints.slice(0, -1).map((currentPoint, index) => {
+        const nextPoint = bodyPoints[index + 1];
+        const currentTangent = tangents[index];
+        const nextTangent = tangents[index + 1];
+        const controlOne = {
+          x: clampControlX(currentPoint.x + currentTangent.x, currentPoint, nextPoint),
+          y: currentPoint.y + currentTangent.y,
+        };
+        const controlTwo = {
+          x: clampControlX(nextPoint.x - nextTangent.x, currentPoint, nextPoint),
+          y: nextPoint.y - nextTangent.y,
+        };
+
+        return [
           'C',
-          formatPathNumber(startControlPoint.x),
-          formatPathNumber(startControlPoint.y),
-          formatPathNumber(firstMiddleControlPoint.x),
-          formatPathNumber(firstMiddleControlPoint.y),
-          formatPathNumber(midpoint.x),
-          formatPathNumber(midpoint.y),
-        ].join(' '),
-        [
-          'C',
-          formatPathNumber(secondMiddleControlPoint.x),
-          formatPathNumber(secondMiddleControlPoint.y),
-          formatPathNumber(endControlPoint.x),
-          formatPathNumber(endControlPoint.y),
-          formatPathNumber(bodyEnd.x),
-          formatPathNumber(bodyEnd.y),
-        ].join(' '),
-      ];
+          formatPathNumber(controlOne.x),
+          formatPathNumber(controlOne.y),
+          formatPathNumber(controlTwo.x),
+          formatPathNumber(controlTwo.y),
+          formatPathNumber(nextPoint.x),
+          formatPathNumber(nextPoint.y),
+        ].join(' ');
+      });
       const d = [
         'M',
         formatPathNumber(pathStartPoint.x),

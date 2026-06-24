@@ -53,6 +53,48 @@ const { title, description = 'Website under construction.' } = Astro.props;
         if (!route.playOnce || !hasPlayed) {
           document.documentElement.classList.add('home-preloader-active', 'home-preloader-booting');
         }
+
+        const listenerKey = '__varelismPreloaderNavigationListeners';
+
+        if (window[listenerKey]) return;
+
+        window[listenerKey] = true;
+
+        document.addEventListener('click', (event) => {
+          if (
+            event.defaultPrevented ||
+            event.button !== 0 ||
+            event.metaKey ||
+            event.ctrlKey ||
+            event.shiftKey ||
+            event.altKey ||
+            !(event.target instanceof Element)
+          ) {
+            return;
+          }
+
+          const link = event.target.closest('a[href]');
+
+          if (!(link instanceof HTMLAnchorElement) || (link.target && link.target !== '_self')) {
+            return;
+          }
+
+          const url = new URL(link.href, window.location.href);
+
+          if (url.origin !== window.location.origin) return;
+
+          if (url.pathname === '/author/' || url.pathname === '/author') {
+            document.documentElement.classList.add('home-preloader-active', 'home-preloader-booting');
+          }
+        });
+
+        document.addEventListener('astro:page-load', () => {
+          const shouldAuthorPreload = window.location.pathname === '/author/' || window.location.pathname === '/author';
+
+          if (!shouldAuthorPreload && !document.querySelector('[data-home-preloader]')) {
+            document.documentElement.classList.remove('home-preloader-active', 'home-preloader-booting');
+          }
+        });
       })();
     </script>
     <title>{title}</title>
