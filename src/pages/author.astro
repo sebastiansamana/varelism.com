@@ -68,6 +68,9 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         return context;
       };
     })();
+    const DEBUG_AUTHOR_CONNECTOR =
+      ['127.0.0.1', 'localhost'].includes(window.location.hostname) &&
+      new URLSearchParams(window.location.search).has('debugAuthorConnector');
     const getPlacementRect = (placement) => ({
       bottom: placement.y + placement.height / 2,
       height: placement.height,
@@ -104,67 +107,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       top: rect.top - canvasRect.top,
       width: rect.width,
     });
-    const getGlyphSideFactor = (character) => {
-      if (!character) return 0.055;
-      if (/^[AaVvWwYy]$/.test(character)) return 0.12;
-      if (/^[CcGgOoQqSs]$/.test(character)) return 0.075;
-      if (/^[Ee]$/.test(character)) return 0.06;
-      if (/^[IiJjLlTt]$/.test(character)) return 0.035;
-      return 0.055;
-    };
-    const getOpticalInsets = (link, rect) => {
-      const styles = window.getComputedStyle(link);
-      const fontSize = Number.parseFloat(styles.fontSize) || rect.height || 1;
-      const text = link.textContent?.trim() || '';
-
-      return {
-        bottom: clamp(fontSize * 0.075, 0.85, 3),
-        left: clamp(fontSize * getGlyphSideFactor(text[0]), 0.8, 5),
-        right: clamp(fontSize * getGlyphSideFactor(text[text.length - 1]), 0.8, 4),
-        top: clamp(fontSize * 0.055, 0.75, 2.4),
-      };
-    };
-    const getMeasuredInkRect = (link, rect, fallbackInsets) => {
-      const styles = window.getComputedStyle(link);
-      const text = link.textContent?.trim() || '';
-      const context = getTextMeasureContext();
-
-      if (!context || !text) {
-        return {
-          bottom: rect.bottom - fallbackInsets.bottom,
-          left: rect.left + fallbackInsets.left,
-          right: rect.right - fallbackInsets.right,
-          top: rect.top + fallbackInsets.top,
-        };
-      }
-
-      context.font = `${styles.fontStyle} ${styles.fontWeight} ${styles.fontSize} ${styles.fontFamily}`;
-      const metrics = context.measureText(text);
-      const measuredWidth = Number.isFinite(metrics.width) && metrics.width > 0 ? metrics.width : rect.width;
-      const layoutStart = rect.left + (rect.width - measuredWidth) / 2;
-      const actualLeft = Number.isFinite(metrics.actualBoundingBoxLeft) ? metrics.actualBoundingBoxLeft : 0;
-      const actualRight =
-        Number.isFinite(metrics.actualBoundingBoxRight) && metrics.actualBoundingBoxRight > 0
-          ? metrics.actualBoundingBoxRight
-          : measuredWidth;
-      const actualAscent =
-        Number.isFinite(metrics.actualBoundingBoxAscent) && metrics.actualBoundingBoxAscent > 0
-          ? metrics.actualBoundingBoxAscent
-          : rect.height - fallbackInsets.top - fallbackInsets.bottom;
-      const actualDescent =
-        Number.isFinite(metrics.actualBoundingBoxDescent) && metrics.actualBoundingBoxDescent >= 0
-          ? metrics.actualBoundingBoxDescent
-          : 0;
-      const actualHeight = Math.max(1, actualAscent + actualDescent);
-      const verticalStart = rect.top + (rect.height - actualHeight) / 2;
-
-      return {
-        bottom: clamp(verticalStart + actualHeight, rect.top + 1, rect.bottom),
-        left: clamp(layoutStart - actualLeft, rect.left, rect.right),
-        right: clamp(layoutStart + actualRight, rect.left, rect.right),
-        top: clamp(verticalStart, rect.top, rect.bottom - 1),
-      };
-    };
+    const normalizeRect = (rect) => ({
+      ...rect,
+      height: Math.max(1, rect.bottom - rect.top),
+      width: Math.max(1, rect.right - rect.left),
+    });
     const createConnectorPath = (svg) => {
       const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
       path.setAttribute('data-author-connector-path', '');
@@ -186,26 +133,127 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       return path;
     };
 
-    const getTextGeometry = (link, canvasRect) => {
+    const getVisibleTextGeometry = (link, canvasRect) => {
       const rect = toCanvasRect(link.getBoundingClientRect(), canvasRect);
-      const opticalInsets = getOpticalInsets(link, rect);
-      const rawInkRect = getMeasuredInkRect(link, rect, opticalInsets);
       const styles = window.getComputedStyle(link);
       const fontSize = Number.parseFloat(styles.fontSize) || rect.height || 1;
       const text = link.textContent?.trim() || '';
       const font = `${styles.fontStyle} ${styles.fontWeight} ${styles.fontSize} ${styles.fontFamily}`;
-      const inkRect = {
-        ...rawInkRect,
-        height: Math.max(1, rawInkRect.bottom - rawInkRect.top),
-        width: Math.max(1, rawInkRect.right - rawInkRect.left),
-      };
+      const context = getTextMeasureContext();
+      const fallbackRect = normalizeRect(rect);
+
+      if (!context || !text) {
+        return {
+          font,
+          fontSize,
+          inkPixels: [],
+          rect,
+          text,
+          visualRect: fallbackRect,
+        };
+      }
+
+      context.font = font;
+      const metrics = context.measureText(text);
+      const measuredWidth = Number.isFinite(metrics.width) && metrics.width > 0 ? metrics.width : rect.width;
+      const actualLeft = Number.isFinite(metrics.actualBoundingBoxLeft) ? Math.max(0, metrics.actualBoundingBoxLeft) : 0;
+      const actualRight =
+        Number.isFinite(metrics.actualBoundingBoxRight) && metrics.actualBoundingBoxRight > 0
+          ? metrics.actualBoundingBoxRight
+          : measuredWidth;
+      const actualAscent =
+        Number.isFinite(metrics.actualBoundingBoxAscent) && metrics.actualBoundingBoxAscent > 0
+          ? metrics.actualBoundingBoxAscent
+          : Math.max(1, rect.height * 0.78);
+      const actualDescent =
+        Number.isFinite(metrics.actualBoundingBoxDescent) && metrics.actualBoundingBoxDescent >= 0
+          ? metrics.actualBoundingBoxDescent
+          : Math.max(0, rect.height * 0.18);
+      const inkWidth = Math.max(1, actualLeft + actualRight);
+      const inkHeight = Math.max(1, actualAscent + actualDescent);
+      const dpr = clamp(window.devicePixelRatio || 1, 1, 3);
+      const padding = Math.ceil(Math.max(8, fontSize * 0.28));
+      const cssWidth = Math.ceil(inkWidth + padding * 2);
+      const cssHeight = Math.ceil(inkHeight + padding * 2);
+      const canvas = context.canvas;
+
+      canvas.width = Math.ceil(cssWidth * dpr);
+      canvas.height = Math.ceil(cssHeight * dpr);
+      context.setTransform(dpr, 0, 0, dpr, 0, 0);
+      context.clearRect(0, 0, cssWidth, cssHeight);
+      context.font = font;
+      context.fillStyle = '#000000';
+      context.textAlign = 'left';
+      context.textBaseline = 'alphabetic';
+      context.fillText(text, padding + actualLeft, padding + actualAscent);
+
+      let pixels;
+      try {
+        pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+      } catch {
+        return {
+          font,
+          fontSize,
+          inkPixels: [],
+          rect,
+          text,
+          visualRect: fallbackRect,
+        };
+      }
+
+      const layoutLeft = rect.left + (rect.width - measuredWidth) / 2;
+      const inkLeft = layoutLeft - actualLeft;
+      const inkTop = rect.top + (rect.height - inkHeight) / 2;
+      const inkPixels = [];
+      let minX = Number.POSITIVE_INFINITY;
+      let minY = Number.POSITIVE_INFINITY;
+      let maxX = Number.NEGATIVE_INFINITY;
+      let maxY = Number.NEGATIVE_INFINITY;
+
+      for (let y = 0; y < canvas.height; y += 1) {
+        const row = y * canvas.width * 4;
+
+        for (let x = 0; x < canvas.width; x += 1) {
+          const alpha = pixels[row + x * 4 + 3];
+          if (alpha <= 18) continue;
+
+          const cssX = (x + 0.5) / dpr;
+          const cssY = (y + 0.5) / dpr;
+          const point = {
+            x: inkLeft + cssX - padding,
+            y: inkTop + cssY - padding,
+          };
+
+          inkPixels.push(point);
+          minX = Math.min(minX, point.x);
+          minY = Math.min(minY, point.y);
+          maxX = Math.max(maxX, point.x);
+          maxY = Math.max(maxY, point.y);
+        }
+      }
+
+      const visualRect =
+        inkPixels.length > 0
+          ? normalizeRect({
+              bottom: maxY,
+              left: minX,
+              right: maxX,
+              top: minY,
+            })
+          : normalizeRect({
+              bottom: inkTop + inkHeight,
+              left: inkLeft,
+              right: inkLeft + inkWidth,
+              top: inkTop,
+            });
 
       return {
         font,
         fontSize,
+        inkPixels,
         rect,
         text,
-        visualRect: inkRect,
+        visualRect,
       };
     };
 
@@ -335,57 +383,13 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     const getVisibleInkBoundaryPoint = (geometry, direction) => {
       const visualRect = geometry.visualRect || geometry.rect;
       const fallbackPoint = projectRectEdge(visualRect, direction);
-      const context = getTextMeasureContext();
-      const text = geometry.text || '';
+      const inkPixels = Array.isArray(geometry.inkPixels) ? geometry.inkPixels : [];
 
-      if (!context || !text || !geometry.font) return fallbackPoint;
+      if (inkPixels.length === 0) return fallbackPoint;
 
       const unit = normalizeVector(direction);
       const normal = { x: -unit.y, y: unit.x };
       const center = getRectCenter(visualRect);
-      context.font = geometry.font;
-      const metrics = context.measureText(text);
-      const measuredWidth = Number.isFinite(metrics.width) && metrics.width > 0 ? metrics.width : visualRect.width;
-      const actualLeft = Number.isFinite(metrics.actualBoundingBoxLeft) ? metrics.actualBoundingBoxLeft : 0;
-      const actualRight =
-        Number.isFinite(metrics.actualBoundingBoxRight) && metrics.actualBoundingBoxRight > 0
-          ? metrics.actualBoundingBoxRight
-          : measuredWidth;
-      const actualAscent =
-        Number.isFinite(metrics.actualBoundingBoxAscent) && metrics.actualBoundingBoxAscent > 0
-          ? metrics.actualBoundingBoxAscent
-          : visualRect.height;
-      const actualDescent =
-        Number.isFinite(metrics.actualBoundingBoxDescent) && metrics.actualBoundingBoxDescent >= 0
-          ? metrics.actualBoundingBoxDescent
-          : 0;
-      const inkWidth = Math.max(1, actualLeft + actualRight);
-      const inkHeight = Math.max(1, actualAscent + actualDescent);
-      const padding = Math.ceil(Math.max(8, (geometry.fontSize || 16) * 0.25));
-      const canvas = context.canvas;
-      const width = Math.ceil(inkWidth + padding * 2);
-      const height = Math.ceil(inkHeight + padding * 2);
-
-      canvas.width = width;
-      canvas.height = height;
-      context.clearRect(0, 0, width, height);
-      context.font = geometry.font;
-      context.fillStyle = '#000000';
-      context.textAlign = 'left';
-      context.textBaseline = 'alphabetic';
-      context.fillText(text, padding + actualLeft, padding + actualAscent);
-
-      let pixels;
-      try {
-        pixels = context.getImageData(0, 0, width, height).data;
-      } catch {
-        return fallbackPoint;
-      }
-
-      const toStagePoint = (x, y) => ({
-        x: visualRect.left + ((x - padding) / inkWidth) * visualRect.width,
-        y: visualRect.top + ((y - padding) / inkHeight) * visualRect.height,
-      });
       const maxBand = Math.max(visualRect.width, visualRect.height);
       const bandSteps = [
         (geometry.fontSize || 16) * 0.04,
@@ -400,26 +404,18 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         let bestPoint = null;
         let bestProjection = Number.NEGATIVE_INFINITY;
 
-        for (let y = 0; y < height; y += 1) {
-          const row = y * width * 4;
+        for (const point of inkPixels) {
+          const fromCenter = {
+            x: point.x - center.x,
+            y: point.y - center.y,
+          };
+          const centerlineDistance = Math.abs(fromCenter.x * normal.x + fromCenter.y * normal.y);
+          if (centerlineDistance > band) continue;
 
-          for (let x = 0; x < width; x += 1) {
-            const alpha = pixels[row + x * 4 + 3];
-            if (alpha <= 18) continue;
-
-            const point = toStagePoint(x + 0.5, y + 0.5);
-            const fromCenter = {
-              x: point.x - center.x,
-              y: point.y - center.y,
-            };
-            const centerlineDistance = Math.abs(fromCenter.x * normal.x + fromCenter.y * normal.y);
-            if (centerlineDistance > band) continue;
-
-            const projection = fromCenter.x * unit.x + fromCenter.y * unit.y;
-            if (projection > bestProjection) {
-              bestProjection = projection;
-              bestPoint = point;
-            }
+          const projection = fromCenter.x * unit.x + fromCenter.y * unit.y;
+          if (projection > bestProjection) {
+            bestProjection = projection;
+            bestPoint = point;
           }
         }
 
@@ -429,40 +425,91 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       return fallbackPoint;
     };
 
-    const getClosestAnchorPoints = (booksGeometry, archivesGeometry, padding) => {
+    const getConnectorGapDiagnostics = ({
+      archivesVisibleEdge,
+      booksVisibleEdge,
+      direction,
+      endPoint,
+      reverseDirection,
+      startPoint,
+      visualGap,
+    }) => {
+      const startGap = (startPoint.x - booksVisibleEdge.x) * direction.x + (startPoint.y - booksVisibleEdge.y) * direction.y;
+      const endGap =
+        (endPoint.x - archivesVisibleEdge.x) * reverseDirection.x + (endPoint.y - archivesVisibleEdge.y) * reverseDirection.y;
+      const tolerance = 0.75;
+
+      return {
+        endGap,
+        gapDelta: startGap - endGap,
+        startGap,
+        tolerance,
+        visualGap,
+        withinTolerance: Math.abs(startGap - visualGap) <= tolerance && Math.abs(endGap - visualGap) <= tolerance,
+      };
+    };
+
+    const verifyConnectorGap = (diagnostics) => {
+      if (!DEBUG_AUTHOR_CONNECTOR || diagnostics.withinTolerance) return;
+
+      console.warn('[author connector] unequal endpoint gap', {
+        endGap: diagnostics.endGap,
+        startGap: diagnostics.startGap,
+        visualGap: diagnostics.visualGap,
+      });
+    };
+
+    const getClosestAnchorPoints = (booksGeometry, archivesGeometry, visualGap) => {
       const booksVisualRect = booksGeometry.visualRect || booksGeometry.rect;
       const archivesVisualRect = archivesGeometry.visualRect || archivesGeometry.rect;
-      const booksSafeRect = getPaddedRect(booksVisualRect, padding);
-      const archivesSafeRect = getPaddedRect(archivesVisualRect, padding);
+      const booksSafeRect = getPaddedRect(booksVisualRect, visualGap);
+      const archivesSafeRect = getPaddedRect(archivesVisualRect, visualGap);
       const booksCenter = getRectCenter(booksVisualRect);
       const archivesCenter = getRectCenter(archivesVisualRect);
-      const direction = normalizeVector({
-        x: archivesCenter.x - booksCenter.x,
-        y: archivesCenter.y - booksCenter.y,
-      });
+      const direction = normalizeVector(
+        {
+          x: archivesCenter.x - booksCenter.x,
+          y: archivesCenter.y - booksCenter.y,
+        },
+        { x: 1, y: 0 },
+      );
       const reverseDirection = {
         x: -direction.x,
         y: -direction.y,
       };
       const booksVisibleEdge = getVisibleInkBoundaryPoint(booksGeometry, direction);
       const archivesVisibleEdge = getVisibleInkBoundaryPoint(archivesGeometry, reverseDirection);
+      const startPoint = {
+        x: booksVisibleEdge.x + direction.x * visualGap,
+        y: booksVisibleEdge.y + direction.y * visualGap,
+      };
+      const endPoint = {
+        x: archivesVisibleEdge.x + reverseDirection.x * visualGap,
+        y: archivesVisibleEdge.y + reverseDirection.y * visualGap,
+      };
+
+      const diagnostics = getConnectorGapDiagnostics({
+        archivesVisibleEdge,
+        booksVisibleEdge,
+        direction,
+        endPoint,
+        reverseDirection,
+        startPoint,
+        visualGap,
+      });
+      verifyConnectorGap(diagnostics);
 
       return {
-        archiveAnchor: 'visible-ink-centerline',
+        archiveAnchor: 'centerline-visible',
         archivesDirection: reverseDirection,
         archivesSafeRect,
-        bookAnchor: 'visible-ink-centerline',
+        bookAnchor: 'centerline-visible',
         booksDirection: direction,
         booksSafeRect,
-        endPoint: {
-          x: archivesVisibleEdge.x + reverseDirection.x * padding,
-          y: archivesVisibleEdge.y + reverseDirection.y * padding,
-        },
+        endPoint,
         endTangent: direction,
-        startPoint: {
-          x: booksVisibleEdge.x + direction.x * padding,
-          y: booksVisibleEdge.y + direction.y * padding,
-        },
+        diagnostics,
+        startPoint,
         startTangent: direction,
       };
     };
@@ -762,6 +809,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         stage.classList.remove('is-books-visible');
         stage.classList.remove('is-line-drawing');
         stage.classList.remove('is-positioned');
+        delete stage.dataset.authorConnectorDiagnostics;
+        delete stage.__authorConnectorDiagnostics;
         createConnectorPath(pathSvg);
       };
 
@@ -787,8 +836,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         stage.classList.add('is-positioned');
 
         const canvasRect = stage.getBoundingClientRect();
-        const booksGeometry = getTextGeometry(links[0], canvasRect);
-        const archivesGeometry = getTextGeometry(links[1], canvasRect);
+        const booksGeometry = getVisibleTextGeometry(links[0], canvasRect);
+        const archivesGeometry = getVisibleTextGeometry(links[1], canvasRect);
         const anchorData = getClosestAnchorPoints(booksGeometry, archivesGeometry, margins.textToLineGap);
         const curve = generateOrganicSingleStrokePath(
           {
@@ -813,6 +862,10 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           curve,
           path,
         };
+        if (DEBUG_AUTHOR_CONNECTOR) {
+          stage.dataset.authorConnectorDiagnostics = JSON.stringify(anchorData.diagnostics);
+          stage.__authorConnectorDiagnostics = anchorData.diagnostics;
+        }
         hasPrepared = true;
       };
 
