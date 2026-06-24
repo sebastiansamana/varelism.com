@@ -111,7 +111,7 @@ const {
         hasRemoved = true;
         cleanupOverlay();
         overlay.remove();
-        document.documentElement.classList.remove('home-preloader-active');
+        document.documentElement.classList.remove('home-preloader-active', 'home-preloader-booting');
         window.dispatchEvent(new CustomEvent(completeEvent));
       };
 
@@ -123,6 +123,7 @@ const {
       if (playOnce) storage.set();
       document.documentElement.classList.add('home-preloader-active');
       overlay.classList.add('is-visible');
+      document.documentElement.classList.remove('home-preloader-booting');
 
       let isPageReady = document.readyState === 'complete';
       let hasMetImageDuration = false;
@@ -173,7 +174,7 @@ const {
       document.addEventListener('astro:before-swap', () => {
         state.cleanups.forEach((cleanup) => cleanup());
         state.cleanups.clear();
-        document.documentElement.classList.remove('home-preloader-active');
+        document.documentElement.classList.remove('home-preloader-active', 'home-preloader-booting');
       });
       state.listenersAttached = true;
     }

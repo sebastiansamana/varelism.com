@@ -360,18 +360,18 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         x: -bodyDirection.y,
         y: bodyDirection.x,
       };
-      const segmentCount = Math.round(clamp(horizontalBodyDistance / randomBetween(170, 250), 3, 6));
-      const amplitude = clamp(distance * randomBetween(0.12, 0.2), 24, 132);
+      const segmentCount = Math.round(clamp(horizontalBodyDistance / randomBetween(150, 220), 4, 7));
+      const amplitude = clamp(distance * randomBetween(0.1, 0.18), 20, 118);
       const firstBendSign = Math.random() < 0.5 ? -1 : 1;
       const bodyPoints = [bodyStart];
 
       for (let index = 1; index < segmentCount; index += 1) {
         const t = index / segmentCount;
-        const taper = Math.sin(Math.PI * t) ** 0.8;
+        const taper = Math.sin(Math.PI * t) ** 1.75;
         const directionSign = index % 2 === 1 ? firstBendSign : -firstBendSign;
         const basePoint = getPointBetween(bodyStart, bodyEnd, t);
-        const localAmplitude = amplitude * taper * randomBetween(0.72, 1.34);
-        const wavelengthDrift = distance * randomBetween(-0.035, 0.035) * taper;
+        const localAmplitude = amplitude * taper * randomBetween(0.58, 1.24);
+        const wavelengthDrift = distance * randomBetween(-0.028, 0.028) * taper;
 
         bodyPoints.push({
           x: basePoint.x + normal.x * localAmplitude * directionSign + bodyDirection.x * wavelengthDrift,
@@ -382,11 +382,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       bodyPoints.push(bodyEnd);
 
       const edgeHandleLength = clamp(
-        horizontalBodyDistance * randomBetween(0.12, 0.22),
-        Math.min(18, horizontalBodyDistance * 0.22),
-        Math.max(18, horizontalBodyDistance * 0.28)
+        horizontalBodyDistance * randomBetween(0.22, 0.34),
+        Math.min(28, horizontalBodyDistance * 0.3),
+        Math.max(28, horizontalBodyDistance * 0.42)
       );
-      const tension = randomBetween(0.16, 0.23);
+      const tension = randomBetween(0.14, 0.2);
       const cubicCommands = bodyPoints.slice(0, -1).map((currentPoint, index) => {
         const nextPoint = bodyPoints[index + 1];
         const previousPoint = bodyPoints[index - 1] || currentPoint;
@@ -458,6 +458,12 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       path.style.transition = 'none';
     };
 
+    const isElementTag = (element, tagName) =>
+      Boolean(element && element.nodeType === 1 && element.tagName?.toLowerCase() === tagName);
+
+    const isSvgElementTag = (element, tagName) =>
+      isElementTag(element, tagName) && element.namespaceURI === 'http://www.w3.org/2000/svg';
+
     const initAuthorPage = () => {
       const stage = document.querySelector('[data-author-stage]');
 
@@ -477,10 +483,10 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       const memoriesLink = stage.querySelector('[data-author-link="memories"]');
 
       if (
-        !(connector instanceof SVGSVGElement) ||
-        !(path instanceof SVGPathElement) ||
-        !(booklistLink instanceof HTMLAnchorElement) ||
-        !(memoriesLink instanceof HTMLAnchorElement)
+        !isSvgElementTag(connector, 'svg') ||
+        !isSvgElementTag(path, 'path') ||
+        !isElementTag(booklistLink, 'a') ||
+        !isElementTag(memoriesLink, 'a')
       ) {
         return;
       }

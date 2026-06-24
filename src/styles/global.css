@@ -49,6 +49,24 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+html.home-preloader-booting,
+html.home-preloader-booting body {
+  background: #ffffff;
+  overflow: hidden;
+}
+
+html.home-preloader-booting .site-header,
+html.home-preloader-booting main > :not(.home-preloader),
+html.home-preloader-booting .site-footer {
+  opacity: 0;
+}
+
+html.home-preloader-booting .home-preloader {
+  opacity: 1;
+  pointer-events: auto;
+  visibility: visible;
+}
+
 a {
   color: inherit;
   text-decoration: none;
