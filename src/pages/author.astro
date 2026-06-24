@@ -43,6 +43,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     const preloaderCompleteEvent = 'varelism:author-preloader-complete';
     const TEXT_TO_LINE_GAP = 10;
     const DEFAULT_HORIZONTAL_LEAD_LENGTH = 64;
+    const BOOKLIST_VISUAL_TRIM = 8;
     const DEBUG_AUTHOR_CONNECTOR = false;
 
     const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
@@ -250,8 +251,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         ? archivesCharRect.left - endPoint.x
         : endPoint.x - archivesCharRect.right;
       const startLeadLength = Math.hypot(
-        pathData.startLeadPoint.x - startPoint.x,
-        pathData.startLeadPoint.y - startPoint.y
+        pathData.startLeadPoint.x - pathData.pathStartPoint.x,
+        pathData.startLeadPoint.y - pathData.pathStartPoint.y
       );
       const endLeadLength = Math.hypot(
         endPoint.x - pathData.endLeadPoint.x,
@@ -275,7 +276,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
     function buildConnectorPath(endpointData) {
       const { endPoint, horizontalDirection, startPoint } = endpointData;
-      const availableHorizontalDistance = Math.abs(endPoint.x - startPoint.x);
+      const pathStartPoint = {
+        x: startPoint.x + horizontalDirection.x * BOOKLIST_VISUAL_TRIM,
+        y: startPoint.y,
+      };
+      const availableHorizontalDistance = Math.abs(endPoint.x - pathStartPoint.x);
       const maxSafeLead = Math.max(0, (availableHorizontalDistance - 24) / 2);
 
       const horizontalLeadLength = Math.min(
@@ -288,8 +293,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         : horizontalLeadLength;
 
       const startLeadPoint = {
-        x: startPoint.x + horizontalDirection.x * finalLeadLength,
-        y: startPoint.y,
+        x: pathStartPoint.x + horizontalDirection.x * finalLeadLength,
+        y: pathStartPoint.y,
       };
 
       const endLeadPoint = {
@@ -331,8 +336,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       };
       const d = [
         'M',
-        formatPathNumber(startPoint.x),
-        formatPathNumber(startPoint.y),
+        formatPathNumber(pathStartPoint.x),
+        formatPathNumber(pathStartPoint.y),
         'L',
         formatPathNumber(startLeadPoint.x),
         formatPathNumber(startLeadPoint.y),
@@ -354,6 +359,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         d,
         endLeadPoint,
         finalLeadLength,
+        pathStartPoint,
         startLeadPoint,
       };
     }
