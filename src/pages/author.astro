@@ -26,7 +26,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     </svg>
 
     <nav class="author-links" aria-label="Author sections">
-      <a class="author-link" href="/books/" data-author-link="books">Books</a>
+      <a class="author-link" href="/books/" data-author-link="books">Books </a>
       <a class="author-link" href="/memories/" data-author-link="archives">Memories</a>
     </nav>
   </section>
@@ -855,6 +855,12 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       visibility 0s linear 900ms;
     visibility: hidden;
     white-space: nowrap;
+  }
+
+  @media (min-width: 1200px) {
+    .author-link[data-author-link='books'] {
+      white-space: pre;
+    }
   }
 
   .author-stage.is-positioned.is-books-visible [data-author-link='books'],
