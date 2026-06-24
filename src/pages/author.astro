@@ -26,8 +26,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     </svg>
 
     <nav class="author-links" aria-label="Author sections">
-      <a class="author-link" href="/booklist/" data-author-link="books">Booklist</a>
-      <a class="author-link" href="/archives/" data-author-link="archives">Archives</a>
+      <a class="author-link" href="/books/" data-author-link="books">Books</a>
+      <a class="author-link" href="/memories/" data-author-link="archives">Memories</a>
     </nav>
   </section>
 </BaseLayout>
@@ -43,7 +43,6 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     const preloaderCompleteEvent = 'varelism:author-preloader-complete';
     const TEXT_TO_LINE_GAP = 10;
     const DEFAULT_HORIZONTAL_LEAD_LENGTH = 64;
-    const BOOKLIST_VISUAL_TRIM = 8;
     const DEBUG_AUTHOR_CONNECTOR = false;
 
     const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
@@ -292,7 +291,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     function buildConnectorPath(endpointData) {
       const { endPoint, horizontalDirection, startPoint } = endpointData;
       const pathStartPoint = {
-        x: startPoint.x + horizontalDirection.x * BOOKLIST_VISUAL_TRIM,
+        x: startPoint.x,
         y: startPoint.y,
       };
       const availableHorizontalDistance = Math.abs(endPoint.x - pathStartPoint.x);
