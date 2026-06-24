@@ -369,34 +369,55 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         y: bodyDirection.x,
       };
       const bendSign = Math.random() < 0.5 ? -1 : 1;
-      const shoulderInset = horizontalBodyDistance > 560 ? 0.18 : 0.22;
-      const wavePointCount = horizontalBodyDistance > 620 ? 5 : 4;
-      const waveStart = shoulderInset + 0.1;
-      const waveEnd = 1 - shoulderInset - 0.1;
-      const amplitude = clamp(distance * randomBetween(0.12, 0.2), 32, 132);
+      const compactBody = horizontalBodyDistance < 320;
+      const shoulderInset = compactBody
+        ? 0
+        : clamp(clamp(horizontalBodyDistance * 0.18, 86, 150) / horizontalBodyDistance, 0.16, 0.3);
+      const wavePointCount = compactBody
+        ? 1
+        : horizontalBodyDistance > 780
+          ? 5
+          : horizontalBodyDistance > 540
+            ? 4
+            : 3;
+      const waveEdgeBreathingRoom = compactBody
+        ? 0
+        : clamp(82 / horizontalBodyDistance, 0.08, 0.15);
+      const waveStart = compactBody ? 0.5 : shoulderInset + waveEdgeBreathingRoom;
+      const waveEnd = compactBody ? 0.5 : 1 - shoulderInset - waveEdgeBreathingRoom;
+      const amplitude = compactBody
+        ? clamp(distance * randomBetween(0.08, 0.16), 4, 24)
+        : clamp(distance * randomBetween(0.12, 0.2), 32, 132);
       const bodyPoints = [bodyStart];
-      const bodyAnchors = [
-        { t: shoulderInset, wave: 0 },
-        ...Array.from({ length: wavePointCount }, (_, index) => {
-          const progress = wavePointCount === 1 ? 0.5 : index / (wavePointCount - 1);
-          const t = clamp(
-            waveStart + (waveEnd - waveStart) * progress + randomBetween(-0.035, 0.035),
-            waveStart,
-            waveEnd
-          );
-          const waveSign = (index % 2 === 0 ? 1 : -1) * bendSign;
+      const bodyAnchors = compactBody
+        ? [
+            {
+              t: 0.5,
+              wave: bendSign * randomBetween(0.35, 0.7),
+            },
+          ]
+        : [
+            { t: shoulderInset, wave: 0 },
+            ...Array.from({ length: wavePointCount }, (_, index) => {
+              const progress = wavePointCount === 1 ? 0.5 : index / (wavePointCount - 1);
+              const t = clamp(
+                waveStart + (waveEnd - waveStart) * progress + randomBetween(-0.035, 0.035),
+                waveStart,
+                waveEnd
+              );
+              const waveSign = (index % 2 === 0 ? 1 : -1) * bendSign;
 
-          return {
-            t,
-            wave: waveSign * randomBetween(0.72, 1.28),
-          };
-        }),
-        { t: 1 - shoulderInset, wave: 0 },
-      ].sort((left, right) => left.t - right.t);
+              return {
+                t,
+                wave: waveSign * randomBetween(0.72, 1.28),
+              };
+            }),
+            { t: 1 - shoulderInset, wave: 0 },
+          ].sort((left, right) => left.t - right.t);
 
       bodyAnchors.forEach(({ t, wave }) => {
         const waveEnvelope = Math.sin(Math.PI * t) ** 1.15;
-        const basePoint = getPointBetween(bodyStart, bodyEnd, smoothstep(t));
+        const basePoint = getPointBetween(bodyStart, bodyEnd, t);
         const wavelengthDrift = distance * randomBetween(-0.012, 0.012) * waveEnvelope * Math.abs(wave);
 
         bodyPoints.push({
@@ -411,14 +432,14 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       const getPointTangent = (index) => {
         if (index === 0) {
           return {
-            x: startTangent.x * clamp(distance * randomBetween(0.18, 0.28), 38, 170),
+            x: startTangent.x * clamp(horizontalBodyDistance * randomBetween(0.22, 0.32), 14, 170),
             y: 0,
           };
         }
 
         if (index === bodyPoints.length - 1) {
           return {
-            x: endTangent.x * clamp(distance * randomBetween(0.18, 0.28), 38, 170),
+            x: endTangent.x * clamp(horizontalBodyDistance * randomBetween(0.22, 0.32), 14, 170),
             y: 0,
           };
         }
