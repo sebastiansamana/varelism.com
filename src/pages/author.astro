@@ -181,6 +181,9 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       const rect = toCanvasRect(link.getBoundingClientRect(), canvasRect);
       const opticalInsets = getOpticalInsets(link, rect);
       const rawInkRect = getMeasuredInkRect(link, rect, opticalInsets);
+      const styles = window.getComputedStyle(link);
+      const fontSize = Number.parseFloat(styles.fontSize) || rect.height || 1;
+      const text = link.textContent?.trim() || '';
       const inkRect = {
         ...rawInkRect,
         height: Math.max(1, rawInkRect.bottom - rawInkRect.top),
@@ -204,8 +207,10 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       };
 
       return {
+        fontSize,
         getSupportPoint: getOpticalAnchorPoint,
         rect,
+        text,
         visualRect: inkRect,
       };
     };
@@ -333,11 +338,39 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       };
     };
 
+    const getApproachSideBias = (geometry, side) => {
+      const text = geometry.text || '';
+      const character = side === 'left' ? text[0] : text[text.length - 1];
+
+      if (/^[AaVvWwYy]$/.test(character)) {
+        return clamp((geometry.fontSize || 1) * 0.28, 6, 14);
+      }
+
+      return 0;
+    };
+
+    const getApproachSideRect = (geometry, side) => {
+      const rect = geometry.visualRect || geometry.rect;
+      const bias = getApproachSideBias(geometry, side);
+      const left = side === 'left' ? Math.min(rect.right - 1, rect.left + bias) : rect.left;
+      const right = side === 'right' ? Math.max(rect.left + 1, rect.right - bias) : rect.right;
+
+      return {
+        ...rect,
+        height: Math.max(1, rect.bottom - rect.top),
+        left,
+        right,
+        width: Math.max(1, right - left),
+      };
+    };
+
     const getClosestAnchorPoints = (booksGeometry, archivesGeometry, padding) => {
       const booksVisualRect = booksGeometry.visualRect || booksGeometry.rect;
       const archivesVisualRect = archivesGeometry.visualRect || archivesGeometry.rect;
-      const booksSafeRect = getPaddedRect(booksVisualRect, padding);
-      const archivesSafeRect = getPaddedRect(archivesVisualRect, padding);
+      const booksApproachRect = getApproachSideRect(booksGeometry, 'right');
+      const archivesApproachRect = getApproachSideRect(archivesGeometry, 'left');
+      const booksSafeRect = getPaddedRect(booksApproachRect, padding);
+      const archivesSafeRect = getPaddedRect(archivesApproachRect, padding);
       const booksCenter = getRectCenter(booksVisualRect);
       const archivesCenter = getRectCenter(archivesVisualRect);
       const direction = normalizeVector({
