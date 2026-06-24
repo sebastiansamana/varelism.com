@@ -738,30 +738,44 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   }
 
   :global(.site-shell) {
+    --author-footer-offset: 7.5rem;
+
     background: #ffffff;
-    min-height: 100vh;
-    min-height: 100svh;
-    min-height: 100dvh;
+    min-height: calc(100vh + var(--author-footer-offset));
+    min-height: calc(100svh + var(--author-footer-offset));
+    min-height: calc(100dvh + var(--author-footer-offset));
   }
 
   :global(.site-shell > main) {
-    --author-footer-reserve: clamp(5.8rem, 11vh, 7.25rem);
     --author-main-top: clamp(6rem, 12vh, 8rem);
 
     max-width: none;
-    min-height: calc(100vh - var(--author-footer-reserve));
-    min-height: calc(100svh - var(--author-footer-reserve));
-    min-height: calc(100dvh - var(--author-footer-reserve));
+    min-height: calc(100vh + var(--author-footer-offset));
+    min-height: calc(100svh + var(--author-footer-offset));
+    min-height: calc(100dvh + var(--author-footer-offset));
     padding: var(--author-main-top) clamp(1rem, 4vw, 3rem) 0;
     width: 100%;
+  }
+
+  :global(.site-shell > .site-footer) {
+    bottom: auto;
+    left: 0;
+    pointer-events: none;
+    position: absolute;
+    right: 0;
+    top: 100vh;
+    top: 100svh;
+    top: 100dvh;
+    width: 100%;
+    z-index: 20;
   }
 
   .author-stage {
     background: #ffffff;
     display: block;
-    height: calc(100vh - var(--author-main-top) - var(--author-footer-reserve));
-    height: calc(100svh - var(--author-main-top) - var(--author-footer-reserve));
-    height: calc(100dvh - var(--author-main-top) - var(--author-footer-reserve));
+    height: calc(100vh - var(--author-main-top));
+    height: calc(100svh - var(--author-main-top));
+    height: calc(100dvh - var(--author-main-top));
     isolation: isolate;
     min-height: 24rem;
     overflow: hidden;
@@ -859,7 +873,6 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
   @media (max-width: 560px) {
     :global(.site-shell > main) {
-      --author-footer-reserve: 6.35rem;
       --author-main-top: 5rem;
       padding-left: 0.85rem;
       padding-right: 0.85rem;
