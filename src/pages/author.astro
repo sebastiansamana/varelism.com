@@ -407,35 +407,82 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         x: -bodyDirection.y,
         y: bodyDirection.x,
       };
-      const amplitude = clamp(distance * randomBetween(0.08, 0.11), 18, 98);
+      const amplitude = clamp(
+        distance * randomBetween(0.13, 0.2),
+        26,
+        clamp(stageHeight * 0.18, 72, 170)
+      );
       const bendSign = Math.random() < 0.5 ? -1 : 1;
-      const maxHandleLength = Math.max(0, distance * 0.82);
-      const minHandleLength = Math.min(maxHandleLength, distance * 0.22);
-      const baseHandleLength = clamp(
-        distance * randomBetween(0.34, 0.48),
-        minHandleLength,
-        maxHandleLength
-      );
-      const handleVariation =
-        amplitude * randomBetween(0.2, 0.36) * Math.max(Math.abs(normal.y), 0.35);
-      const cp1HandleLength = clamp(
-        baseHandleLength + handleVariation * bendSign,
-        minHandleLength,
-        maxHandleLength
-      );
-      const cp2HandleLength = clamp(
-        baseHandleLength - handleVariation * bendSign,
-        minHandleLength,
-        maxHandleLength
-      );
-      const cp1 = {
-        x: bodyStart.x + horizontalDirection.x * cp1HandleLength,
-        y: bodyStart.y,
+      const bodySegmentCount = distance > 620 ? 4 : distance > 240 ? 3 : 2;
+      const bodyPoints = [bodyStart];
+      const terminalTangentLength = clamp(distance * randomBetween(0.34, 0.5), 52, 220);
+
+      for (let index = 1; index < bodySegmentCount; index += 1) {
+        const baseT = index / bodySegmentCount;
+        const jitter = Math.min(0.055, 0.22 / bodySegmentCount);
+        const t = clamp(baseT + randomBetween(-jitter, jitter), 0.22, 0.78);
+        const waveEnvelope = Math.sin(Math.PI * t) ** 1.12;
+        const waveSign = bendSign * (index % 2 === 0 ? -1 : 1);
+        const waveAmplitude = amplitude * waveEnvelope * randomBetween(0.72, 1.18);
+        const wavelengthDrift =
+          distance * randomBetween(-0.035, 0.035) * waveEnvelope;
+
+        bodyPoints.push({
+          x:
+            bodyStart.x +
+            dx * t +
+            bodyDirection.x * wavelengthDrift +
+            normal.x * waveAmplitude * waveSign,
+          y:
+            bodyStart.y +
+            dy * t +
+            bodyDirection.y * wavelengthDrift +
+            normal.y * waveAmplitude * waveSign,
+        });
+      }
+
+      bodyPoints.push(bodyEnd);
+
+      const getBodyTangent = (index) => {
+        if (index === 0 || index === bodyPoints.length - 1) {
+          return {
+            x: horizontalDirection.x * terminalTangentLength,
+            y: 0,
+          };
+        }
+
+        const previousPoint = bodyPoints[index - 1];
+        const nextPoint = bodyPoints[index + 1];
+        const tension = randomBetween(0.5, 0.68);
+
+        return {
+          x: (nextPoint.x - previousPoint.x) * tension,
+          y: (nextPoint.y - previousPoint.y) * tension,
+        };
       };
-      const cp2 = {
-        x: bodyEnd.x - horizontalDirection.x * cp2HandleLength,
-        y: bodyEnd.y,
-      };
+
+      const tangents = bodyPoints.map((_, index) => getBodyTangent(index));
+      const cubicCommands = bodyPoints.slice(0, -1).map((point, index) => {
+        const nextPoint = bodyPoints[index + 1];
+        const controlOne = {
+          x: point.x + tangents[index].x / 3,
+          y: point.y + tangents[index].y / 3,
+        };
+        const controlTwo = {
+          x: nextPoint.x - tangents[index + 1].x / 3,
+          y: nextPoint.y - tangents[index + 1].y / 3,
+        };
+
+        return [
+          'C',
+          formatPathNumber(controlOne.x),
+          formatPathNumber(controlOne.y),
+          formatPathNumber(controlTwo.x),
+          formatPathNumber(controlTwo.y),
+          formatPathNumber(nextPoint.x),
+          formatPathNumber(nextPoint.y),
+        ].join(' ');
+      });
       const d = [
         'M',
         formatPathNumber(pathStartPoint.x),
@@ -443,21 +490,13 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         'L',
         formatPathNumber(startLeadPoint.x),
         formatPathNumber(startLeadPoint.y),
-        'C',
-        formatPathNumber(cp1.x),
-        formatPathNumber(cp1.y),
-        formatPathNumber(cp2.x),
-        formatPathNumber(cp2.y),
-        formatPathNumber(endLeadPoint.x),
-        formatPathNumber(endLeadPoint.y),
+        ...cubicCommands,
         'L',
         formatPathNumber(endPoint.x),
         formatPathNumber(endPoint.y),
       ].join(' ');
 
       return {
-        cp1,
-        cp2,
         d,
         endLeadPoint,
         pathStartPoint,
@@ -714,7 +753,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       };
 
       const animatePath = (onComplete) => {
-        const duration = clamp(pathLength * 5, 1400, 5200);
+        const duration = clamp(pathLength * 5, 2400, 5600);
         let hasFinished = false;
         let fallbackTimer = 0;
 
