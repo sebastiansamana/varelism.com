@@ -42,7 +42,6 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
     const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
     const randomBetween = (min, max) => min + Math.random() * (max - min);
-    const responsiveScale = (target, width = window.innerWidth) => clamp(width * 0.0025, target * 0.8, target * 1.2);
     const getRectCenter = (rect) => ({
       x: rect.left + rect.width / 2,
       y: rect.top + rect.height / 2,
@@ -148,12 +147,22 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         Number.isFinite(metrics.actualBoundingBoxRight) && metrics.actualBoundingBoxRight > 0
           ? metrics.actualBoundingBoxRight
           : measuredWidth;
+      const actualAscent =
+        Number.isFinite(metrics.actualBoundingBoxAscent) && metrics.actualBoundingBoxAscent > 0
+          ? metrics.actualBoundingBoxAscent
+          : rect.height - fallbackInsets.top - fallbackInsets.bottom;
+      const actualDescent =
+        Number.isFinite(metrics.actualBoundingBoxDescent) && metrics.actualBoundingBoxDescent >= 0
+          ? metrics.actualBoundingBoxDescent
+          : 0;
+      const actualHeight = Math.max(1, actualAscent + actualDescent);
+      const verticalStart = rect.top + (rect.height - actualHeight) / 2;
 
       return {
-        bottom: rect.bottom - fallbackInsets.bottom,
+        bottom: clamp(verticalStart + actualHeight, rect.top + 1, rect.bottom),
         left: clamp(layoutStart - actualLeft, rect.left, rect.right),
         right: clamp(layoutStart + actualRight, rect.left, rect.right),
-        top: rect.top + fallbackInsets.top,
+        top: clamp(verticalStart, rect.top, rect.bottom - 1),
       };
     };
     const createConnectorPath = (svg) => {
@@ -184,31 +193,16 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       const styles = window.getComputedStyle(link);
       const fontSize = Number.parseFloat(styles.fontSize) || rect.height || 1;
       const text = link.textContent?.trim() || '';
+      const font = `${styles.fontStyle} ${styles.fontWeight} ${styles.fontSize} ${styles.fontFamily}`;
       const inkRect = {
         ...rawInkRect,
         height: Math.max(1, rawInkRect.bottom - rawInkRect.top),
         width: Math.max(1, rawInkRect.right - rawInkRect.left),
       };
-      const getOpticalAnchorPoint = (anchor) => {
-        const center = getRectCenter(rect);
-        const inkCenter = getRectCenter(inkRect);
-        const anchors = {
-          E: { x: inkRect.right, y: center.y },
-          N: { x: inkCenter.x, y: inkRect.top },
-          NE: { x: inkRect.right, y: inkRect.top },
-          NW: { x: inkRect.left, y: inkRect.top },
-          S: { x: inkCenter.x, y: inkRect.bottom },
-          SE: { x: inkRect.right, y: inkRect.bottom },
-          SW: { x: inkRect.left, y: inkRect.bottom },
-          W: { x: inkRect.left, y: center.y },
-        };
-
-        return anchors[anchor] || center;
-      };
 
       return {
+        font,
         fontSize,
-        getSupportPoint: getOpticalAnchorPoint,
         rect,
         text,
         visualRect: inkRect,
@@ -338,39 +332,108 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       };
     };
 
-    const getApproachSideBias = (geometry, side) => {
+    const getVisibleInkBoundaryPoint = (geometry, direction) => {
+      const visualRect = geometry.visualRect || geometry.rect;
+      const fallbackPoint = projectRectEdge(visualRect, direction);
+      const context = getTextMeasureContext();
       const text = geometry.text || '';
-      const character = side === 'left' ? text[0] : text[text.length - 1];
 
-      if (/^[AaVvWwYy]$/.test(character)) {
-        return clamp((geometry.fontSize || 1) * 0.28, 6, 14);
+      if (!context || !text || !geometry.font) return fallbackPoint;
+
+      const unit = normalizeVector(direction);
+      const normal = { x: -unit.y, y: unit.x };
+      const center = getRectCenter(visualRect);
+      context.font = geometry.font;
+      const metrics = context.measureText(text);
+      const measuredWidth = Number.isFinite(metrics.width) && metrics.width > 0 ? metrics.width : visualRect.width;
+      const actualLeft = Number.isFinite(metrics.actualBoundingBoxLeft) ? metrics.actualBoundingBoxLeft : 0;
+      const actualRight =
+        Number.isFinite(metrics.actualBoundingBoxRight) && metrics.actualBoundingBoxRight > 0
+          ? metrics.actualBoundingBoxRight
+          : measuredWidth;
+      const actualAscent =
+        Number.isFinite(metrics.actualBoundingBoxAscent) && metrics.actualBoundingBoxAscent > 0
+          ? metrics.actualBoundingBoxAscent
+          : visualRect.height;
+      const actualDescent =
+        Number.isFinite(metrics.actualBoundingBoxDescent) && metrics.actualBoundingBoxDescent >= 0
+          ? metrics.actualBoundingBoxDescent
+          : 0;
+      const inkWidth = Math.max(1, actualLeft + actualRight);
+      const inkHeight = Math.max(1, actualAscent + actualDescent);
+      const padding = Math.ceil(Math.max(8, (geometry.fontSize || 16) * 0.25));
+      const canvas = context.canvas;
+      const width = Math.ceil(inkWidth + padding * 2);
+      const height = Math.ceil(inkHeight + padding * 2);
+
+      canvas.width = width;
+      canvas.height = height;
+      context.clearRect(0, 0, width, height);
+      context.font = geometry.font;
+      context.fillStyle = '#000000';
+      context.textAlign = 'left';
+      context.textBaseline = 'alphabetic';
+      context.fillText(text, padding + actualLeft, padding + actualAscent);
+
+      let pixels;
+      try {
+        pixels = context.getImageData(0, 0, width, height).data;
+      } catch {
+        return fallbackPoint;
       }
 
-      return 0;
-    };
+      const toStagePoint = (x, y) => ({
+        x: visualRect.left + ((x - padding) / inkWidth) * visualRect.width,
+        y: visualRect.top + ((y - padding) / inkHeight) * visualRect.height,
+      });
+      const maxBand = Math.max(visualRect.width, visualRect.height);
+      const bandSteps = [
+        (geometry.fontSize || 16) * 0.04,
+        (geometry.fontSize || 16) * 0.08,
+        (geometry.fontSize || 16) * 0.14,
+        (geometry.fontSize || 16) * 0.22,
+        (geometry.fontSize || 16) * 0.34,
+        maxBand,
+      ];
 
-    const getApproachSideRect = (geometry, side) => {
-      const rect = geometry.visualRect || geometry.rect;
-      const bias = getApproachSideBias(geometry, side);
-      const left = side === 'left' ? Math.min(rect.right - 1, rect.left + bias) : rect.left;
-      const right = side === 'right' ? Math.max(rect.left + 1, rect.right - bias) : rect.right;
+      for (const band of bandSteps) {
+        let bestPoint = null;
+        let bestProjection = Number.NEGATIVE_INFINITY;
 
-      return {
-        ...rect,
-        height: Math.max(1, rect.bottom - rect.top),
-        left,
-        right,
-        width: Math.max(1, right - left),
-      };
+        for (let y = 0; y < height; y += 1) {
+          const row = y * width * 4;
+
+          for (let x = 0; x < width; x += 1) {
+            const alpha = pixels[row + x * 4 + 3];
+            if (alpha <= 18) continue;
+
+            const point = toStagePoint(x + 0.5, y + 0.5);
+            const fromCenter = {
+              x: point.x - center.x,
+              y: point.y - center.y,
+            };
+            const centerlineDistance = Math.abs(fromCenter.x * normal.x + fromCenter.y * normal.y);
+            if (centerlineDistance > band) continue;
+
+            const projection = fromCenter.x * unit.x + fromCenter.y * unit.y;
+            if (projection > bestProjection) {
+              bestProjection = projection;
+              bestPoint = point;
+            }
+          }
+        }
+
+        if (bestPoint) return bestPoint;
+      }
+
+      return fallbackPoint;
     };
 
     const getClosestAnchorPoints = (booksGeometry, archivesGeometry, padding) => {
       const booksVisualRect = booksGeometry.visualRect || booksGeometry.rect;
       const archivesVisualRect = archivesGeometry.visualRect || archivesGeometry.rect;
-      const booksApproachRect = getApproachSideRect(booksGeometry, 'right');
-      const archivesApproachRect = getApproachSideRect(archivesGeometry, 'left');
-      const booksSafeRect = getPaddedRect(booksApproachRect, padding);
-      const archivesSafeRect = getPaddedRect(archivesApproachRect, padding);
+      const booksSafeRect = getPaddedRect(booksVisualRect, padding);
+      const archivesSafeRect = getPaddedRect(archivesVisualRect, padding);
       const booksCenter = getRectCenter(booksVisualRect);
       const archivesCenter = getRectCenter(archivesVisualRect);
       const direction = normalizeVector({
@@ -381,17 +444,25 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         x: -direction.x,
         y: -direction.y,
       };
+      const booksVisibleEdge = getVisibleInkBoundaryPoint(booksGeometry, direction);
+      const archivesVisibleEdge = getVisibleInkBoundaryPoint(archivesGeometry, reverseDirection);
 
       return {
-        archiveAnchor: 'protected-zone',
+        archiveAnchor: 'visible-ink-centerline',
         archivesDirection: reverseDirection,
         archivesSafeRect,
-        bookAnchor: 'protected-zone',
+        bookAnchor: 'visible-ink-centerline',
         booksDirection: direction,
         booksSafeRect,
-        endPoint: projectRectEdge(archivesSafeRect, reverseDirection),
+        endPoint: {
+          x: archivesVisibleEdge.x + reverseDirection.x * padding,
+          y: archivesVisibleEdge.y + reverseDirection.y * padding,
+        },
         endTangent: direction,
-        startPoint: projectRectEdge(booksSafeRect, direction),
+        startPoint: {
+          x: booksVisibleEdge.x + direction.x * padding,
+          y: booksVisibleEdge.y + direction.y * padding,
+        },
         startTangent: direction,
       };
     };
