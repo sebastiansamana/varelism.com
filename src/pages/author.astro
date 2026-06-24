@@ -18,12 +18,13 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         data-author-connector-path
         fill="none"
         stroke="#000000"
-        stroke-linecap="butt"
+        stroke-linecap="round"
         stroke-linejoin="round"
         stroke-width="0.8"
         vector-effect="non-scaling-stroke"
       ></path>
     </svg>
+
     <nav class="author-links" aria-label="Author sections">
       <a class="author-link" href="/booklist/" data-author-link="books">Booklist</a>
       <a class="author-link" href="/archives/" data-author-link="archives">Archives</a>
@@ -38,511 +39,338 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       cleanup: null,
       listenersAttached: false,
     });
+
     const preloaderCompleteEvent = 'varelism:author-preloader-complete';
+    const TEXT_TO_LINE_GAP = 10;
+    const DEFAULT_HORIZONTAL_LEAD_LENGTH = 64;
+    const DEBUG_AUTHOR_CONNECTOR = false;
 
     const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
-    const randomBetween = (min, max) => min + Math.random() * (max - min);
-    const getRectCenter = (rect) => ({
-      x: rect.left + rect.width / 2,
-      y: rect.top + rect.height / 2,
-    });
-    const getRectVerticalCenter = (rect) => (rect.top + rect.bottom) / 2;
-    const normalizeVector = (vector, fallback = { x: 1, y: 0 }) => {
-      const length = Math.hypot(vector.x, vector.y);
+    const randomBetween = (min, max) => (max <= min ? min : min + Math.random() * (max - min));
+    const formatPathNumber = (value) => (Number.isFinite(value) ? String(value) : '0');
 
-      if (length < 0.001) return fallback;
+    function getTextNode(link) {
+      return Array.from(link.childNodes).find(
+        (node) => node.nodeType === Node.TEXT_NODE && node.nodeValue?.trim()
+      );
+    }
 
+    function toStageRect(rect, stageRect) {
       return {
-        x: vector.x / length,
-        y: vector.y / length,
+        left: rect.left - stageRect.left,
+        right: rect.right - stageRect.left,
+        top: rect.top - stageRect.top,
+        bottom: rect.bottom - stageRect.top,
+        width: rect.width,
+        height: rect.height,
+        centerX: rect.left - stageRect.left + rect.width / 2,
+        centerY: rect.top - stageRect.top + rect.height / 2,
       };
-    };
-    const getPlacementRect = (placement) => ({
-      bottom: placement.y + placement.height / 2,
-      height: placement.height,
-      left: placement.x - placement.width / 2,
-      right: placement.x + placement.width / 2,
-      top: placement.y - placement.height / 2,
-      width: placement.width,
-    });
-    const getPaddedRect = (rect, padding) => ({
-      bottom: rect.bottom + padding,
-      height: rect.height + padding * 2,
-      left: rect.left - padding,
-      right: rect.right + padding,
-      top: rect.top - padding,
-      width: rect.width + padding * 2,
-    });
-    const getRectGap = (first, second) => {
-      const xGap = Math.max(0, first.left > second.right ? first.left - second.right : second.left - first.right);
-      const yGap = Math.max(0, first.top > second.bottom ? first.top - second.bottom : second.top - first.bottom);
+    }
 
-      return Math.hypot(xGap, yGap);
-    };
-    const getPointRectDistance = (point, rect) => {
-      const dx = Math.max(rect.left - point.x, 0, point.x - rect.right);
-      const dy = Math.max(rect.top - point.y, 0, point.y - rect.bottom);
+    function getCharacterRect(link, charIndex, stageRect) {
+      const textNode = getTextNode(link);
 
-      return Math.hypot(dx, dy);
-    };
-    const toCanvasRect = (rect, canvasRect) => ({
-      bottom: rect.bottom - canvasRect.top,
-      height: rect.height,
-      left: rect.left - canvasRect.left,
-      right: rect.right - canvasRect.left,
-      top: rect.top - canvasRect.top,
-      width: rect.width,
-    });
-    const getCharacterRect = (link, characterIndex, canvasRect) => {
-      const textNode = Array.from(link.childNodes).find((node) => node.nodeType === Node.TEXT_NODE);
-      const fallbackRect = toCanvasRect(link.getBoundingClientRect(), canvasRect);
+      if (!textNode || !textNode.nodeValue) {
+        return toStageRect(link.getBoundingClientRect(), stageRect);
+      }
 
-      if (!textNode || !textNode.nodeValue) return fallbackRect;
+      const raw = textNode.nodeValue;
+      const trimmed = raw.trim();
+      const trimStart = raw.indexOf(trimmed);
 
-      const fullText = textNode.nodeValue;
-      const trimmedText = fullText.trim();
-      const trimStart = fullText.indexOf(trimmedText);
+      const safeIndex = Math.min(
+        Math.max(charIndex, 0),
+        Math.max(trimmed.length - 1, 0)
+      );
 
-      if (trimStart < 0 || trimmedText.length === 0) return fallbackRect;
-
-      const safeIndex = Math.min(Math.max(characterIndex, 0), Math.max(trimmedText.length - 1, 0));
       const range = document.createRange();
-
       range.setStart(textNode, trimStart + safeIndex);
       range.setEnd(textNode, trimStart + safeIndex + 1);
 
-      const rect = range.getBoundingClientRect();
-      range.detach?.();
+      const browserRect = range.getBoundingClientRect();
+      range.detach();
 
-      if (rect.width <= 0 || rect.height <= 0) return fallbackRect;
-
-      return toCanvasRect(rect, canvasRect);
-    };
-    const createConnectorPath = (svg) => {
-      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-      path.setAttribute('data-author-connector-path', '');
-      path.setAttribute('fill', 'none');
-      path.setAttribute('stroke', '#000000');
-      path.setAttribute('stroke-linecap', 'butt');
-      path.setAttribute('stroke-linejoin', 'round');
-      path.setAttribute('stroke-width', '0.8');
-      path.setAttribute('vector-effect', 'non-scaling-stroke');
-      path.style.fill = 'none';
-      path.style.opacity = '0';
-      path.style.stroke = '#000000';
-      path.style.strokeLinecap = 'butt';
-      path.style.strokeLinejoin = 'round';
-      path.style.strokeWidth = '0.8px';
-      path.style.vectorEffect = 'non-scaling-stroke';
-      svg.replaceChildren(path);
-
-      return path;
-    };
-
-    const getTextGeometry = (link, canvasRect) => {
-      const rect = toCanvasRect(link.getBoundingClientRect(), canvasRect);
-      const text = link.textContent?.trim() || '';
-      const firstCharRect = getCharacterRect(link, 0, canvasRect);
-      const lastCharRect = getCharacterRect(link, text.length - 1, canvasRect);
-
-      return {
-        firstCharRect,
-        lastCharRect,
-        link,
-        rect,
-        text,
-        visualRect: rect,
-      };
-    };
-
-    const calculateSafeMargins = (stage, links) => {
-      const canvasRect = stage.getBoundingClientRect();
-      const width = Math.max(stage.clientWidth, Math.round(canvasRect.width), 1);
-      const height = Math.max(stage.clientHeight, Math.round(canvasRect.height), 1);
-      const minDimension = Math.min(width, height);
-      const textHeights = links.map((link) => link.getBoundingClientRect().height || 1);
-      const fontSizes = links.map((link) => Number.parseFloat(window.getComputedStyle(link).fontSize) || 1);
-      const typographyScale = Math.max(...textHeights, ...fontSizes, 1);
-      const edgeInsetX = clamp(minDimension * 0.09, 26, 90);
-      const edgeInsetY = clamp(minDimension * 0.1, 28, 84);
-      const textPadding = clamp(typographyScale * 0.14, width <= 560 ? 3 : 4, width <= 560 ? 5 : 6);
-      const TEXT_TO_LINE_GAP = 10;
-      const safeRect = {
-        bottom: height - edgeInsetY,
-        left: edgeInsetX,
-        right: width - edgeInsetX,
-        top: edgeInsetY,
-      };
-      const viewportSplitX = clamp(window.innerWidth / 2 - canvasRect.left, safeRect.left, safeRect.right);
-
-      return {
-        canvasRect,
-        edgeInsetX,
-        edgeInsetY,
-        height,
-        minDimension,
-        safeRect,
-        textToLineGap: TEXT_TO_LINE_GAP,
-        textPadding,
-        viewportSplitX,
-        width,
-      };
-    };
-
-    const calculateRandomTextPositions = (sizes, margins) => {
-      const { minDimension, safeRect, textPadding, viewportSplitX, width, height } = margins;
-      const splitX = clamp(viewportSplitX, safeRect.left, safeRect.right);
-      const booksBounds = {
-        bottom: safeRect.bottom,
-        left: safeRect.left,
-        right: Math.min(safeRect.right, splitX),
-        top: safeRect.top,
-      };
-      const archivesBounds = {
-        bottom: safeRect.bottom,
-        left: Math.max(safeRect.left, splitX),
-        right: safeRect.right,
-        top: safeRect.top,
-      };
-      const centerRange = (size, bounds) => {
-        const minX = bounds.left + size.width / 2;
-        const maxX = bounds.right - size.width / 2;
-        const minY = bounds.top + size.height / 2;
-        const maxY = bounds.bottom - size.height / 2;
-
-        return {
-          maxX: Math.max(minX, maxX),
-          maxY: Math.max(minY, maxY),
-          minX,
-          minY,
-        };
-      };
-      const createPlacement = (size, bounds) => {
-        const range = centerRange(size, bounds);
-
-        return {
-          height: size.height,
-          width: size.width,
-          x: randomBetween(range.minX, range.maxX),
-          y: randomBetween(range.minY, range.maxY),
-        };
-      };
-      const minGap = Math.max(textPadding * 4.2, minDimension * 0.24);
-      const minDistance = Math.max(minDimension * 0.63, (sizes[0].width + sizes[1].width) / 2 + textPadding * 6);
-      const maxDistance = Math.hypot(width, height) * 0.88;
-
-      for (let attempt = 0; attempt < 900; attempt += 1) {
-        const books = createPlacement(sizes[0], booksBounds);
-        const archives = createPlacement(sizes[1], archivesBounds);
-        const booksRect = getPaddedRect(getPlacementRect(books), textPadding);
-        const archivesRect = getPaddedRect(getPlacementRect(archives), textPadding);
-        const gap = getRectGap(booksRect, archivesRect);
-        const distance = Math.hypot(archives.x - books.x, archives.y - books.y);
-
-        if (gap >= minGap && distance >= minDistance && distance <= maxDistance) {
-          return [books, archives];
-        }
+      if (!browserRect.width || !browserRect.height) {
+        return toStageRect(link.getBoundingClientRect(), stageRect);
       }
 
-      const firstRange = centerRange(sizes[0], booksBounds);
-      const secondRange = centerRange(sizes[1], archivesBounds);
+      return toStageRect(browserRect, stageRect);
+    }
 
-      return [
-        {
-          height: sizes[0].height,
-          width: sizes[0].width,
-          x: firstRange.minX,
-          y: randomBetween(firstRange.minY, firstRange.maxY),
-        },
-        {
-          height: sizes[1].height,
-          width: sizes[1].width,
-          x: secondRange.maxX,
-          y: randomBetween(secondRange.minY, secondRange.maxY),
-        },
-      ];
-    };
+    function computeConnectorEndpoints(booklistLink, archivesLink, stageRect) {
+      const booklistRect = toStageRect(booklistLink.getBoundingClientRect(), stageRect);
+      const archivesRect = toStageRect(archivesLink.getBoundingClientRect(), stageRect);
 
-    const getClosestAnchorPoints = (booksGeometry, archivesGeometry, padding) => {
-      const booksCenter = getRectCenter(booksGeometry.rect);
-      const archivesCenter = getRectCenter(archivesGeometry.rect);
-      const archivesIsRight = archivesCenter.x >= booksCenter.x;
-      const startLetterRect = archivesIsRight ? booksGeometry.lastCharRect : booksGeometry.firstCharRect;
-      const endLetterRect = archivesIsRight ? archivesGeometry.firstCharRect : archivesGeometry.lastCharRect;
-      const startPoint = {
-        x: archivesIsRight ? startLetterRect.right + padding : startLetterRect.left - padding,
-        y: getRectVerticalCenter(startLetterRect),
-      };
-      const endPoint = {
-        x: archivesIsRight ? endLetterRect.left - padding : endLetterRect.right + padding,
-        y: getRectVerticalCenter(endLetterRect),
-      };
-      const direction = normalizeVector(
-        {
-          x: endPoint.x - startPoint.x,
-          y: endPoint.y - startPoint.y,
-        },
-        { x: archivesIsRight ? 1 : -1, y: 0 },
-      );
-      const reverseDirection = {
-        x: -direction.x,
-        y: -direction.y,
-      };
+      const archivesIsRight = archivesRect.centerX >= booklistRect.centerX;
+
+      const booklistText = booklistLink.textContent.trim();
+      const archivesText = archivesLink.textContent.trim();
+
+      const booklistCharIndex = archivesIsRight ? booklistText.length - 1 : 0;
+      const archivesCharIndex = archivesIsRight ? 0 : archivesText.length - 1;
+
+      const booklistCharRect = getCharacterRect(booklistLink, booklistCharIndex, stageRect);
+      const archivesCharRect = getCharacterRect(archivesLink, archivesCharIndex, stageRect);
+
+      const horizontalDirection = archivesIsRight
+        ? { x: 1, y: 0 }
+        : { x: -1, y: 0 };
+
+      const startPoint = archivesIsRight
+        ? {
+            x: booklistCharRect.right + TEXT_TO_LINE_GAP,
+            y: booklistCharRect.centerY,
+          }
+        : {
+            x: booklistCharRect.left - TEXT_TO_LINE_GAP,
+            y: booklistCharRect.centerY,
+          };
+
+      const endPoint = archivesIsRight
+        ? {
+            x: archivesCharRect.left - TEXT_TO_LINE_GAP,
+            y: archivesCharRect.centerY,
+          }
+        : {
+            x: archivesCharRect.right + TEXT_TO_LINE_GAP,
+            y: archivesCharRect.centerY,
+          };
 
       return {
-        archiveAnchor: 'character-center',
-        archivesDirection: reverseDirection,
-        archivesSafeRect: getPaddedRect(archivesGeometry.rect, padding),
-        bookAnchor: 'character-center',
-        booksDirection: direction,
-        booksSafeRect: getPaddedRect(booksGeometry.rect, padding),
-        endPoint,
-        endTangent: direction,
         startPoint,
-        startTangent: direction,
+        endPoint,
+        horizontalDirection,
+        booklistCharRect,
+        archivesCharRect,
+        archivesIsRight,
       };
-    };
+    }
 
-    const getCubicPoint = (start, controlOne, controlTwo, end, t) => {
-      const inverseT = 1 - t;
+    const getLinkSize = (link) => {
+      const rect = link.getBoundingClientRect();
 
       return {
-        x:
-          inverseT ** 3 * start.x +
-          3 * inverseT ** 2 * t * controlOne.x +
-          3 * inverseT * t ** 2 * controlTwo.x +
-          t ** 3 * end.x,
-        y:
-          inverseT ** 3 * start.y +
-          3 * inverseT ** 2 * t * controlOne.y +
-          3 * inverseT * t ** 2 * controlTwo.y +
-          t ** 3 * end.y,
+        width: rect.width,
+        height: rect.height,
       };
     };
 
-    const generateVariableWaveParameters = (distance, minDimension) => ({
-      amplitude: clamp(distance * randomBetween(0.032, 0.06), 7, minDimension * 0.131),
-      amplitudeDrift: randomBetween(0.26, 0.58),
-      amplitudePhase: randomBetween(-Math.PI, Math.PI),
-      cycles: clamp(distance / (minDimension * randomBetween(0.48, 0.78)), 0.65, 2.45),
-      centerAmplitudeBoost: randomBetween(0.75, 1.35),
-      phase: randomBetween(-Math.PI, Math.PI),
-      phaseDrift: randomBetween(0.4, 0.98),
-      wavelengthDrift: randomBetween(0.43, 0.9),
-      wavelengthPhase: randomBetween(-Math.PI, Math.PI),
+    const getCenterRange = ({ maxX, maxY, minX, minY, size, stageHeight, stageWidth }) => {
+      const halfWidth = size.width / 2;
+      const halfHeight = size.height / 2;
+      const safeMinX = clamp(minX + halfWidth, 0, stageWidth);
+      const safeMaxX = clamp(maxX - halfWidth, safeMinX, stageWidth);
+      const safeMinY = clamp(minY + halfHeight, 0, stageHeight);
+      const safeMaxY = clamp(maxY - halfHeight, safeMinY, stageHeight);
+
+      return {
+        maxX: safeMaxX,
+        maxY: safeMaxY,
+        minX: safeMinX,
+        minY: safeMinY,
+      };
+    };
+
+    const getRandomPointInRange = (range) => ({
+      x: randomBetween(range.minX, range.maxX),
+      y: randomBetween(range.minY, range.maxY),
     });
 
-    const createSmoothPathFromPoints = (points, startTangent, endTangent, minDimension, options = {}) => {
-      const samples = [points[0]];
-      const cumulative = [0];
-      let length = 0;
-      let previousSample = points[0];
-      let d = `M ${points[0].x.toFixed(2)} ${points[0].y.toFixed(2)}`;
-      const hasLeadSegments = Boolean(options.hasLeadSegments) && points.length >= 4;
+    function placeAuthorLinks(stage, booklistLink, archivesLink) {
+      const stageRect = stage.getBoundingClientRect();
+      const stageWidth = Math.max(stageRect.width, 1);
+      const stageHeight = Math.max(stageRect.height, 1);
+      const safeX = clamp(stageWidth * 0.08, 32, 96);
+      const safeY = clamp(stageHeight * 0.12, 48, 120);
+      const booklistSize = getLinkSize(booklistLink);
+      const archivesSize = getLinkSize(archivesLink);
+      const booklistRange = getCenterRange({
+        maxX: stageWidth * 0.45,
+        maxY: stageHeight - safeY,
+        minX: safeX,
+        minY: safeY,
+        size: booklistSize,
+        stageHeight,
+        stageWidth,
+      });
+      const archivesRange = getCenterRange({
+        maxX: stageWidth - safeX,
+        maxY: stageHeight - safeY,
+        minX: stageWidth * 0.55,
+        minY: safeY,
+        size: archivesSize,
+        stageHeight,
+        stageWidth,
+      });
+      const minimumHorizontalDistance = Math.max(
+        96,
+        Math.min(stageWidth * 0.28, 220),
+        (booklistSize.width + archivesSize.width) / 2 + 40
+      );
 
-      for (let index = 0; index < points.length - 1; index += 1) {
-        const previous = points[index - 1] || points[index];
-        const current = points[index];
-        const next = points[index + 1];
-        const afterNext = points[index + 2] || next;
-        const segmentLength = Math.hypot(next.x - current.x, next.y - current.y);
-        const leadHandle = Math.max(0.1, segmentLength / 3);
-        const tangentHandle = clamp(segmentLength * 0.38, 18, minDimension * 0.22);
-        const startsStraightLead = hasLeadSegments && index === 0;
-        const blendsFromLead = hasLeadSegments && index === 1;
-        const blendsToLead = hasLeadSegments && index === points.length - 3;
-        const endsStraightLead = hasLeadSegments && index === points.length - 2;
-        let controlOne;
-        let controlTwo;
+      for (let attempt = 0; attempt < 80; attempt += 1) {
+        const booklistPoint = getRandomPointInRange(booklistRange);
+        const archivesPoint = getRandomPointInRange(archivesRange);
 
-        if (startsStraightLead) {
-          controlOne = {
-            x: current.x + startTangent.x * leadHandle,
-            y: current.y + startTangent.y * leadHandle,
-          };
-        } else if (endsStraightLead) {
-          controlOne = {
-            x: current.x + endTangent.x * leadHandle,
-            y: current.y + endTangent.y * leadHandle,
-          };
-        } else if (index === 0 || blendsFromLead) {
-          controlOne = {
-            x: current.x + startTangent.x * tangentHandle,
-            y: current.y + startTangent.y * tangentHandle,
-          };
-        } else {
-          controlOne = {
-            x: current.x + (next.x - previous.x) / 6,
-            y: current.y + (next.y - previous.y) / 6,
+        if (Math.abs(archivesPoint.x - booklistPoint.x) >= minimumHorizontalDistance) {
+          return {
+            archives: archivesPoint,
+            books: booklistPoint,
           };
         }
-
-        if (startsStraightLead) {
-          controlTwo = {
-            x: next.x - startTangent.x * leadHandle,
-            y: next.y - startTangent.y * leadHandle,
-          };
-        } else if (endsStraightLead) {
-          controlTwo = {
-            x: next.x - endTangent.x * leadHandle,
-            y: next.y - endTangent.y * leadHandle,
-          };
-        } else if (index === points.length - 2 || blendsToLead) {
-          controlTwo = {
-            x: next.x - endTangent.x * tangentHandle,
-            y: next.y - endTangent.y * tangentHandle,
-          };
-        } else {
-          controlTwo = {
-            x: next.x - (afterNext.x - current.x) / 6,
-            y: next.y - (afterNext.y - current.y) / 6,
-          };
-        }
-
-        for (let sample = 1; sample <= 12; sample += 1) {
-          const point = getCubicPoint(current, controlOne, controlTwo, next, sample / 12);
-
-          length += Math.hypot(point.x - previousSample.x, point.y - previousSample.y);
-          samples.push(point);
-          cumulative.push(length);
-          previousSample = point;
-        }
-
-        d += ` C ${controlOne.x.toFixed(2)} ${controlOne.y.toFixed(2)}, ${controlTwo.x.toFixed(
-          2,
-        )} ${controlTwo.y.toFixed(2)}, ${next.x.toFixed(2)} ${next.y.toFixed(2)}`;
       }
 
       return {
-        cumulative,
-        d,
-        length,
-        samples,
-      };
-    };
-
-    const getMinimumCurveDistance = (samples, rects) =>
-      samples.slice(1, -1).reduce((minimum, point) => {
-        const pointMinimum = rects.reduce(
-          (rectMinimum, rect) => Math.min(rectMinimum, getPointRectDistance(point, rect)),
-          Number.POSITIVE_INFINITY,
-        );
-
-        return Math.min(minimum, pointMinimum);
-      }, Number.POSITIVE_INFINITY);
-
-    const generateOrganicSingleStrokePath = ({ endPoint, endTangent, startPoint, startTangent }, margins, avoidRects) => {
-      const deltaX = endPoint.x - startPoint.x;
-      const deltaY = endPoint.y - startPoint.y;
-      const distance = Math.max(1, Math.hypot(deltaX, deltaY));
-      const direction = { x: deltaX / distance, y: deltaY / distance };
-      const leadOutTangent = normalizeVector(startTangent || direction, direction);
-      const leadInTangent = normalizeVector(endTangent || direction, direction);
-      const leadLength = clamp(distance * 0.045, margins.textToLineGap * 1.4, margins.minDimension * 0.07);
-      const organicStartPoint = {
-        x: startPoint.x + leadOutTangent.x * leadLength,
-        y: startPoint.y + leadOutTangent.y * leadLength,
-      };
-      const organicEndPoint = {
-        x: endPoint.x - leadInTangent.x * leadLength,
-        y: endPoint.y - leadInTangent.y * leadLength,
-      };
-      const organicDeltaX = organicEndPoint.x - organicStartPoint.x;
-      const organicDeltaY = organicEndPoint.y - organicStartPoint.y;
-      const organicDistance = Math.max(1, Math.hypot(organicDeltaX, organicDeltaY));
-      const organicDirection = { x: organicDeltaX / organicDistance, y: organicDeltaY / organicDistance };
-      const normal = { x: -organicDirection.y, y: organicDirection.x };
-      const pointCount = Math.round(clamp(distance / 58, 7, 15));
-      let bestCurve = null;
-      let bestScore = Number.NEGATIVE_INFINITY;
-
-      for (let attempt = 0; attempt < 18; attempt += 1) {
-        const params = generateVariableWaveParameters(distance, margins.minDimension);
-        const points = [];
-
-        for (let index = 0; index <= pointCount; index += 1) {
-          const t = index / pointCount;
-          const taper = Math.sin(Math.PI * t) ** 2;
-          const centerProfile = Math.sin(Math.PI * t) ** 1.35;
-          const amplitude =
-            params.amplitude *
-            taper *
-            (1 + params.centerAmplitudeBoost * centerProfile) *
-            (1 + params.amplitudeDrift * Math.sin(Math.PI * 2 * t + params.amplitudePhase));
-          const phase =
-            params.phase +
-            Math.PI * 2 * params.cycles * t +
-            params.phaseDrift * centerProfile * Math.sin(Math.PI * 2 * t * 1.35 + params.wavelengthPhase);
-          const wavelengthVariation =
-            1 + params.wavelengthDrift * centerProfile * Math.sin(Math.PI * 2 * t * 0.72 + params.wavelengthPhase);
-          const offset = amplitude * Math.sin(phase * wavelengthVariation);
-
-          points.push({
-            x: organicStartPoint.x + organicDeltaX * t + normal.x * offset,
-            y: organicStartPoint.y + organicDeltaY * t + normal.y * offset,
-          });
-        }
-
-        points[0] = organicStartPoint;
-        points[points.length - 1] = organicEndPoint;
-        points.unshift(startPoint);
-        points.push(endPoint);
-
-        const curve = createSmoothPathFromPoints(points, leadOutTangent, leadInTangent, margins.minDimension, {
-          hasLeadSegments: true,
-        });
-        const clearance = getMinimumCurveDistance(curve.samples, avoidRects);
-        const score = clearance - params.amplitude * 0.08 - Math.abs(params.cycles - 1.4) * 0.5;
-
-        if (score > bestScore) {
-          bestCurve = curve;
-          bestScore = score;
-        }
-      }
-
-      return (
-        bestCurve ||
-        createSmoothPathFromPoints(
-          [startPoint, organicStartPoint, organicEndPoint, endPoint],
-          leadOutTangent,
-          leadInTangent,
-          margins.minDimension,
-          { hasLeadSegments: true },
-        )
-      );
-    };
-
-    const animateSingleStrokeConstantSpeed = ({ curve, path, timers }, callback) => {
-      const duration = Math.round(clamp(curve.length * 5.2, 1600, 5600));
-      let hasFinished = false;
-
-      const finish = () => {
-        if (hasFinished) return;
-
-        hasFinished = true;
-        callback();
-      };
-
-      path.style.strokeDasharray = `${curve.length} ${curve.length}`;
-      path.style.strokeDashoffset = `${curve.length}`;
-      path.style.transition = 'none';
-      path.style.opacity = '1';
-      path.getBoundingClientRect();
-      path.style.transition = `stroke-dashoffset ${duration}ms linear`;
-      path.style.strokeDashoffset = '0';
-
-      path.addEventListener(
-        'transitionend',
-        (event) => {
-          if (event.propertyName === 'stroke-dashoffset') finish();
+        archives: {
+          x: stageWidth * 0.65,
+          y: stageHeight * 0.42,
         },
-        { once: true },
-      );
-      timers.add(window.setTimeout(finish, duration + 140));
-
-      return () => {
-        path.style.transition = 'none';
+        books: {
+          x: stageWidth * 0.35,
+          y: stageHeight * 0.62,
+        },
       };
+    }
+
+    function verifyConnectorGeometry(endpointData, pathData) {
+      if (!DEBUG_AUTHOR_CONNECTOR) return;
+
+      const {
+        archivesCharRect,
+        archivesIsRight,
+        booklistCharRect,
+        endPoint,
+        startPoint,
+      } = endpointData;
+      const startGap = archivesIsRight
+        ? startPoint.x - booklistCharRect.right
+        : booklistCharRect.left - startPoint.x;
+      const endGap = archivesIsRight
+        ? archivesCharRect.left - endPoint.x
+        : endPoint.x - archivesCharRect.right;
+      const startLeadLength = Math.hypot(
+        pathData.startLeadPoint.x - startPoint.x,
+        pathData.startLeadPoint.y - startPoint.y
+      );
+      const endLeadLength = Math.hypot(
+        endPoint.x - pathData.endLeadPoint.x,
+        endPoint.y - pathData.endLeadPoint.y
+      );
+      const tolerance = 0.01;
+      const hasGapError =
+        Math.abs(startGap - TEXT_TO_LINE_GAP) > tolerance ||
+        Math.abs(endGap - TEXT_TO_LINE_GAP) > tolerance;
+      const hasLeadError = Math.abs(startLeadLength - endLeadLength) > tolerance;
+
+      if (hasGapError || hasLeadError) {
+        console.warn('[author connector]', {
+          endGap,
+          endLeadLength,
+          startGap,
+          startLeadLength,
+        });
+      }
+    }
+
+    function buildConnectorPath(endpointData) {
+      const { endPoint, horizontalDirection, startPoint } = endpointData;
+      const availableHorizontalDistance = Math.abs(endPoint.x - startPoint.x);
+      const maxSafeLead = Math.max(0, (availableHorizontalDistance - 24) / 2);
+
+      const horizontalLeadLength = Math.min(
+        DEFAULT_HORIZONTAL_LEAD_LENGTH,
+        maxSafeLead
+      );
+
+      const finalLeadLength = maxSafeLead >= 28
+        ? Math.max(28, horizontalLeadLength)
+        : horizontalLeadLength;
+
+      const startLeadPoint = {
+        x: startPoint.x + horizontalDirection.x * finalLeadLength,
+        y: startPoint.y,
+      };
+
+      const endLeadPoint = {
+        x: endPoint.x - horizontalDirection.x * finalLeadLength,
+        y: endPoint.y,
+      };
+
+      const bodyStart = startLeadPoint;
+      const bodyEnd = endLeadPoint;
+      const dx = bodyEnd.x - bodyStart.x;
+      const dy = bodyEnd.y - bodyStart.y;
+      const distance = Math.hypot(dx, dy);
+      const bodyDirection = distance > 0.001
+        ? {
+            x: dx / distance,
+            y: dy / distance,
+          }
+        : horizontalDirection;
+      const normal = {
+        x: -bodyDirection.y,
+        y: bodyDirection.x,
+      };
+      const amplitude = clamp(distance * 0.08, 18, 90);
+      const bendSign = Math.random() < 0.5 ? -1 : 1;
+      const startTangent = horizontalDirection;
+      const endTangent = horizontalDirection;
+      const maxHandleLength = Math.max(0, distance * 0.82);
+      const baseHandleLength = clamp(distance * 0.42, 0, maxHandleLength);
+      const handleJitter = normal.x * amplitude * bendSign * 0.2;
+      const cp1HandleLength = clamp(baseHandleLength + handleJitter, 0, maxHandleLength);
+      const cp2HandleLength = clamp(baseHandleLength - handleJitter, 0, maxHandleLength);
+      const cp1 = {
+        x: bodyStart.x + startTangent.x * cp1HandleLength,
+        y: bodyStart.y + startTangent.y * cp1HandleLength,
+      };
+      const cp2 = {
+        x: bodyEnd.x - endTangent.x * cp2HandleLength,
+        y: bodyEnd.y - endTangent.y * cp2HandleLength,
+      };
+      const d = [
+        'M',
+        formatPathNumber(startPoint.x),
+        formatPathNumber(startPoint.y),
+        'L',
+        formatPathNumber(startLeadPoint.x),
+        formatPathNumber(startLeadPoint.y),
+        'C',
+        formatPathNumber(cp1.x),
+        formatPathNumber(cp1.y),
+        formatPathNumber(cp2.x),
+        formatPathNumber(cp2.y),
+        formatPathNumber(endLeadPoint.x),
+        formatPathNumber(endLeadPoint.y),
+        'L',
+        formatPathNumber(endPoint.x),
+        formatPathNumber(endPoint.y),
+      ].join(' ');
+
+      return {
+        cp1,
+        cp2,
+        d,
+        endLeadPoint,
+        finalLeadLength,
+        startLeadPoint,
+      };
+    }
+
+    const resetPathStyles = (path) => {
+      path.removeAttribute('d');
+      path.style.opacity = '';
+      path.style.strokeDasharray = '';
+      path.style.strokeDashoffset = '';
+      path.style.transition = '';
+    };
+
+    const setPathHidden = (path, length) => {
+      path.style.opacity = '0';
+      path.style.strokeDasharray = `${length} ${length}`;
+      path.style.strokeDashoffset = `${length}`;
+      path.style.transition = 'none';
     };
 
     const initAuthorPage = () => {
@@ -558,24 +386,44 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       state.cleanup?.();
       stage.dataset.authorBooted = 'true';
 
-      const links = Array.from(stage.querySelectorAll('[data-author-link]')).filter(
-        (link) => link instanceof HTMLAnchorElement,
-      );
-      const pathSvg = stage.querySelector('[data-author-connector]');
+      const connector = stage.querySelector('[data-author-connector]');
+      const path = stage.querySelector('[data-author-connector-path]');
+      const booklistLink = stage.querySelector('[data-author-link="books"]');
+      const archivesLink = stage.querySelector('[data-author-link="archives"]');
 
-      if (links.length < 2 || !(pathSvg instanceof SVGSVGElement)) return;
+      if (
+        !(connector instanceof SVGSVGElement) ||
+        !(path instanceof SVGPathElement) ||
+        !(booklistLink instanceof HTMLAnchorElement) ||
+        !(archivesLink instanceof HTMLAnchorElement)
+      ) {
+        return;
+      }
 
       const timers = new Set();
+      const animationFrames = new Set();
       let cleanupAnimation = () => {};
-      let composition = null;
       let disposed = false;
-      let hasPrepared = false;
-      let hasStarted = false;
+      let hasStartedSequence = false;
+      let layoutToken = 0;
+      let pathLength = 0;
       let preloaderComplete = !document.querySelector('[data-home-preloader]');
-      let resizeFrame = 0;
-      const blankDelay = 240;
-      const booksFadeDuration = 1040;
-      const lineDelay = 180;
+      let sequenceComplete = false;
+
+      const clearTimers = () => {
+        timers.forEach((timer) => window.clearTimeout(timer));
+        timers.clear();
+      };
+
+      const clearAnimationFrames = () => {
+        animationFrames.forEach((frame) => window.cancelAnimationFrame(frame));
+        animationFrames.clear();
+      };
+
+      const clearPendingWork = () => {
+        clearTimers();
+        clearAnimationFrames();
+      };
 
       const setTimer = (callback, delay) => {
         const timer = window.setTimeout(() => {
@@ -586,191 +434,216 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         timers.add(timer);
         return timer;
       };
-      const clearTimers = () => {
-        timers.forEach((timer) => window.clearTimeout(timer));
-        timers.clear();
+
+      const waitForAnimationFrame = () =>
+        new Promise((resolve) => {
+          const frame = window.requestAnimationFrame(() => {
+            animationFrames.delete(frame);
+            resolve();
+          });
+
+          animationFrames.add(frame);
+        });
+
+      const resetRevealClasses = () => {
+        stage.classList.remove(
+          'is-archives-visible',
+          'is-books-visible',
+          'is-line-drawing',
+          'is-positioned'
+        );
       };
+
+      const showCompletedReveal = () => {
+        stage.classList.add(
+          'is-positioned',
+          'is-books-visible',
+          'is-line-drawing',
+          'is-archives-visible'
+        );
+        path.style.opacity = '1';
+        path.style.strokeDashoffset = '0';
+        path.style.transition = 'none';
+      };
+
+      const clearInlinePositions = () => {
+        booklistLink.style.removeProperty('--author-link-x');
+        booklistLink.style.removeProperty('--author-link-y');
+        archivesLink.style.removeProperty('--author-link-x');
+        archivesLink.style.removeProperty('--author-link-y');
+      };
+
       const resetStage = () => {
         cleanupAnimation();
         cleanupAnimation = () => {};
-        clearTimers();
-        stage.classList.remove('is-archives-visible');
-        stage.classList.remove('is-books-visible');
-        stage.classList.remove('is-line-drawing');
-        stage.classList.remove('is-positioned');
-        createConnectorPath(pathSvg);
+        clearPendingWork();
+        resetRevealClasses();
+        clearInlinePositions();
+        connector.removeAttribute('height');
+        connector.removeAttribute('viewBox');
+        connector.removeAttribute('width');
+        resetPathStyles(path);
       };
 
-      const prepareComposition = () => {
-        if (disposed) return;
+      const animatePath = (onComplete) => {
+        const duration = clamp(pathLength * 5, 1400, 5200);
+        let hasFinished = false;
+        let fallbackTimer = 0;
 
-        resetStage();
-        const sizes = links.map((link) => {
-          const rect = link.getBoundingClientRect();
+        const finish = () => {
+          if (hasFinished) return;
 
-          return {
-            height: Math.ceil(rect.height),
-            width: Math.ceil(rect.width),
-          };
-        });
-        const margins = calculateSafeMargins(stage, links);
-        const placements = calculateRandomTextPositions(sizes, margins);
+          hasFinished = true;
+          path.removeEventListener('transitionend', onTransitionEnd);
 
-        links.forEach((link, index) => {
-          link.style.setProperty('--author-link-x', `${placements[index].x}px`);
-          link.style.setProperty('--author-link-y', `${placements[index].y}px`);
-        });
-        stage.classList.add('is-positioned');
+          if (fallbackTimer) {
+            window.clearTimeout(fallbackTimer);
+            timers.delete(fallbackTimer);
+          }
 
-        const canvasRect = stage.getBoundingClientRect();
-        const booksGeometry = getTextGeometry(links[0], canvasRect);
-        const archivesGeometry = getTextGeometry(links[1], canvasRect);
-        const anchorData = getClosestAnchorPoints(booksGeometry, archivesGeometry, margins.textToLineGap);
-        const curve = generateOrganicSingleStrokePath(
-          {
-            endPoint: anchorData.endPoint,
-            endTangent: anchorData.endTangent,
-            startPoint: anchorData.startPoint,
-            startTangent: anchorData.startTangent,
-          },
-          margins,
-          [anchorData.booksSafeRect, anchorData.archivesSafeRect],
-        );
-        const path = createConnectorPath(pathSvg);
-
-        pathSvg.setAttribute('height', `${margins.height}`);
-        pathSvg.setAttribute('viewBox', `0 0 ${margins.width} ${margins.height}`);
-        pathSvg.setAttribute('width', `${margins.width}`);
-        path.setAttribute('d', curve.d);
-        path.style.strokeDasharray = `${curve.length} ${curve.length}`;
-        path.style.strokeDashoffset = `${curve.length}`;
-
-        composition = {
-          curve,
-          path,
+          onComplete();
         };
-        hasPrepared = true;
+
+        const onTransitionEnd = (event) => {
+          if (event.target === path && event.propertyName === 'stroke-dashoffset') {
+            finish();
+          }
+        };
+
+        path.style.opacity = '1';
+        path.style.strokeDasharray = `${pathLength} ${pathLength}`;
+        path.style.strokeDashoffset = `${pathLength}`;
+        path.style.transition = 'none';
+        path.getBoundingClientRect();
+        path.addEventListener('transitionend', onTransitionEnd);
+        path.style.transition = `stroke-dashoffset ${duration}ms linear`;
+        path.style.strokeDashoffset = '0';
+
+        fallbackTimer = setTimer(finish, duration + 120);
+
+        return () => {
+          path.removeEventListener('transitionend', onTransitionEnd);
+          path.style.transition = 'none';
+        };
       };
 
       const tryStartSequence = () => {
-        if (disposed || hasStarted || !hasPrepared || !preloaderComplete || !composition) return;
+        if (disposed || hasStartedSequence || !preloaderComplete || !pathLength) return;
 
-        hasStarted = true;
+        hasStartedSequence = true;
 
         setTimer(() => {
           stage.classList.add('is-books-visible');
-        }, blankDelay);
+        }, 240);
+
         setTimer(() => {
           stage.classList.add('is-line-drawing');
-          cleanupAnimation = animateSingleStrokeConstantSpeed(
-            {
-              curve: composition.curve,
-              path: composition.path,
-              timers,
-            },
-            () => {
-              setTimer(() => {
-                stage.classList.add('is-archives-visible');
-              }, blankDelay);
-            },
-          );
-        }, blankDelay + booksFadeDuration + lineDelay);
+          cleanupAnimation = animatePath(() => {
+            setTimer(() => {
+              stage.classList.add('is-archives-visible');
+              sequenceComplete = true;
+            }, 220);
+          });
+        }, 1320);
       };
 
-      const prepareWhenFontsReady = () => {
-        const fontsReady = document.fonts?.ready;
+      const rebuildConnector = async ({ preserveCompletedReveal = false } = {}) => {
+        const token = ++layoutToken;
+        const shouldPreserveCompletedReveal = preserveCompletedReveal && sequenceComplete;
 
-        if (fontsReady && typeof fontsReady.then === 'function') {
-          fontsReady.then(() => {
-            prepareComposition();
-            tryStartSequence();
-          }).catch(() => {
-            prepareComposition();
-            tryStartSequence();
-          });
+        cleanupAnimation();
+        cleanupAnimation = () => {};
+        clearPendingWork();
+
+        if (!shouldPreserveCompletedReveal) {
+          hasStartedSequence = false;
+          sequenceComplete = false;
+          resetRevealClasses();
+        }
+
+        resetPathStyles(path);
+
+        try {
+          if (document.fonts?.ready) {
+            await document.fonts.ready;
+          }
+        } catch {
+          // Continue with browser fallback fonts if the FontFaceSet promise rejects.
+        }
+
+        await waitForAnimationFrame();
+
+        if (disposed || token !== layoutToken) return;
+
+        const placements = placeAuthorLinks(stage, booklistLink, archivesLink);
+
+        booklistLink.style.setProperty('--author-link-x', `${placements.books.x}px`);
+        booklistLink.style.setProperty('--author-link-y', `${placements.books.y}px`);
+        archivesLink.style.setProperty('--author-link-x', `${placements.archives.x}px`);
+        archivesLink.style.setProperty('--author-link-y', `${placements.archives.y}px`);
+        stage.classList.add('is-positioned');
+
+        await waitForAnimationFrame();
+
+        if (disposed || token !== layoutToken) return;
+
+        const stageRect = stage.getBoundingClientRect();
+        const stageWidth = Math.max(stageRect.width, 1);
+        const stageHeight = Math.max(stageRect.height, 1);
+        const endpointData = computeConnectorEndpoints(booklistLink, archivesLink, stageRect);
+        const pathData = buildConnectorPath(endpointData);
+
+        connector.setAttribute('height', `${stageHeight}`);
+        connector.setAttribute('viewBox', `0 0 ${stageWidth} ${stageHeight}`);
+        connector.setAttribute('width', `${stageWidth}`);
+        path.setAttribute('d', pathData.d);
+        pathLength = path.getTotalLength();
+        setPathHidden(path, pathLength);
+        verifyConnectorGeometry(endpointData, pathData);
+
+        if (shouldPreserveCompletedReveal) {
+          showCompletedReveal();
           return;
         }
 
-        prepareComposition();
         tryStartSequence();
       };
+
       const onPreloaderComplete = () => {
         preloaderComplete = true;
         tryStartSequence();
       };
+
       const onResize = () => {
-        window.cancelAnimationFrame(resizeFrame);
-        resizeFrame = window.requestAnimationFrame(() => {
-          if (disposed) return;
+        const preserveCompletedReveal = sequenceComplete;
 
-          const wasStarted = hasStarted;
-          const shouldShowBooks = wasStarted || stage.classList.contains('is-books-visible');
-          const shouldShowLine = stage.classList.contains('is-line-drawing');
-          const shouldShowArchives = stage.classList.contains('is-archives-visible');
+        ++layoutToken;
+        cleanupAnimation();
+        cleanupAnimation = () => {};
+        clearPendingWork();
 
-          hasPrepared = false;
-          prepareComposition();
-
-          if (!wasStarted) {
-            tryStartSequence();
-            return;
-          }
-
-          if (shouldShowBooks) stage.classList.add('is-books-visible');
-
-          if (!composition) return;
-
-          if (shouldShowLine || shouldShowArchives) {
-            stage.classList.add('is-line-drawing');
-            composition.path.style.transition = 'none';
-            composition.path.style.opacity = '1';
-            composition.path.style.strokeDasharray = `${composition.curve.length} ${composition.curve.length}`;
-            composition.path.style.strokeDashoffset = '0';
-          } else if (shouldShowBooks) {
-            setTimer(() => {
-              stage.classList.add('is-line-drawing');
-              cleanupAnimation = animateSingleStrokeConstantSpeed(
-                {
-                  curve: composition.curve,
-                  path: composition.path,
-                  timers,
-                },
-                () => {
-                  setTimer(() => {
-                    stage.classList.add('is-archives-visible');
-                  }, blankDelay);
-                },
-              );
-            }, lineDelay);
-          }
-
-          if (shouldShowArchives) {
-            stage.classList.add('is-archives-visible');
-          } else if (shouldShowLine) {
-            setTimer(() => {
-              stage.classList.add('is-archives-visible');
-            }, blankDelay);
-          }
+        const frame = window.requestAnimationFrame(() => {
+          animationFrames.delete(frame);
+          rebuildConnector({ preserveCompletedReveal });
         });
+
+        animationFrames.add(frame);
       };
 
       window.addEventListener(preloaderCompleteEvent, onPreloaderComplete);
       window.addEventListener('resize', onResize);
       window.addEventListener('orientationchange', onResize);
-      prepareWhenFontsReady();
+      rebuildConnector();
 
       state.cleanup = () => {
         disposed = true;
-        window.cancelAnimationFrame(resizeFrame);
+        ++layoutToken;
         window.removeEventListener(preloaderCompleteEvent, onPreloaderComplete);
         window.removeEventListener('resize', onResize);
         window.removeEventListener('orientationchange', onResize);
-        links.forEach((link) => {
-          link.style.removeProperty('--author-link-x');
-          link.style.removeProperty('--author-link-y');
-        });
         resetStage();
         delete stage.dataset.authorBooted;
+        state.cleanup = null;
       };
     };
 
@@ -844,7 +717,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     fill: none;
     opacity: 0;
     stroke: #000000;
-    stroke-linecap: butt;
+    stroke-linecap: round;
     stroke-linejoin: round;
     stroke-width: 0.8;
     vector-effect: non-scaling-stroke;
@@ -866,7 +739,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     font-family: 'SF Pro Display Ultralight', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     font-size: clamp(1.35rem, 2.1vw, 2.15rem);
     font-weight: 300;
-    left: var(--author-link-x, 50%);
+    left: var(--author-link-x);
     letter-spacing: 0;
     line-height: 1;
     opacity: 0;
@@ -874,9 +747,13 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     position: absolute;
     text-align: center;
     text-decoration: none;
-    top: var(--author-link-y, 50%);
+    top: var(--author-link-y);
     transform: translate(-50%, -50%);
-    transition: color 180ms ease, opacity 1020ms ease;
+    transition:
+      color 180ms ease,
+      opacity 900ms ease,
+      visibility 0s linear 900ms;
+    visibility: hidden;
     white-space: nowrap;
   }
 
@@ -884,6 +761,15 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   .author-stage.is-positioned.is-archives-visible [data-author-link='archives'] {
     opacity: 1;
     pointer-events: auto;
+    transition:
+      color 180ms ease,
+      opacity 900ms ease,
+      visibility 0s linear 0s;
+    visibility: visible;
+  }
+
+  .author-stage.is-line-drawing :global(.author-connector path) {
+    opacity: 1;
   }
 
   .author-link:focus-visible {
