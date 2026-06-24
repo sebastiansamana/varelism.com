@@ -548,6 +548,57 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         path.style.transition = 'none';
       };
 
+      const getRevealSnapshot = () => ({
+        archivesVisible: stage.classList.contains('is-archives-visible'),
+        booksVisible: stage.classList.contains('is-books-visible'),
+        complete: sequenceComplete,
+        lineDrawing: stage.classList.contains('is-line-drawing'),
+        started: hasStartedSequence,
+      });
+
+      const finishArchivesReveal = () => {
+        stage.classList.add('is-archives-visible');
+        sequenceComplete = true;
+      };
+
+      const continueRevealAfterRebuild = (revealSnapshot) => {
+        if (!revealSnapshot) return false;
+
+        if (revealSnapshot.complete || revealSnapshot.archivesVisible) {
+          hasStartedSequence = true;
+          sequenceComplete = true;
+          showCompletedReveal();
+          return true;
+        }
+
+        if (revealSnapshot.lineDrawing) {
+          hasStartedSequence = true;
+          sequenceComplete = false;
+          stage.classList.add('is-positioned', 'is-books-visible', 'is-line-drawing');
+          path.style.opacity = '1';
+          path.style.strokeDasharray = `${pathLength} ${pathLength}`;
+          path.style.strokeDashoffset = '0';
+          path.style.transition = 'none';
+          setTimer(finishArchivesReveal, 220);
+          return true;
+        }
+
+        if (revealSnapshot.booksVisible || revealSnapshot.started) {
+          hasStartedSequence = true;
+          sequenceComplete = false;
+          stage.classList.add('is-books-visible');
+          setTimer(() => {
+            stage.classList.add('is-line-drawing');
+            cleanupAnimation = animatePath(() => {
+              setTimer(finishArchivesReveal, 220);
+            });
+          }, 180);
+          return true;
+        }
+
+        return false;
+      };
+
       const clearInlinePositions = () => {
         booklistLink.style.removeProperty('--author-link-x');
         booklistLink.style.removeProperty('--author-link-y');
@@ -624,26 +675,42 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         setTimer(() => {
           stage.classList.add('is-line-drawing');
           cleanupAnimation = animatePath(() => {
-            setTimer(() => {
-              stage.classList.add('is-archives-visible');
-              sequenceComplete = true;
-            }, 220);
+            setTimer(finishArchivesReveal, 220);
           });
         }, 1320);
       };
 
-      const rebuildConnector = async ({ preserveCompletedReveal = false } = {}) => {
+      const rebuildConnector = async ({ revealSnapshot = null } = {}) => {
         const token = ++layoutToken;
-        const shouldPreserveCompletedReveal = preserveCompletedReveal && sequenceComplete;
+        const shouldContinueReveal = Boolean(
+          revealSnapshot?.archivesVisible ||
+          revealSnapshot?.booksVisible ||
+          revealSnapshot?.complete ||
+          revealSnapshot?.lineDrawing ||
+          revealSnapshot?.started
+        );
 
         cleanupAnimation();
         cleanupAnimation = () => {};
         clearPendingWork();
 
-        if (!shouldPreserveCompletedReveal) {
+        if (!shouldContinueReveal) {
           hasStartedSequence = false;
           sequenceComplete = false;
           resetRevealClasses();
+        } else {
+          stage.classList.remove('is-line-drawing');
+          if (!revealSnapshot?.archivesVisible && !revealSnapshot?.complete) {
+            stage.classList.remove('is-archives-visible');
+          }
+          if (
+            !revealSnapshot?.booksVisible &&
+            !revealSnapshot?.lineDrawing &&
+            !revealSnapshot?.archivesVisible &&
+            !revealSnapshot?.complete
+          ) {
+            stage.classList.remove('is-books-visible');
+          }
         }
 
         resetPathStyles(path);
@@ -686,10 +753,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         setPathHidden(path, pathLength);
         verifyConnectorGeometry(endpointData, pathData);
 
-        if (shouldPreserveCompletedReveal) {
-          showCompletedReveal();
-          return;
-        }
+        if (continueRevealAfterRebuild(revealSnapshot)) return;
 
         tryStartSequence();
       };
@@ -700,7 +764,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       };
 
       const onResize = () => {
-        const preserveCompletedReveal = sequenceComplete;
+        const revealSnapshot = getRevealSnapshot();
 
         ++layoutToken;
         cleanupAnimation();
@@ -709,7 +773,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
         const frame = window.requestAnimationFrame(() => {
           animationFrames.delete(frame);
-          rebuildConnector({ preserveCompletedReveal });
+          rebuildConnector({ revealSnapshot });
         });
 
         animationFrames.add(frame);
