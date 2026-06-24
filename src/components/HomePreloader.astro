@@ -40,93 +40,119 @@ const {
 
 <script is:inline>
   (() => {
-    const overlay = document.querySelector('[data-home-preloader]');
-    if (!overlay) return;
+    const stateKey = '__varelismHomePreloader';
+    const state = (window[stateKey] ||= {
+      listenersAttached: false,
+    });
 
-    const sessionKey = overlay.dataset.sessionKey || 'varelism-home-preloader-seen';
-    const completeEvent = overlay.dataset.completeEvent || 'varelism:preloader-complete';
-    const activePaths = (overlay.dataset.activePaths || '/|/index.html').split('|').filter(Boolean);
-    const playOnce = overlay.dataset.playOnce !== 'false';
-    const timingScale = Math.max(0.1, Number.parseFloat(overlay.dataset.timingScale || '1') || 1);
-    const videoVisibleMs = Math.round(3000 * timingScale);
-    const videoFadeMs = Math.round(300 * timingScale);
-    const whiteHoldMs = Math.round(300 * timingScale);
-    const overlayFadeMs = Math.round(300 * timingScale);
-    const fallbackMs = Math.round(10000 * timingScale);
-    const isActivePath = activePaths.includes(window.location.pathname);
-    let hasRemoved = false;
-    const storage = {
-      get() {
-        try {
-          return sessionStorage.getItem(sessionKey);
-        } catch {
-          return null;
-        }
-      },
-      set() {
-        try {
-          sessionStorage.setItem(sessionKey, 'true');
-        } catch {
-          // Storage can be unavailable in strict privacy contexts.
-        }
-      },
+    const initOverlay = (overlay) => {
+      if (!(overlay instanceof HTMLElement) || overlay.dataset.homePreloaderBooted === 'true') return;
+
+      overlay.dataset.homePreloaderBooted = 'true';
+
+      const sessionKey = overlay.dataset.sessionKey || 'varelism-home-preloader-seen';
+      const completeEvent = overlay.dataset.completeEvent || 'varelism:preloader-complete';
+      const activePaths = (overlay.dataset.activePaths || '/|/index.html').split('|').filter(Boolean);
+      const playOnce = overlay.dataset.playOnce !== 'false';
+      const timingScale = Math.max(0.1, Number.parseFloat(overlay.dataset.timingScale || '1') || 1);
+      const videoVisibleMs = Math.round(3000 * timingScale);
+      const videoFadeMs = Math.round(300 * timingScale);
+      const whiteHoldMs = Math.round(300 * timingScale);
+      const overlayFadeMs = Math.round(300 * timingScale);
+      const fallbackMs = Math.round(10000 * timingScale);
+      const isActivePath = activePaths.includes(window.location.pathname);
+      let hasRemoved = false;
+      const storage = {
+        get() {
+          try {
+            return sessionStorage.getItem(sessionKey);
+          } catch {
+            return null;
+          }
+        },
+        set() {
+          try {
+            sessionStorage.setItem(sessionKey, 'true');
+          } catch {
+            // Storage can be unavailable in strict privacy contexts.
+          }
+        },
+      };
+
+      const removeOverlay = () => {
+        if (hasRemoved) return;
+        hasRemoved = true;
+        overlay.remove();
+        document.documentElement.classList.remove('home-preloader-active');
+        window.dispatchEvent(new CustomEvent(completeEvent));
+      };
+
+      if (!isActivePath || (playOnce && storage.get() === 'true')) {
+        removeOverlay();
+        return;
+      }
+
+      if (playOnce) storage.set();
+      document.documentElement.classList.add('home-preloader-active');
+      overlay.classList.add('is-visible');
+
+      let isPageReady = document.readyState === 'complete';
+      let hasMetVideoDuration = false;
+      let isHiding = false;
+
+      const hideOverlay = () => {
+        if (isHiding || !isPageReady || !hasMetVideoDuration) return;
+
+        isHiding = true;
+        overlay.classList.add('is-video-fading');
+        window.setTimeout(() => {
+          overlay.classList.add('is-overlay-fading');
+          window.setTimeout(removeOverlay, overlayFadeMs);
+        }, videoFadeMs + whiteHoldMs);
+      };
+
+      window.setTimeout(() => {
+        hasMetVideoDuration = true;
+        hideOverlay();
+      }, videoVisibleMs);
+
+      const fallbackTimer = window.setTimeout(() => {
+        isPageReady = true;
+        hasMetVideoDuration = true;
+        hideOverlay();
+      }, fallbackMs);
+
+      if (document.readyState === 'complete') {
+        hideOverlay();
+      } else {
+        window.addEventListener(
+          'load',
+          () => {
+            isPageReady = true;
+            window.clearTimeout(fallbackTimer);
+            hideOverlay();
+          },
+          { once: true },
+        );
+      }
     };
 
-    const removeOverlay = () => {
-      if (hasRemoved) return;
-      hasRemoved = true;
-      overlay.remove();
-      document.documentElement.classList.remove('home-preloader-active');
-      window.dispatchEvent(new CustomEvent(completeEvent));
+    const initPreloaders = () => {
+      document.querySelectorAll('[data-home-preloader]').forEach(initOverlay);
     };
 
-    if (!isActivePath || (playOnce && storage.get() === 'true')) {
-      removeOverlay();
-      return;
+    if (!state.listenersAttached) {
+      document.addEventListener('astro:page-load', initPreloaders);
+      document.addEventListener('astro:before-swap', () => {
+        document.documentElement.classList.remove('home-preloader-active');
+      });
+      state.listenersAttached = true;
     }
 
-    if (playOnce) storage.set();
-    document.documentElement.classList.add('home-preloader-active');
-    overlay.classList.add('is-visible');
-
-    let isPageReady = document.readyState === 'complete';
-    let hasMetVideoDuration = false;
-    let isHiding = false;
-
-    const hideOverlay = () => {
-      if (isHiding || !isPageReady || !hasMetVideoDuration) return;
-
-      isHiding = true;
-      overlay.classList.add('is-video-fading');
-      window.setTimeout(() => {
-        overlay.classList.add('is-overlay-fading');
-        window.setTimeout(removeOverlay, overlayFadeMs);
-      }, videoFadeMs + whiteHoldMs);
-    };
-
-    window.setTimeout(() => {
-      hasMetVideoDuration = true;
-      hideOverlay();
-    }, videoVisibleMs);
-
-    const fallbackTimer = window.setTimeout(() => {
-      isPageReady = true;
-      hasMetVideoDuration = true;
-      hideOverlay();
-    }, fallbackMs);
-
-    if (document.readyState === 'complete') {
-      hideOverlay();
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initPreloaders, { once: true });
     } else {
-      window.addEventListener(
-        'load',
-        () => {
-          isPageReady = true;
-          window.clearTimeout(fallbackTimer);
-          hideOverlay();
-        },
-        { once: true },
-      );
+      initPreloaders();
     }
   })();
 </script>

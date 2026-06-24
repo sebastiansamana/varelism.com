@@ -499,6 +499,25 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         return timer;
       };
 
+      const clearStalePreloader = () => {
+        if (preloaderComplete) return;
+
+        const overlay = document.querySelector('[data-home-preloader]');
+
+        if (!(overlay instanceof HTMLElement)) {
+          preloaderComplete = true;
+          tryStartSequence();
+          return;
+        }
+
+        if (overlay.dataset.homePreloaderBooted !== 'true' && !overlay.classList.contains('is-visible')) {
+          overlay.remove();
+          document.documentElement.classList.remove('home-preloader-active');
+          preloaderComplete = true;
+          tryStartSequence();
+        }
+      };
+
       const waitForAnimationFrame = () =>
         new Promise((resolve) => {
           const frame = window.requestAnimationFrame(() => {
@@ -700,6 +719,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       window.addEventListener(preloaderCompleteEvent, onPreloaderComplete);
       window.addEventListener('resize', onResize);
       window.addEventListener('orientationchange', onResize);
+      setTimer(clearStalePreloader, 250);
       rebuildConnector();
 
       state.cleanup = () => {
