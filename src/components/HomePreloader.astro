@@ -56,7 +56,8 @@ const {
       const activePaths = (overlay.dataset.activePaths || '/|/index.html').split('|').filter(Boolean);
       const playOnce = overlay.dataset.playOnce !== 'false';
       const timingScale = Math.max(0.1, Number.parseFloat(overlay.dataset.timingScale || '1') || 1);
-      const imageVisibleMs = Math.round(3000 * timingScale);
+      // Match the single-pass GIF duration so ready pages reveal after one full iteration.
+      const imageVisibleMs = Math.round(3020 * timingScale);
       const imageFadeMs = Math.round(300 * timingScale);
       const whiteHoldMs = Math.round(300 * timingScale);
       const overlayFadeMs = Math.round(300 * timingScale);

@@ -360,33 +360,35 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         x: -bodyDirection.y,
         y: bodyDirection.x,
       };
-      const segmentCount = Math.round(clamp(horizontalBodyDistance / randomBetween(150, 220), 4, 7));
-      const amplitude = clamp(distance * randomBetween(0.1, 0.18), 20, 118);
+      const segmentCount = Math.round(clamp(horizontalBodyDistance / randomBetween(190, 270), 4, 6));
+      const amplitude = clamp(distance * randomBetween(0.08, 0.145), 18, 96);
       const firstBendSign = Math.random() < 0.5 ? -1 : 1;
+      const waveCount = randomBetween(1.15, 1.85);
+      const wavePhase = randomBetween(-0.45, 0.45);
       const bodyPoints = [bodyStart];
 
       for (let index = 1; index < segmentCount; index += 1) {
         const t = index / segmentCount;
-        const taper = Math.sin(Math.PI * t) ** 1.75;
-        const directionSign = index % 2 === 1 ? firstBendSign : -firstBendSign;
+        const taper = Math.sin(Math.PI * t) ** 2.15;
+        const wave = Math.sin(t * Math.PI * waveCount + wavePhase) * firstBendSign;
         const basePoint = getPointBetween(bodyStart, bodyEnd, t);
-        const localAmplitude = amplitude * taper * randomBetween(0.58, 1.24);
-        const wavelengthDrift = distance * randomBetween(-0.028, 0.028) * taper;
+        const localAmplitude = amplitude * taper * randomBetween(0.72, 1.08);
+        const wavelengthDrift = distance * randomBetween(-0.018, 0.018) * taper;
 
         bodyPoints.push({
-          x: basePoint.x + normal.x * localAmplitude * directionSign + bodyDirection.x * wavelengthDrift,
-          y: basePoint.y + normal.y * localAmplitude * directionSign + bodyDirection.y * wavelengthDrift,
+          x: basePoint.x + normal.x * localAmplitude * wave + bodyDirection.x * wavelengthDrift,
+          y: basePoint.y + normal.y * localAmplitude * wave + bodyDirection.y * wavelengthDrift,
         });
       }
 
       bodyPoints.push(bodyEnd);
 
       const edgeHandleLength = clamp(
-        horizontalBodyDistance * randomBetween(0.22, 0.34),
-        Math.min(28, horizontalBodyDistance * 0.3),
-        Math.max(28, horizontalBodyDistance * 0.42)
+        horizontalBodyDistance * randomBetween(0.28, 0.38),
+        Math.min(34, horizontalBodyDistance * 0.34),
+        Math.max(34, horizontalBodyDistance * 0.45)
       );
-      const tension = randomBetween(0.14, 0.2);
+      const tension = randomBetween(0.1, 0.15);
       const cubicCommands = bodyPoints.slice(0, -1).map((currentPoint, index) => {
         const nextPoint = bodyPoints[index + 1];
         const previousPoint = bodyPoints[index - 1] || currentPoint;
