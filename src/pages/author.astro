@@ -180,7 +180,12 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     const getTextGeometry = (link, canvasRect) => {
       const rect = toCanvasRect(link.getBoundingClientRect(), canvasRect);
       const opticalInsets = getOpticalInsets(link, rect);
-      const inkRect = getMeasuredInkRect(link, rect, opticalInsets);
+      const rawInkRect = getMeasuredInkRect(link, rect, opticalInsets);
+      const inkRect = {
+        ...rawInkRect,
+        height: Math.max(1, rawInkRect.bottom - rawInkRect.top),
+        width: Math.max(1, rawInkRect.right - rawInkRect.left),
+      };
       const getOpticalAnchorPoint = (anchor) => {
         const center = getRectCenter(rect);
         const inkCenter = getRectCenter(inkRect);
@@ -201,7 +206,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       return {
         getSupportPoint: getOpticalAnchorPoint,
         rect,
-        visualRect: rect,
+        visualRect: inkRect,
       };
     };
 
@@ -216,7 +221,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       const edgeInsetX = clamp(minDimension * 0.09, 26, 90);
       const edgeInsetY = clamp(minDimension * 0.1, 28, 84);
       const textPadding = clamp(typographyScale * 0.14, width <= 560 ? 3 : 4, width <= 560 ? 5 : 6);
-      const TEXT_TO_LINE_GAP = responsiveScale(10, window.innerWidth);
+      const TEXT_TO_LINE_GAP = clamp(window.innerWidth * 0.012, 10, 24);
       const safeRect = {
         bottom: height - edgeInsetY,
         left: edgeInsetX,
@@ -313,52 +318,48 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       ];
     };
 
-    const getCompassAnchorDirection = (anchor) => {
-      const directions = {
-        E: { x: 1, y: 0 },
-        N: { x: 0, y: -1 },
-        NE: normalizeVector({ x: 1, y: -1 }),
-        NW: normalizeVector({ x: -1, y: -1 }),
-        S: { x: 0, y: 1 },
-        SE: normalizeVector({ x: 1, y: 1 }),
-        SW: normalizeVector({ x: -1, y: 1 }),
-        W: { x: -1, y: 0 },
-      };
-
-      return directions[anchor] || { x: 1, y: 0 };
-    };
-
-    const getCompassAnchorPair = () => ({ archives: 'W', books: 'E' });
-
-    const getClosestAnchorPoints = (booksGeometry, archivesGeometry, padding) => {
-      const booksSafeRect = getPaddedRect(booksGeometry.rect, padding);
-      const archivesSafeRect = getPaddedRect(archivesGeometry.rect, padding);
-      const anchors = getCompassAnchorPair(booksGeometry.rect, archivesGeometry.rect);
-      const booksDirection = getCompassAnchorDirection(anchors.books);
-      const archivesDirection = getCompassAnchorDirection(anchors.archives);
-      const booksReferencePoint = booksGeometry.getSupportPoint(anchors.books);
-      const archivesReferencePoint = archivesGeometry.getSupportPoint(anchors.archives);
+    const projectRectEdge = (rect, direction) => {
+      const center = getRectCenter(rect);
+      const unit = normalizeVector(direction);
+      const halfWidth = rect.width / 2;
+      const halfHeight = rect.height / 2;
+      const xScale = Math.abs(unit.x) > 0.0001 ? halfWidth / Math.abs(unit.x) : Number.POSITIVE_INFINITY;
+      const yScale = Math.abs(unit.y) > 0.0001 ? halfHeight / Math.abs(unit.y) : Number.POSITIVE_INFINITY;
+      const edgeScale = Math.min(xScale, yScale);
 
       return {
-        archiveAnchor: anchors.archives,
-        archivesDirection,
+        x: center.x + unit.x * edgeScale,
+        y: center.y + unit.y * edgeScale,
+      };
+    };
+
+    const getClosestAnchorPoints = (booksGeometry, archivesGeometry, padding) => {
+      const booksVisualRect = booksGeometry.visualRect || booksGeometry.rect;
+      const archivesVisualRect = archivesGeometry.visualRect || archivesGeometry.rect;
+      const booksSafeRect = getPaddedRect(booksVisualRect, padding);
+      const archivesSafeRect = getPaddedRect(archivesVisualRect, padding);
+      const booksCenter = getRectCenter(booksVisualRect);
+      const archivesCenter = getRectCenter(archivesVisualRect);
+      const direction = normalizeVector({
+        x: archivesCenter.x - booksCenter.x,
+        y: archivesCenter.y - booksCenter.y,
+      });
+      const reverseDirection = {
+        x: -direction.x,
+        y: -direction.y,
+      };
+
+      return {
+        archiveAnchor: 'protected-zone',
+        archivesDirection: reverseDirection,
         archivesSafeRect,
-        bookAnchor: anchors.books,
-        booksDirection,
+        bookAnchor: 'protected-zone',
+        booksDirection: direction,
         booksSafeRect,
-        endPoint: {
-          x: archivesReferencePoint.x + archivesDirection.x * padding,
-          y: archivesReferencePoint.y + archivesDirection.y * padding,
-        },
-        endTangent: {
-          x: -archivesDirection.x,
-          y: -archivesDirection.y,
-        },
-        startPoint: {
-          x: booksReferencePoint.x + booksDirection.x * padding,
-          y: booksReferencePoint.y + booksDirection.y * padding,
-        },
-        startTangent: booksDirection,
+        endPoint: projectRectEdge(archivesSafeRect, reverseDirection),
+        endTangent: direction,
+        startPoint: projectRectEdge(booksSafeRect, direction),
+        startTangent: direction,
       };
     };
 
