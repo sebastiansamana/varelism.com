@@ -121,27 +121,29 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       const startPoint = archivesIsRight
         ? {
             x: booklistCharRect.right + TEXT_TO_LINE_GAP,
-            y: booklistCharRect.centerY,
+            y: booklistRect.centerY,
           }
         : {
             x: booklistCharRect.left - TEXT_TO_LINE_GAP,
-            y: booklistCharRect.centerY,
+            y: booklistRect.centerY,
           };
 
       const endPoint = archivesIsRight
         ? {
             x: archivesCharRect.left - TEXT_TO_LINE_GAP,
-            y: archivesCharRect.centerY,
+            y: archivesRect.centerY,
           }
         : {
             x: archivesCharRect.right + TEXT_TO_LINE_GAP,
-            y: archivesCharRect.centerY,
+            y: archivesRect.centerY,
           };
 
       return {
         startPoint,
         endPoint,
         horizontalDirection,
+        booklistRect,
+        archivesRect,
         booklistCharRect,
         archivesCharRect,
         archivesIsRight,
@@ -240,6 +242,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       const {
         archivesCharRect,
         archivesIsRight,
+        archivesRect,
+        booklistRect,
         booklistCharRect,
         endPoint,
         startPoint,
@@ -263,13 +267,20 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         Math.abs(startGap - TEXT_TO_LINE_GAP) > tolerance ||
         Math.abs(endGap - TEXT_TO_LINE_GAP) > tolerance;
       const hasLeadError = Math.abs(startLeadLength - endLeadLength) > tolerance;
+      const hasAlignmentError =
+        Math.abs(pathData.pathStartPoint.y - booklistRect.centerY) > tolerance ||
+        Math.abs(endPoint.y - archivesRect.centerY) > tolerance;
 
-      if (hasGapError || hasLeadError) {
+      if (hasGapError || hasLeadError || hasAlignmentError) {
         console.warn('[author connector]', {
           endGap,
           endLeadLength,
+          endY: endPoint.y,
+          archivesCenterY: archivesRect.centerY,
           startGap,
           startLeadLength,
+          startY: pathData.pathStartPoint.y,
+          booklistCenterY: booklistRect.centerY,
         });
       }
     }
