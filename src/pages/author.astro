@@ -59,11 +59,6 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       x: start.x + (end.x - start.x) * t,
       y: start.y + (end.y - start.y) * t,
     });
-    const smoothstep = (value) => {
-      const t = clamp(value, 0, 1);
-
-      return t * t * (3 - 2 * t);
-    };
 
     function getTextNode(link) {
       return Array.from(link.childNodes).find(
@@ -253,12 +248,22 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         desiredMinimumHorizontalDistance,
         Math.max(maximumHorizontalDistance - 8, 0)
       );
+      const maximumVerticalDistance = stageWidth <= 560
+        ? clamp(stageHeight * 0.08, 48, 76)
+        : stageWidth <= 900
+          ? clamp(stageHeight * 0.16, 96, 190)
+          : stageHeight;
 
       for (let attempt = 0; attempt < 80; attempt += 1) {
         const booklistPoint = getRandomPointInRange(booklistRange);
         const memoriesPoint = getRandomPointInRange(memoriesRange);
+        const horizontalDistance = Math.abs(memoriesPoint.x - booklistPoint.x);
+        const verticalDistance = Math.abs(memoriesPoint.y - booklistPoint.y);
 
-        if (Math.abs(memoriesPoint.x - booklistPoint.x) >= minimumHorizontalDistance) {
+        if (
+          horizontalDistance >= minimumHorizontalDistance &&
+          verticalDistance <= maximumVerticalDistance
+        ) {
           return {
             memories: memoriesPoint,
             books: booklistPoint,
@@ -269,11 +274,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       return {
         memories: {
           x: stageWidth * 0.65,
-          y: stageHeight * 0.42,
+          y: stageHeight * (stageWidth <= 560 ? 0.47 : stageWidth <= 900 ? 0.44 : 0.42),
         },
         books: {
           x: stageWidth * 0.35,
-          y: stageHeight * 0.62,
+          y: stageHeight * (stageWidth <= 560 ? 0.53 : stageWidth <= 900 ? 0.56 : 0.62),
         },
       };
     }
@@ -374,27 +379,35 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         y: bodyDirection.x,
       };
       const bendSign = Math.random() < 0.5 ? -1 : 1;
-      const compactBody = horizontalBodyDistance < 320;
-      const shoulderInset = compactBody
-        ? 0
-        : clamp(clamp(horizontalBodyDistance * 0.18, 86, 150) / horizontalBodyDistance, 0.16, 0.3);
+      const verticalBodyDistance = Math.abs(dy);
+      const settleDistance = clamp(horizontalBodyDistance * 0.18, 92, 168);
+      const waveBreathingRoom = clamp(horizontalBodyDistance * 0.09, 42, 86);
+      const usableWaveDistance = horizontalBodyDistance - (settleDistance + waveBreathingRoom) * 2;
+      const compactBody = horizontalBodyDistance < 380 || usableWaveDistance < 190;
+      const ultraCompactBody = compactBody && (
+        horizontalBodyDistance < 112 ||
+        verticalBodyDistance > horizontalBodyDistance * 1.35
+      );
+      const shoulderInset = compactBody ? 0 : settleDistance / horizontalBodyDistance;
       const wavePointCount = compactBody
         ? 1
-        : horizontalBodyDistance > 780
+        : usableWaveDistance > 680
           ? 5
-          : horizontalBodyDistance > 540
+          : usableWaveDistance > 440
             ? 4
             : 3;
-      const waveEdgeBreathingRoom = compactBody
+      const waveStart = compactBody ? 0.5 : (settleDistance + waveBreathingRoom) / horizontalBodyDistance;
+      const waveEnd = compactBody ? 0.5 : 1 - waveStart;
+      const waveJitter = compactBody
         ? 0
-        : clamp(82 / horizontalBodyDistance, 0.08, 0.15);
-      const waveStart = compactBody ? 0.5 : shoulderInset + waveEdgeBreathingRoom;
-      const waveEnd = compactBody ? 0.5 : 1 - shoulderInset - waveEdgeBreathingRoom;
+        : Math.min(0.032, Math.max((waveEnd - waveStart) / (wavePointCount * 5), 0));
       const amplitude = compactBody
-        ? clamp(distance * randomBetween(0.08, 0.16), 4, 24)
+        ? clamp(horizontalBodyDistance * randomBetween(0.06, 0.12), 2, 18)
         : clamp(distance * randomBetween(0.12, 0.2), 32, 132);
       const bodyPoints = [bodyStart];
-      const bodyAnchors = compactBody
+      const bodyAnchors = ultraCompactBody
+        ? []
+        : compactBody
         ? [
             {
               t: 0.5,
@@ -402,11 +415,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             },
           ]
         : [
-            { t: shoulderInset, wave: 0 },
+            { settle: true, t: shoulderInset, wave: 0 },
             ...Array.from({ length: wavePointCount }, (_, index) => {
-              const progress = wavePointCount === 1 ? 0.5 : index / (wavePointCount - 1);
+              const progress = (index + 0.5) / wavePointCount;
               const t = clamp(
-                waveStart + (waveEnd - waveStart) * progress + randomBetween(-0.035, 0.035),
+                waveStart + (waveEnd - waveStart) * progress + randomBetween(-waveJitter, waveJitter),
                 waveStart,
                 waveEnd
               );
@@ -417,15 +430,16 @@ import BaseLayout from '../layouts/BaseLayout.astro';
                 wave: waveSign * randomBetween(0.72, 1.28),
               };
             }),
-            { t: 1 - shoulderInset, wave: 0 },
+            { settle: true, t: 1 - shoulderInset, wave: 0 },
           ].sort((left, right) => left.t - right.t);
 
-      bodyAnchors.forEach(({ t, wave }) => {
+      bodyAnchors.forEach(({ settle = false, t, wave }) => {
         const waveEnvelope = Math.sin(Math.PI * t) ** 1.15;
         const basePoint = getPointBetween(bodyStart, bodyEnd, t);
         const wavelengthDrift = distance * randomBetween(-0.012, 0.012) * waveEnvelope * Math.abs(wave);
 
         bodyPoints.push({
+          settle,
           t,
           x: basePoint.x + bodyDirection.x * wavelengthDrift,
           y: basePoint.y + bodyDirection.y * wavelengthDrift + normal.y * amplitude * waveEnvelope * wave,
@@ -451,13 +465,14 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
         const previousPoint = bodyPoints[index - 1];
         const nextPoint = bodyPoints[index + 1];
+        const currentPoint = bodyPoints[index];
         const t = bodyPoints[index].t ?? index / (bodyPoints.length - 1);
         const endEase = Math.sin(Math.PI * t) ** 0.6;
         const tension = randomBetween(0.2, 0.28);
 
         return {
           x: (nextPoint.x - previousPoint.x) * tension,
-          y: (nextPoint.y - previousPoint.y) * tension * endEase,
+          y: currentPoint.settle ? 0 : (nextPoint.y - previousPoint.y) * tension * endEase,
         };
       };
       const tangents = bodyPoints.map((_, index) => getPointTangent(index));
