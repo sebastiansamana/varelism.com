@@ -55,21 +55,13 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
     const randomBetween = (min, max) => (max <= min ? min : min + Math.random() * (max - min));
     const formatPathNumber = (value) => (Number.isFinite(value) ? String(value) : '0');
-    const getPointBetween = (start, end, t) => ({
-      x: start.x + (end.x - start.x) * t,
-      y: start.y + (end.y - start.y) * t,
-    });
     const getAuthorCurveScale = ({ stageHeight = window.innerHeight, stageWidth }) => {
       const mobileViewport = stageWidth <= 560;
       const compactViewport = stageWidth <= 900;
 
       return {
-        amplitudeMaximum: mobileViewport ? 64 : compactViewport ? 142 : 132,
-        amplitudeMinimum: mobileViewport ? 10 : compactViewport ? 24 : 32,
-        compactViewport,
         fallbackBooksY: mobileViewport ? 0.6 : compactViewport ? 0.62 : 0.62,
         fallbackMemoriesY: mobileViewport ? 0.4 : compactViewport ? 0.38 : 0.42,
-        horizontalAmplitudeFactor: mobileViewport ? 0.46 : compactViewport ? 0.62 : 0,
         horizontalSeparationFactor: mobileViewport ? 0.48 : compactViewport ? 0.42 : 0.36,
         horizontalSeparationMax: mobileViewport ? 220 : compactViewport ? 380 : 360,
         leadLength: mobileViewport
@@ -88,19 +80,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           : compactViewport
             ? clamp(stageHeight * 0.18, 136, 240)
             : 0,
-        mobileViewport,
-        tangentMaximum: mobileViewport ? 70 : compactViewport ? 120 : 170,
-        tangentMinimum: compactViewport ? 10 : 14,
-        tangentScaleMax: compactViewport ? 0.48 : 0.32,
-        tangentScaleMin: compactViewport ? 0.32 : 0.22,
-        tensionMax: mobileViewport ? 0.36 : compactViewport ? 0.44 : 0.28,
-        tensionMin: mobileViewport ? 0.28 : compactViewport ? 0.34 : 0.2,
         textSeparationPadding: mobileViewport ? 88 : compactViewport ? 84 : 72,
-        verticalAmplitudeFactor: mobileViewport ? 0.16 : compactViewport ? 0.22 : 0,
-        waveDistanceFactor: mobileViewport ? 0.11 : compactViewport ? 0.14 : 0,
-        waveDrift: mobileViewport ? 0.02 : compactViewport ? 0.035 : 0.012,
-        waveMagnitudeMax: mobileViewport ? 1.05 : compactViewport ? 1.35 : 1.28,
-        waveMagnitudeMin: mobileViewport ? 0.52 : compactViewport ? 0.78 : 0.72,
       };
     };
 
@@ -417,9 +397,6 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       const dx = bodyEnd.x - bodyStart.x;
       const dy = bodyEnd.y - bodyStart.y;
       const distance = Math.hypot(dx, dy);
-      const startTangent = horizontalDirection;
-      const endTangent = horizontalDirection;
-      const horizontalBodyDistance = Math.abs(dx);
       const bodyDirection = distance > 0.001
         ? {
             x: dx / distance,
@@ -430,185 +407,21 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         x: -bodyDirection.y,
         y: bodyDirection.x,
       };
+      const amplitude = clamp(distance * 0.08, 18, 90);
       const bendSign = Math.random() < 0.5 ? -1 : 1;
-      const { compactViewport, mobileViewport } = curveScale;
-      const verticalBodyDistance = Math.abs(dy);
-      const safeHorizontalBodyDistance = Math.max(horizontalBodyDistance, 1);
-      const settleDistance = clamp(horizontalBodyDistance * 0.18, 92, 168);
-      const waveBreathingRoom = clamp(horizontalBodyDistance * 0.09, 42, 86);
-      const usableWaveDistance = horizontalBodyDistance - (settleDistance + waveBreathingRoom) * 2;
-      const compactBody = !compactViewport && (horizontalBodyDistance < 380 || usableWaveDistance < 190);
-      const shoulderInset = compactBody ? 0 : settleDistance / safeHorizontalBodyDistance;
-      const wavePointCount = compactViewport
-        ? mobileViewport
-          ? horizontalBodyDistance > 56
-              ? 2
-              : 1
-          : horizontalBodyDistance > 140
-            ? 3
-            : horizontalBodyDistance > 68
-              ? 2
-              : 1
-        : compactBody
-          ? 1
-          : usableWaveDistance > 680
-          ? 5
-          : usableWaveDistance > 440
-            ? 4
-            : 3;
-      const waveStart = compactBody ? 0.5 : (settleDistance + waveBreathingRoom) / safeHorizontalBodyDistance;
-      const waveEnd = compactBody ? 0.5 : 1 - waveStart;
-      const waveJitter = compactBody
-        ? 0
-        : Math.min(0.032, Math.max((waveEnd - waveStart) / (wavePointCount * 5), 0));
-      const amplitude = compactViewport
-        ? clamp(
-            Math.max(
-              horizontalBodyDistance * curveScale.horizontalAmplitudeFactor,
-              verticalBodyDistance * curveScale.verticalAmplitudeFactor,
-              distance * curveScale.waveDistanceFactor
-            ) *
-              randomBetween(0.72, 1.28),
-            curveScale.amplitudeMinimum,
-            curveScale.amplitudeMaximum
-          )
-        : compactBody
-          ? clamp(horizontalBodyDistance * randomBetween(0.06, 0.12), 2, 18)
-          : clamp(distance * randomBetween(0.12, 0.2), 32, 132);
-      const bodyPoints = [bodyStart];
-      const bodyAnchors = compactViewport
-        ? Array.from({ length: wavePointCount }, (_, index) => {
-            const progress = (index + 1) / (wavePointCount + 1);
-            const earlyFreedom = wavePointCount === 1 ? 0.5 : progress;
-            const t = clamp(
-              earlyFreedom + randomBetween(-0.08, 0.08),
-              0.18,
-              0.82
-            );
-            const waveSign = (index % 2 === 0 ? 1 : -1) * bendSign;
-
-            return {
-              freehand: true,
-              t,
-              wave: waveSign * randomBetween(curveScale.waveMagnitudeMin, curveScale.waveMagnitudeMax),
-            };
-          }).sort((left, right) => left.t - right.t)
-        : compactBody
-          ? [
-            {
-              t: 0.5,
-              wave: bendSign * randomBetween(0.35, 0.7),
-            },
-          ]
-        : [
-            { settle: true, t: shoulderInset, wave: 0 },
-            ...Array.from({ length: wavePointCount }, (_, index) => {
-              const progress = (index + 0.5) / wavePointCount;
-              const t = clamp(
-                waveStart + (waveEnd - waveStart) * progress + randomBetween(-waveJitter, waveJitter),
-                waveStart,
-                waveEnd
-              );
-              const waveSign = (index % 2 === 0 ? 1 : -1) * bendSign;
-
-              return {
-                t,
-                wave: waveSign * randomBetween(0.72, 1.28),
-              };
-            }),
-            { settle: true, t: 1 - shoulderInset, wave: 0 },
-          ].sort((left, right) => left.t - right.t);
-
-      bodyAnchors.forEach(({ freehand = false, settle = false, t, wave }) => {
-        const waveEnvelope = freehand ? 1 : Math.sin(Math.PI * t) ** 1.15;
-        const basePoint = getPointBetween(bodyStart, bodyEnd, t);
-        const wavelengthDrift = distance *
-          randomBetween(
-            freehand ? -curveScale.waveDrift : -0.012,
-            freehand ? curveScale.waveDrift : 0.012
-          ) *
-          waveEnvelope *
-          Math.abs(wave);
-
-        bodyPoints.push({
-          freehand,
-          settle,
-          t,
-          x: basePoint.x + bodyDirection.x * wavelengthDrift,
-          y: basePoint.y + bodyDirection.y * wavelengthDrift + normal.y * amplitude * waveEnvelope * wave,
-        });
-      });
-
-      bodyPoints.push(bodyEnd);
-
-      const getPointTangent = (index) => {
-        if (index === 0) {
-          const terminalTangentScale = randomBetween(curveScale.tangentScaleMin, curveScale.tangentScaleMax);
-
-          return {
-            x: startTangent.x * clamp(
-              horizontalBodyDistance * terminalTangentScale,
-              curveScale.tangentMinimum,
-              curveScale.tangentMaximum
-            ),
-            y: 0,
-          };
-        }
-
-        if (index === bodyPoints.length - 1) {
-          const terminalTangentScale = randomBetween(curveScale.tangentScaleMin, curveScale.tangentScaleMax);
-
-          return {
-            x: endTangent.x * clamp(
-              horizontalBodyDistance * terminalTangentScale,
-              curveScale.tangentMinimum,
-              curveScale.tangentMaximum
-            ),
-            y: 0,
-          };
-        }
-
-        const previousPoint = bodyPoints[index - 1];
-        const nextPoint = bodyPoints[index + 1];
-        const currentPoint = bodyPoints[index];
-        const t = bodyPoints[index].t ?? index / (bodyPoints.length - 1);
-        const endEase = Math.sin(Math.PI * t) ** 0.6;
-        const tension = currentPoint.freehand
-          ? randomBetween(curveScale.tensionMin, curveScale.tensionMax)
-          : randomBetween(0.2, 0.28);
-        const tangentEase = currentPoint.freehand ? 1 : endEase;
-
-        return {
-          x: (nextPoint.x - previousPoint.x) * tension,
-          y: currentPoint.settle ? 0 : (nextPoint.y - previousPoint.y) * tension * tangentEase,
-        };
+      const maxHandleLength = Math.max(0, distance * 0.82);
+      const baseHandleLength = clamp(distance * randomBetween(0.36, 0.44), 0, maxHandleLength);
+      const handleJitter = normal.x * amplitude * bendSign * 0.18;
+      const cp1HandleLength = clamp(baseHandleLength + handleJitter, 0, maxHandleLength);
+      const cp2HandleLength = clamp(baseHandleLength - handleJitter, 0, maxHandleLength);
+      const cp1 = {
+        x: bodyStart.x + horizontalDirection.x * cp1HandleLength,
+        y: bodyStart.y,
       };
-      const tangents = bodyPoints.map((_, index) => getPointTangent(index));
-      const clampControlX = (controlX, currentPoint, nextPoint) =>
-        clamp(controlX, Math.min(currentPoint.x, nextPoint.x), Math.max(currentPoint.x, nextPoint.x));
-      const cubicCommands = bodyPoints.slice(0, -1).map((currentPoint, index) => {
-        const nextPoint = bodyPoints[index + 1];
-        const currentTangent = tangents[index];
-        const nextTangent = tangents[index + 1];
-        const controlOne = {
-          x: clampControlX(currentPoint.x + currentTangent.x, currentPoint, nextPoint),
-          y: currentPoint.y + currentTangent.y,
-        };
-        const controlTwo = {
-          x: clampControlX(nextPoint.x - nextTangent.x, currentPoint, nextPoint),
-          y: nextPoint.y - nextTangent.y,
-        };
-
-        return [
-          'C',
-          formatPathNumber(controlOne.x),
-          formatPathNumber(controlOne.y),
-          formatPathNumber(controlTwo.x),
-          formatPathNumber(controlTwo.y),
-          formatPathNumber(nextPoint.x),
-          formatPathNumber(nextPoint.y),
-        ].join(' ');
-      });
+      const cp2 = {
+        x: bodyEnd.x - horizontalDirection.x * cp2HandleLength,
+        y: bodyEnd.y,
+      };
       const d = [
         'M',
         formatPathNumber(pathStartPoint.x),
@@ -616,13 +429,21 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         'L',
         formatPathNumber(startLeadPoint.x),
         formatPathNumber(startLeadPoint.y),
-        ...cubicCommands,
+        'C',
+        formatPathNumber(cp1.x),
+        formatPathNumber(cp1.y),
+        formatPathNumber(cp2.x),
+        formatPathNumber(cp2.y),
+        formatPathNumber(endLeadPoint.x),
+        formatPathNumber(endLeadPoint.y),
         'L',
         formatPathNumber(endPoint.x),
         formatPathNumber(endPoint.y),
       ].join(' ');
 
       return {
+        cp1,
+        cp2,
         d,
         endLeadPoint,
         pathStartPoint,
