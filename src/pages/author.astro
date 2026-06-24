@@ -243,10 +243,15 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         stageHeight,
         stageWidth,
       });
-      const minimumHorizontalDistance = Math.max(
-        96,
-        Math.min(stageWidth * 0.28, 220),
-        (booklistSize.width + memoriesSize.width) / 2 + 40
+      const desiredMinimumHorizontalDistance = Math.max(
+        128,
+        Math.min(stageWidth * 0.36, 360),
+        (booklistSize.width + memoriesSize.width) / 2 + 72
+      );
+      const maximumHorizontalDistance = Math.max(0, memoriesRange.maxX - booklistRange.minX);
+      const minimumHorizontalDistance = Math.min(
+        desiredMinimumHorizontalDistance,
+        Math.max(maximumHorizontalDistance - 8, 0)
       );
 
       for (let attempt = 0; attempt < 80; attempt += 1) {
