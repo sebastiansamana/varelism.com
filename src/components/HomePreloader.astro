@@ -174,28 +174,19 @@ const {
       );
     };
 
-    const getPendingHandoffPlayback = (activePaths) => {
+    const getPendingHandoffState = (activePaths) => {
       const pendingNavigation = window[pendingPreloaderKey];
 
       if (
-        !pendingNavigation?.handoffStartedAt ||
+        !pendingNavigation?.suppressRoutePreloaderVideo ||
         !activePaths.some((path) => isSamePath(path, pendingNavigation.pathname || window.location.pathname))
       ) {
         return null;
       }
 
-      const cycleDurationMs = Math.max(
-        500,
-        pendingNavigation.handoffCycleDurationMs || window.__varelismPreloaderCycleDurationMs || 3067
-      );
-      const elapsedMs = Math.max(0, window.performance.now() - pendingNavigation.handoffStartedAt);
-      const cycleElapsed = elapsedMs >= cycleDurationMs;
-      const remainingMs = Math.max(0, cycleDurationMs - elapsedMs);
-
       return {
-        cycleElapsed,
-        currentTime: cycleElapsed ? 0 : elapsedMs / 1000,
-        remainingMs,
+        cycleComplete: Boolean(pendingNavigation.handoffCycleComplete),
+        pathname: pendingNavigation.pathname || window.location.pathname,
       };
     };
 
@@ -217,9 +208,10 @@ const {
       const fallbackMs = Math.round(10000 * timingScale);
       const isActivePath = activePaths.some((path) => isSamePath(path, window.location.pathname));
       const forcePreloader = isForcedByPendingNavigation(activePaths);
-      const handoffPlayback = getPendingHandoffPlayback(activePaths);
+      const handoffState = getPendingHandoffState(activePaths);
       let hasRemoved = false;
       let cleanupVideo = () => {};
+      let cleanupHandoffCompletion = () => {};
       const timers = new Set();
       const storage = {
         get() {
@@ -250,6 +242,7 @@ const {
 
       const cleanupOverlay = () => {
         cleanupVideo();
+        cleanupHandoffCompletion();
         timers.forEach((timer) => window.clearTimeout(timer));
         timers.clear();
 
@@ -276,12 +269,13 @@ const {
       const video = overlay.querySelector('.home-preloader__media');
       const preloaderVideo = video instanceof HTMLVideoElement ? video : null;
 
-      if (handoffPlayback && preloaderVideo) {
+      if (handoffState && preloaderVideo) {
         preparePassivePreloaderVideo(preloaderVideo);
+        preloaderVideo.style.opacity = '0';
 
         try {
           preloaderVideo.pause();
-          preloaderVideo.currentTime = handoffPlayback.currentTime;
+          preloaderVideo.currentTime = 0;
         } catch {
           // Astro can insert the autoplaying video before this script takes over.
         }
@@ -293,7 +287,7 @@ const {
       document.documentElement.classList.remove('home-preloader-booting');
 
       let isPageReady = false;
-      let hasMetMediaMoment = Boolean(handoffPlayback);
+      let hasMetMediaMoment = Boolean(handoffState?.cycleComplete);
       let isHiding = false;
       let isReplayCycleBlockingReveal = false;
 
@@ -320,40 +314,13 @@ const {
           isReplayCycleBlockingReveal = true;
         }
 
+        preloaderVideo.style.opacity = '1';
         restartPreloaderVideo(preloaderVideo).then((didPlay) => {
           if (didPlay === false && !hasRemoved) {
             isReplayCycleBlockingReveal = false;
             markMediaMomentReached();
           }
         });
-      };
-
-      const playVideoFromCurrentTime = () => {
-        if (!preloaderVideo || hasRemoved || isHiding) return;
-
-        const seekAndPlay = () => {
-          if (hasRemoved || isHiding) return;
-
-          try {
-            preloaderVideo.currentTime = handoffPlayback.currentTime;
-          } catch {
-            // If seeking is unavailable, playback still continues without exposing UI.
-          }
-
-          playPreloaderVideo(preloaderVideo).then((didPlay) => {
-            if (didPlay === false && !hasRemoved) {
-              markMediaMomentReached();
-            }
-          });
-        };
-
-        if (preloaderVideo.readyState === 0) {
-          preloaderVideo.addEventListener('loadedmetadata', seekAndPlay, { once: true });
-          preloaderVideo.load();
-          return;
-        }
-
-        seekAndPlay();
       };
 
       if (preloaderVideo) {
@@ -372,13 +339,18 @@ const {
 
           hideOverlay();
         };
-        const onError = markMediaMomentReached;
+        const onError = () => {
+          if (handoffState && !hasMetMediaMoment) return;
+          markMediaMomentReached();
+        };
         const onReady = () => playPreloaderVideo(preloaderVideo);
 
         preloaderVideo.addEventListener('ended', onEnded);
         preloaderVideo.addEventListener('error', onError, { once: true });
-        preloaderVideo.addEventListener('loadeddata', onReady, { once: true });
-        preloaderVideo.addEventListener('canplaythrough', onReady, { once: true });
+        if (!handoffState) {
+          preloaderVideo.addEventListener('loadeddata', onReady, { once: true });
+          preloaderVideo.addEventListener('canplaythrough', onReady, { once: true });
+        }
 
         cleanupVideo = () => {
           preloaderVideo.removeEventListener('ended', onEnded);
@@ -393,27 +365,39 @@ const {
           }
         };
 
-        if (handoffPlayback) {
-          if (handoffPlayback.cycleElapsed) {
-            setTimer(() => {
-              if (!isPageReady && !isHiding && !isReplayCycleBlockingReveal) {
-                startVideoCycle({ blockRevealUntilEnded: true });
-              }
-            }, 0);
-          } else {
-            playVideoFromCurrentTime();
-            setTimer(() => {
-              if (!isPageReady && !isHiding && !isReplayCycleBlockingReveal) {
-                startVideoCycle({ blockRevealUntilEnded: true });
-              }
-            }, handoffPlayback.remainingMs + 80);
-          }
-        } else {
+        if (!handoffState) {
           startVideoCycle();
         }
       }
 
-      setTimer(markMediaMomentReached, imageVisibleMs);
+      if (handoffState && !handoffState.cycleComplete) {
+        const onHandoffComplete = (event) => {
+          const pathname = event?.detail?.pathname;
+
+          if (pathname && !activePaths.some((path) => isSamePath(path, pathname))) return;
+
+          cleanupHandoffCompletion();
+          markMediaMomentReached();
+
+          if (!isPageReady && !isHiding && !isReplayCycleBlockingReveal) {
+            startVideoCycle({ blockRevealUntilEnded: true });
+          }
+        };
+
+        window.addEventListener('varelism:handoff-complete', onHandoffComplete);
+        cleanupHandoffCompletion = () => {
+          window.removeEventListener('varelism:handoff-complete', onHandoffComplete);
+          cleanupHandoffCompletion = () => {};
+        };
+      } else if (handoffState?.cycleComplete) {
+        setTimer(() => {
+          if (!isPageReady && !isHiding && !isReplayCycleBlockingReveal) {
+            startVideoCycle({ blockRevealUntilEnded: true });
+          }
+        }, 0);
+      } else {
+        setTimer(markMediaMomentReached, imageVisibleMs);
+      }
 
       waitForStablePageFrame(overlay).then(() => {
         if (hasRemoved) return;

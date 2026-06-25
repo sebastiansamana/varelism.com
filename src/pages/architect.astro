@@ -101,6 +101,7 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
 
       const restartVideo = () => {
         preparePassivePreloaderVideo(video);
+        video.style.opacity = '1';
         onCycleStart();
 
         try {
@@ -125,8 +126,10 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
 
       video.addEventListener('ended', onEnded);
       video.addEventListener('error', onError, { once: true });
-      video.addEventListener('loadeddata', onReady, { once: true });
-      video.addEventListener('canplaythrough', onReady, { once: true });
+      if (autoStart) {
+        video.addEventListener('loadeddata', onReady, { once: true });
+        video.addEventListener('canplaythrough', onReady, { once: true });
+      }
       if (autoStart) {
         restartVideo();
       } else {
@@ -159,29 +162,20 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
       pathA === pathB ||
       `${pathA.replace(/\/$/, '')}/` === `${pathB.replace(/\/$/, '')}/`;
 
-    const getPendingHandoffPlayback = () => {
+    const getPendingHandoffState = () => {
       const pendingNavigation = window.__varelismPendingPreloaderNavigation;
 
       if (
-        !pendingNavigation?.handoffStartedAt ||
+        !pendingNavigation?.suppressRoutePreloaderVideo ||
         !pendingNavigation.pathname ||
         !isSamePath(pendingNavigation.pathname, window.location.pathname)
       ) {
         return null;
       }
 
-      const cycleDurationMs = Math.max(
-        500,
-        pendingNavigation.handoffCycleDurationMs || window.__varelismPreloaderCycleDurationMs || 3067
-      );
-      const elapsedMs = Math.max(0, window.performance.now() - pendingNavigation.handoffStartedAt);
-      const cycleElapsed = elapsedMs >= cycleDurationMs;
-      const remainingMs = Math.max(0, cycleDurationMs - elapsedMs);
-
       return {
-        cycleElapsed,
-        currentTime: cycleElapsed ? 0 : elapsedMs / 1000,
-        remainingMs,
+        cycleComplete: Boolean(pendingNavigation.handoffCycleComplete),
+        pathname: pendingNavigation.pathname,
       };
     };
 
@@ -213,8 +207,9 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
       let isReplayCycleBlockingReveal = false;
       let cleanupSpatialLinks = () => {};
       let cleanupPreloaderVideo = () => {};
+      let cleanupHandoffCompletion = () => {};
       let isPointCoveredByModel = () => true;
-      const handoffPlayback = getPendingHandoffPlayback();
+      const handoffState = getPendingHandoffState();
       const preloaderTimers = new Set();
       const getSpatialLinks = () =>
         Array.from(controlsElement.querySelectorAll('[data-architect-spatial-link]')).filter(
@@ -292,52 +287,34 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
         );
       };
 
-      const playPreloaderFromHandoffTime = () => {
+      const prepareHiddenHandoffPreloaderVideo = () => {
         const video = preloader?.querySelector('.architect-preloader__media');
 
-        if (!(video instanceof HTMLVideoElement) || !handoffPlayback) return;
+        if (!(video instanceof HTMLVideoElement)) return;
 
         preparePassivePreloaderVideo(video);
-
-        const seekAndPlay = () => {
-          if (hasDisposed || isPreloaderHiding) return;
-
-          try {
-            video.currentTime = handoffPlayback.currentTime;
-          } catch {
-            // If seeking is unavailable, playback still continues without exposing UI.
-          }
-
-          try {
-            const playAttempt = video.play();
-
-            if (playAttempt?.catch) {
-              playAttempt.catch(() => {
-                hidePreloaderWhenReady();
-              });
-            }
-          } catch {
-            hidePreloaderWhenReady();
-          }
-        };
+        video.style.opacity = '0';
 
         try {
           video.pause();
+          video.currentTime = 0;
         } catch {
           // Astro can insert the autoplaying video before this script takes over.
         }
-
-        if (video.readyState === 0) {
-          video.addEventListener('loadedmetadata', seekAndPlay, { once: true });
-          video.load();
-          return;
-        }
-
-        seekAndPlay();
       };
 
-      if (handoffPlayback) {
+      const completeHandoffMinimum = () => {
         hasMetMinimumDuration = true;
+        hidePreloaderWhenReady();
+
+        if (!isModelReady && !isPreloaderHiding && !isReplayCycleBlockingReveal) {
+          startBlockingPreloaderCycle();
+        }
+      };
+
+      if (handoffState) {
+        hasMetMinimumDuration = Boolean(handoffState.cycleComplete);
+        prepareHiddenHandoffPreloaderVideo();
         cleanupPreloaderVideo = startPreloaderVideo(
           preloader,
           () => !hasDisposed && !isPreloaderHiding && !isModelReady,
@@ -353,19 +330,23 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
           },
         );
 
-        if (handoffPlayback.cycleElapsed) {
-          setPreloaderTimer(() => {
-            if (!isModelReady && !isPreloaderHiding && !isReplayCycleBlockingReveal) {
-              startBlockingPreloaderCycle();
-            }
-          }, 0);
+        if (handoffState.cycleComplete) {
+          setPreloaderTimer(completeHandoffMinimum, 0);
         } else {
-          playPreloaderFromHandoffTime();
-          setPreloaderTimer(() => {
-            if (!isModelReady && !isPreloaderHiding && !isReplayCycleBlockingReveal) {
-              startBlockingPreloaderCycle();
-            }
-          }, handoffPlayback.remainingMs + 80);
+          const onHandoffComplete = (event) => {
+            const pathname = event?.detail?.pathname;
+
+            if (pathname && !isSamePath(pathname, window.location.pathname)) return;
+
+            cleanupHandoffCompletion();
+            completeHandoffMinimum();
+          };
+
+          window.addEventListener('varelism:handoff-complete', onHandoffComplete);
+          cleanupHandoffCompletion = () => {
+            window.removeEventListener('varelism:handoff-complete', onHandoffComplete);
+            cleanupHandoffCompletion = () => {};
+          };
         }
       } else {
         cleanupPreloaderVideo = startPreloaderVideo(
@@ -374,10 +355,12 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
         );
       }
 
-      setPreloaderTimer(() => {
-        hasMetMinimumDuration = true;
-        hidePreloaderWhenReady();
-      }, imageVisibleMs);
+      if (!handoffState) {
+        setPreloaderTimer(() => {
+          hasMetMinimumDuration = true;
+          hidePreloaderWhenReady();
+        }, imageVisibleMs);
+      }
 
       const installSpatialLinkGuards = () => {
         const spatialLinks = getSpatialLinks();
@@ -1287,6 +1270,7 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
         viewer.classList.remove('is-ready');
         cleanupSpatialLinks();
         cleanupPreloaderVideo();
+        cleanupHandoffCompletion();
         unlockPageBehindPreloader();
         removePreloader();
         cleanup();
