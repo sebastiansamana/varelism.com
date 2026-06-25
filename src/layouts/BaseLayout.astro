@@ -28,6 +28,7 @@ const { title, description = 'Website under construction.' } = Astro.props;
         const pendingHomeReturnKey = '__varelismPendingHomeReturn';
         const astroNavigateKey = '__varelismAstroNavigate';
         const navigationPreloaderClass = 'home-preloader-navigation-active';
+        const homeReturnClass = 'home-return-active';
         const preloaderCycleDurationMs = 3067;
         const handoffCycleFallbackMs = preloaderCycleDurationMs + 350;
         const handoffMediaFadeMs = 220;
@@ -497,6 +498,8 @@ const { title, description = 'Website under construction.' } = Astro.props;
         const ensureHomeReturnOverlay = () => {
           const existingOverlay = document.querySelector('[data-home-return-overlay]');
 
+          document.documentElement.classList.add(homeReturnClass);
+
           if (existingOverlay instanceof HTMLElement) return existingOverlay;
 
           const overlay = document.createElement('div');
@@ -510,7 +513,7 @@ const { title, description = 'Website under construction.' } = Astro.props;
             position: 'fixed',
             transition: `opacity ${homeReturnFadeMs}ms ease`,
             visibility: 'visible',
-            zIndex: '10000',
+            zIndex: '10',
           });
           document.body?.append(overlay);
 
@@ -541,6 +544,7 @@ const { title, description = 'Website under construction.' } = Astro.props;
               overlay.style.opacity = '0';
               window.setTimeout(() => {
                 overlay.remove();
+                document.documentElement.classList.remove(homeReturnClass);
               }, homeReturnRevealMs);
             });
           });

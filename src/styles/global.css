@@ -71,7 +71,8 @@ html.home-preloader-booting .home-preloader {
   visibility: visible;
 }
 
-html.home-preloader-navigation-active .site-footer {
+html.home-preloader-navigation-active .site-footer,
+html.home-return-active .site-footer {
   position: relative;
   z-index: 20;
 }
