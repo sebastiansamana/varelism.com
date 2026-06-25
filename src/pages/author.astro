@@ -55,6 +55,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
     const randomBetween = (min, max) => (max <= min ? min : min + Math.random() * (max - min));
     const formatPathNumber = (value) => (Number.isFinite(value) ? String(value) : '0');
+    const isPortraitPhoneViewport = (stageWidth, stageHeight) =>
+      stageWidth <= 600 && stageHeight > stageWidth * 1.35;
     const getAuthorCurveScale = ({ stageHeight = window.innerHeight, stageWidth }) => {
       const mobileViewport = stageWidth <= 560;
       const compactViewport = stageWidth <= 900;
@@ -62,12 +64,12 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         mobileViewport && stageHeight > stageWidth && stageHeight >= 640;
 
       return {
-        amplitudeFactorMax: portraitPhoneViewport ? 0.32 : 0.2,
-        amplitudeFactorMin: portraitPhoneViewport ? 0.2 : 0.13,
+        amplitudeFactorMax: portraitPhoneViewport ? 0.21 : 0.2,
+        amplitudeFactorMin: portraitPhoneViewport ? 0.14 : 0.13,
         amplitudeMaximum: portraitPhoneViewport
-          ? clamp(stageHeight * 0.24, 96, 210)
+          ? clamp(stageHeight * 0.16, 72, 140)
           : clamp(stageHeight * 0.18, 72, 170),
-        amplitudeMinimum: portraitPhoneViewport ? 34 : 26,
+        amplitudeMinimum: portraitPhoneViewport ? 28 : 26,
         bodySegmentCount: portraitPhoneViewport ? 3 : null,
         fallbackBooksY: portraitPhoneViewport
           ? 0.72
@@ -105,19 +107,21 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           : compactViewport
             ? clamp(stageHeight * 0.18, 136, 240)
             : 0,
-        terminalTangentFactorMax: portraitPhoneViewport ? 0.58 : 0.5,
-        terminalTangentFactorMin: portraitPhoneViewport ? 0.38 : 0.34,
-        terminalTangentMaximum: portraitPhoneViewport ? 230 : 220,
-        terminalTangentMinimum: portraitPhoneViewport ? 56 : 52,
+        normalXScale: portraitPhoneViewport ? 0.48 : 1,
+        normalYScale: 1,
+        terminalTangentFactorMax: 0.5,
+        terminalTangentFactorMin: 0.34,
+        terminalTangentMaximum: 220,
+        terminalTangentMinimum: 52,
         textSeparationPadding: mobileViewport ? 88 : compactViewport ? 84 : 72,
-        tensionMax: portraitPhoneViewport ? 0.62 : 0.68,
-        tensionMin: portraitPhoneViewport ? 0.42 : 0.5,
-        wavelengthDriftFactor: portraitPhoneViewport ? 0.055 : 0.035,
-        waveEnvelopePower: portraitPhoneViewport ? 0.92 : 1.12,
-        waveMagnitudeMax: portraitPhoneViewport ? 1.34 : 1.18,
-        waveMagnitudeMin: portraitPhoneViewport ? 0.86 : 0.72,
-        waveTMax: portraitPhoneViewport ? 0.8 : 0.78,
-        waveTMin: portraitPhoneViewport ? 0.2 : 0.22,
+        tensionMax: 0.68,
+        tensionMin: 0.5,
+        wavelengthDriftFactor: 0.035,
+        waveEnvelopePower: 1.12,
+        waveMagnitudeMax: 1.18,
+        waveMagnitudeMin: 0.72,
+        waveTMax: 0.78,
+        waveTMin: 0.22,
       };
     };
 
@@ -275,6 +279,72 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       y: randomBetween(range.minY, range.maxY),
     });
 
+    function getPortraitPhonePlacement({
+      booklistRange,
+      memoriesRange,
+      stageHeight,
+    }) {
+      const viewportHeight =
+        window.innerHeight || document.documentElement.clientHeight || stageHeight;
+      const requestedMinimumVerticalDistance = viewportHeight * 0.5;
+      const getPointAtRandomX = (range, y) => ({
+        x: randomBetween(range.minX, range.maxX),
+        y,
+      });
+      const getCandidate = ({ lowerKey, lowerRange, upperKey, upperRange }) => {
+        const maxDistance = Math.max(0, lowerRange.maxY - upperRange.minY);
+        const minDistance = Math.max(
+          0,
+          requestedMinimumVerticalDistance,
+          lowerRange.minY - upperRange.maxY
+        );
+
+        if (maxDistance < minDistance) return null;
+
+        const distance = randomBetween(minDistance, maxDistance);
+        const upperMinY = Math.max(upperRange.minY, lowerRange.minY - distance);
+        const upperMaxY = Math.min(upperRange.maxY, lowerRange.maxY - distance);
+        const upperY = randomBetween(upperMinY, upperMaxY);
+        const lowerY = upperY + distance;
+
+        return {
+          [upperKey]: getPointAtRandomX(upperRange, upperY),
+          [lowerKey]: getPointAtRandomX(lowerRange, lowerY),
+        };
+      };
+      const candidates = [
+        getCandidate({
+          lowerKey: 'books',
+          lowerRange: booklistRange,
+          upperKey: 'memories',
+          upperRange: memoriesRange,
+        }),
+        getCandidate({
+          lowerKey: 'memories',
+          lowerRange: memoriesRange,
+          upperKey: 'books',
+          upperRange: booklistRange,
+        }),
+      ].filter(Boolean);
+
+      if (candidates.length) {
+        const { books, memories } = candidates[Math.floor(Math.random() * candidates.length)];
+
+        return { books, memories };
+      }
+
+      const booksAreLower = Math.random() < 0.5;
+      const topRange = booksAreLower ? memoriesRange : booklistRange;
+      const bottomRange = booksAreLower ? booklistRange : memoriesRange;
+      const topY = topRange.minY;
+      const bottomY = bottomRange.maxY;
+
+      return {
+        books: getPointAtRandomX(booklistRange, booksAreLower ? bottomY : topY),
+        memories: getPointAtRandomX(memoriesRange, booksAreLower ? topY : bottomY),
+      };
+    }
+
     function placeAuthorLinks(stage, booklistLink, memoriesLink) {
       const stageRect = stage.getBoundingClientRect();
       const stageWidth = Math.max(stageRect.width, 1);
@@ -302,6 +372,15 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         stageHeight,
         stageWidth,
       });
+
+      if (isPortraitPhoneViewport(stageWidth, stageHeight)) {
+        return getPortraitPhonePlacement({
+          booklistRange,
+          memoriesRange,
+          stageHeight,
+        });
+      }
+
       const desiredMinimumHorizontalDistance = Math.max(
         128,
         Math.min(stageWidth * curveScale.horizontalSeparationFactor, curveScale.horizontalSeparationMax),
@@ -484,12 +563,12 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             bodyStart.x +
             dx * t +
             bodyDirection.x * wavelengthDrift +
-            normal.x * waveAmplitude * waveSign,
+            normal.x * curveScale.normalXScale * waveAmplitude * waveSign,
           y:
             bodyStart.y +
             dy * t +
             bodyDirection.y * wavelengthDrift +
-            normal.y * waveAmplitude * waveSign,
+            normal.y * curveScale.normalYScale * waveAmplitude * waveSign,
         });
       }
 
