@@ -21,8 +21,7 @@ const { title, description = 'Website under construction.' } = Astro.props;
     <ViewTransitions />
     <script is:inline>
       (() => {
-        const preloaderImageSrc = '/images/Logo_Animation_Preloader.gif';
-        const preloaderWebpSrc = '/images/Logo_Animation_Preloader.webp';
+        const preloaderVideoSrc = '/images/Logo_Animation_Preloader.mp4';
         const pendingPreloaderKey = '__varelismPendingPreloaderNavigation';
         const astroNavigateKey = '__varelismAstroNavigate';
         const triptychHandoffDelayMs = 950;
@@ -82,7 +81,6 @@ const { title, description = 'Website under construction.' } = Astro.props;
         const route = getPreloaderRoute(window.location.pathname);
         let skipNextHomePreloader = false;
         let activeTriptychNavigation = null;
-        let preloaderRunId = 0;
 
         const showPreloaderShell = () => {
           document.documentElement.classList.add('home-preloader-active', 'home-preloader-booting');
@@ -98,36 +96,54 @@ const { title, description = 'Website under construction.' } = Astro.props;
           });
         };
 
-        const getRestartedPreloaderSrc = (source = preloaderImageSrc) => {
-          const url = new URL(source, window.location.origin);
-          preloaderRunId += 1;
-          url.searchParams.set('run', `${Date.now()}-${preloaderRunId}`);
+        const preparePassivePreloaderVideo = (video) => {
+          video.controls = false;
+          video.muted = true;
+          video.defaultMuted = true;
+          video.playsInline = true;
+          video.preload = 'auto';
+          video.disablePictureInPicture = true;
+          video.setAttribute('controlsList', 'nodownload noplaybackrate noremoteplayback');
+          video.setAttribute('aria-hidden', 'true');
+          video.tabIndex = -1;
+        };
 
-          return `${url.pathname}${url.search}`;
+        const restartHandoffVideo = (video) => {
+          preparePassivePreloaderVideo(video);
+
+          try {
+            video.pause();
+            video.currentTime = 0;
+          } catch {
+            // Metadata may not be ready yet; autoplay still starts from the beginning on fresh elements.
+          }
+
+          try {
+            const playAttempt = video.play();
+
+            if (playAttempt?.catch) {
+              playAttempt.catch(() => {});
+            }
+          } catch {
+            // If autoplay is rejected, keep the overlay clean and let navigation continue.
+          }
         };
 
         const ensureHandoffPreloader = () => {
           const existingOverlay = document.querySelector('[data-home-preloader-handoff]');
 
           if (existingOverlay instanceof HTMLElement) {
-            const existingImage = existingOverlay.querySelector('img');
-            const existingSource = existingOverlay.querySelector('source');
+            const existingVideo = existingOverlay.querySelector('video');
 
-            if (existingSource instanceof HTMLSourceElement) {
-              existingSource.srcset = getRestartedPreloaderSrc(preloaderWebpSrc);
-            }
-
-            if (existingImage instanceof HTMLImageElement) {
-              existingImage.src = getRestartedPreloaderSrc();
+            if (existingVideo instanceof HTMLVideoElement) {
+              restartHandoffVideo(existingVideo);
             }
 
             return;
           }
 
           const overlay = document.createElement('div');
-          const picture = document.createElement('picture');
-          const source = document.createElement('source');
-          const image = document.createElement('img');
+          const video = document.createElement('video');
           const isCompact = window.matchMedia?.('(max-width: 720px)').matches;
 
           overlay.dataset.homePreloaderHandoff = 'true';
@@ -145,32 +161,25 @@ const { title, description = 'Website under construction.' } = Astro.props;
             zIndex: '9999',
           });
 
-          source.type = 'image/webp';
-          source.srcset = getRestartedPreloaderSrc(preloaderWebpSrc);
-
-          image.alt = '';
-          image.decoding = 'async';
-          image.draggable = false;
-          image.loading = 'eager';
-          image.src = getRestartedPreloaderSrc();
-          Object.assign(picture.style, {
+          video.className = 'home-preloader__media';
+          video.src = preloaderVideoSrc;
+          video.autoplay = true;
+          preparePassivePreloaderVideo(video);
+          Object.assign(video.style, {
+            background: 'transparent',
             display: 'block',
             height: 'auto',
             maxHeight: isCompact ? 'min(28vh, 13rem)' : 'min(34vh, 18rem)',
             maxWidth: isCompact ? 'min(62vw, 16rem)' : 'min(48vw, 22rem)',
             objectFit: 'contain',
+            pointerEvents: 'none',
+            userSelect: 'none',
             width: isCompact ? 'min(62vw, 16rem)' : 'min(48vw, 22rem)',
           });
-          Object.assign(image.style, {
-            display: 'block',
-            height: 'auto',
-            objectFit: 'contain',
-            width: '100%',
-          });
 
-          picture.append(source, image);
-          overlay.append(picture);
+          overlay.append(video);
           document.body?.append(overlay);
+          restartHandoffVideo(video);
         };
 
         const isSamePath = (pathA, pathB) =>

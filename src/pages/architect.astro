@@ -3,29 +3,23 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
 const basePath = import.meta.env.BASE_URL === '/' ? '' : import.meta.env.BASE_URL.replace(/\/$/, '');
 const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
-const preloaderImageUrl = `${basePath}/images/Logo_Animation_Preloader.gif`;
-const preloaderWebpUrl = `${basePath}/images/Logo_Animation_Preloader.webp`;
+const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
 ---
 
 <BaseLayout title="Architect | Varelism" description="Interactive architectural object.">
   <div class="architect-preloader" data-architect-preloader aria-hidden="true">
-    <picture class="architect-preloader__media">
-      <source
-        srcset={preloaderWebpUrl}
-        type="image/webp"
-        data-preloader-source
-        data-preloader-source-src={preloaderWebpUrl}
-      />
-      <img
-        class="architect-preloader__image"
-        src={preloaderImageUrl}
-        data-preloader-image-src={preloaderImageUrl}
-        alt=""
-        decoding="async"
-        draggable="false"
-        loading="eager"
-      />
-    </picture>
+    <video
+      class="architect-preloader__media"
+      src={preloaderVideoUrl}
+      autoplay
+      muted
+      playsinline
+      preload="auto"
+      disablePictureInPicture
+      controlsList="nodownload noplaybackrate noremoteplayback"
+      aria-hidden="true"
+      tabindex="-1"
+    ></video>
   </div>
   <div class="architect-viewer" data-architect-viewer data-model-url={modelUrl}></div>
   <section class="architect-stage" data-architect-stage aria-label="Architect">
@@ -63,33 +57,76 @@ const preloaderWebpUrl = `${basePath}/images/Logo_Animation_Preloader.webp`;
       }
     };
 
-    const getRestartedPreloaderImageSrc = (source) => {
-      const url = new URL(source, window.location.href);
-      url.searchParams.delete('run');
-      url.searchParams.set('run', `${Date.now()}-${Math.random().toString(36).slice(2)}`);
-
-      return url.href;
+    const preparePassivePreloaderVideo = (video) => {
+      video.controls = false;
+      video.muted = true;
+      video.defaultMuted = true;
+      video.playsInline = true;
+      video.preload = 'auto';
+      video.disablePictureInPicture = true;
+      video.setAttribute('controlsList', 'nodownload noplaybackrate noremoteplayback');
+      video.setAttribute('aria-hidden', 'true');
+      video.tabIndex = -1;
     };
 
-    const restartPreloaderImage = (preloader) => {
-      const pictureSource = preloader?.querySelector('[data-preloader-source]');
-      const image = preloader?.querySelector('.architect-preloader__image');
+    const startPreloaderVideo = (preloader, shouldReplay) => {
+      const video = preloader?.querySelector('.architect-preloader__media');
 
-      if (pictureSource instanceof HTMLSourceElement) {
-        const sourceSrc = pictureSource.dataset.preloaderSourceSrc || pictureSource.srcset;
+      if (!(video instanceof HTMLVideoElement)) return () => {};
 
-        if (sourceSrc) {
-          pictureSource.srcset = getRestartedPreloaderImageSrc(sourceSrc);
+      let isDisposed = false;
+
+      const playVideo = () => {
+        if (isDisposed) return;
+
+        preparePassivePreloaderVideo(video);
+
+        try {
+          const playAttempt = video.play();
+
+          if (playAttempt?.catch) {
+            playAttempt.catch(() => {});
+          }
+        } catch {
+          // A rejected autoplay attempt should never expose browser controls or block the page.
         }
-      }
+      };
 
-      if (!(image instanceof HTMLImageElement)) return;
+      const restartVideo = () => {
+        preparePassivePreloaderVideo(video);
 
-      const fallbackSource = image.dataset.preloaderImageSrc || image.getAttribute('src') || image.currentSrc;
+        try {
+          video.pause();
+          video.currentTime = 0;
+        } catch {
+          // Metadata may not be available yet on slow connections.
+        }
 
-      if (fallbackSource) {
-        image.src = getRestartedPreloaderImageSrc(fallbackSource);
-      }
+        playVideo();
+      };
+
+      const onEnded = () => {
+        if (!isDisposed && shouldReplay()) restartVideo();
+      };
+      const onReady = playVideo;
+
+      video.addEventListener('ended', onEnded);
+      video.addEventListener('loadeddata', onReady, { once: true });
+      video.addEventListener('canplaythrough', onReady, { once: true });
+      restartVideo();
+
+      return () => {
+        isDisposed = true;
+        video.removeEventListener('ended', onEnded);
+        video.removeEventListener('loadeddata', onReady);
+        video.removeEventListener('canplaythrough', onReady);
+
+        try {
+          video.pause();
+        } catch {
+          // Ignore media cleanup failures.
+        }
+      };
     };
 
     const initArchitectViewer = () => {
@@ -108,7 +145,6 @@ const preloaderWebpUrl = `${basePath}/images/Logo_Animation_Preloader.webp`;
 
       disposeCurrentViewer();
       viewer.dataset.viewerBooted = 'true';
-      restartPreloaderImage(preloader);
       document.documentElement.classList.add('architect-preloader-active');
 
       let didStart = false;
@@ -119,6 +155,7 @@ const preloaderWebpUrl = `${basePath}/images/Logo_Animation_Preloader.webp`;
       let isModelReady = false;
       let isPreloaderHiding = false;
       let cleanupSpatialLinks = () => {};
+      let cleanupPreloaderVideo = () => {};
       let isPointCoveredByModel = () => true;
       const preloaderTimers = new Set();
       const getSpatialLinks = () =>
@@ -130,6 +167,11 @@ const preloaderWebpUrl = `${basePath}/images/Logo_Animation_Preloader.webp`;
       const imageFadeMs = 300;
       const whiteHoldMs = 300;
       const overlayFadeMs = 300;
+
+      cleanupPreloaderVideo = startPreloaderVideo(
+        preloader,
+        () => !hasDisposed && !isPreloaderHiding && !isModelReady,
+      );
 
       const setPreloaderTimer = (callback, delay) => {
         const timer = window.setTimeout(() => {
@@ -1075,6 +1117,7 @@ const preloaderWebpUrl = `${basePath}/images/Logo_Animation_Preloader.webp`;
         delete viewer.dataset.viewerBooted;
         viewer.classList.remove('is-ready');
         cleanupSpatialLinks();
+        cleanupPreloaderVideo();
         unlockPageBehindPreloader();
         removePreloader();
         cleanup();
@@ -1122,24 +1165,21 @@ const preloaderWebpUrl = `${basePath}/images/Logo_Animation_Preloader.webp`;
     visibility: hidden;
   }
 
-  .architect-preloader__media,
-  .architect-preloader__image {
+  .architect-preloader__media {
+    background: transparent;
     display: block;
     height: auto;
     max-height: min(34vh, 18rem);
     max-width: min(48vw, 22rem);
     object-fit: contain;
     opacity: 1;
+    pointer-events: none;
     transition: opacity 300ms ease;
+    user-select: none;
     width: min(48vw, 22rem);
   }
 
-  .architect-preloader__image {
-    height: auto;
-    width: 100%;
-  }
-
-  .architect-preloader.is-image-fading .architect-preloader__image {
+  .architect-preloader.is-image-fading .architect-preloader__media {
     opacity: 0;
   }
 
@@ -1344,15 +1384,10 @@ const preloaderWebpUrl = `${basePath}/images/Logo_Animation_Preloader.webp`;
       width: 100vw;
     }
 
-    .architect-preloader__media,
-    .architect-preloader__image {
+    .architect-preloader__media {
       max-height: min(28vh, 13rem);
       max-width: min(62vw, 16rem);
       width: min(62vw, 16rem);
-    }
-
-    .architect-preloader__image {
-      width: 100%;
     }
   }
 </style>

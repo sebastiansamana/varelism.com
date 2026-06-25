@@ -7,8 +7,7 @@ interface Props {
   timingScale?: number;
 }
 
-const imageSrc = '/images/Logo_Animation_Preloader.gif';
-const webpSrc = '/images/Logo_Animation_Preloader.webp';
+const videoSrc = '/images/Logo_Animation_Preloader.mp4';
 const {
   activePaths = ['/', '/index.html'],
   completeEvent = 'varelism:preloader-complete',
@@ -28,23 +27,18 @@ const {
   data-timing-scale={timingScale}
   aria-hidden="true"
 >
-  <picture class="home-preloader__media">
-    <source
-      srcset={webpSrc}
-      type="image/webp"
-      data-preloader-source
-      data-preloader-source-src={webpSrc}
-    />
-    <img
-      class="home-preloader__image"
-      src={imageSrc}
-      data-preloader-image-src={imageSrc}
-      alt=""
-      decoding="async"
-      draggable="false"
-      loading="eager"
-    />
-  </picture>
+  <video
+    class="home-preloader__media"
+    src={videoSrc}
+    autoplay
+    muted
+    playsinline
+    preload="auto"
+    disablePictureInPicture
+    controlsList="nodownload noplaybackrate noremoteplayback"
+    aria-hidden="true"
+    tabindex="-1"
+  ></video>
 </div>
 
 <script is:inline>
@@ -68,33 +62,45 @@ const {
       pathA === pathB ||
       `${pathA.replace(/\/$/, '')}/` === `${pathB.replace(/\/$/, '')}/`;
 
-    const getRestartedImageSrc = (source) => {
-      const url = new URL(source, window.location.href);
-      url.searchParams.delete('run');
-      url.searchParams.set('run', `${Date.now()}-${Math.random().toString(36).slice(2)}`);
-
-      return url.href;
+    const preparePassivePreloaderVideo = (video) => {
+      video.controls = false;
+      video.muted = true;
+      video.defaultMuted = true;
+      video.playsInline = true;
+      video.preload = 'auto';
+      video.disablePictureInPicture = true;
+      video.setAttribute('controlsList', 'nodownload noplaybackrate noremoteplayback');
+      video.setAttribute('aria-hidden', 'true');
+      video.tabIndex = -1;
     };
 
-    const restartPreloaderImage = (overlay) => {
-      const image = overlay.querySelector('.home-preloader__image');
-      const pictureSource = overlay.querySelector('[data-preloader-source]');
+    const playPreloaderVideo = (video) => {
+      preparePassivePreloaderVideo(video);
 
-      if (pictureSource instanceof HTMLSourceElement) {
-        const sourceSrc = pictureSource.dataset.preloaderSourceSrc || pictureSource.srcset;
+      try {
+        const playAttempt = video.play();
 
-        if (sourceSrc) {
-          pictureSource.srcset = getRestartedImageSrc(sourceSrc);
+        if (playAttempt?.catch) {
+          return playAttempt.catch(() => false);
         }
+      } catch {
+        return Promise.resolve(false);
       }
 
-      if (!(image instanceof HTMLImageElement)) return;
+      return Promise.resolve(true);
+    };
 
-      const fallbackSource = image.dataset.preloaderImageSrc || image.getAttribute('src') || image.currentSrc;
+    const restartPreloaderVideo = (video) => {
+      preparePassivePreloaderVideo(video);
 
-      if (fallbackSource) {
-        image.src = getRestartedImageSrc(fallbackSource);
+      try {
+        video.pause();
+        video.currentTime = 0;
+      } catch {
+        // Some browsers reject currentTime writes before metadata exists.
       }
+
+      return playPreloaderVideo(video);
     };
 
     const waitForWindowLoad = () => {
@@ -184,6 +190,7 @@ const {
       const isActivePath = activePaths.some((path) => isSamePath(path, window.location.pathname));
       const forcePreloader = isForcedByPendingNavigation(activePaths);
       let hasRemoved = false;
+      let cleanupVideo = () => {};
       const timers = new Set();
       const storage = {
         get() {
@@ -213,6 +220,7 @@ const {
       };
 
       const cleanupOverlay = () => {
+        cleanupVideo();
         timers.forEach((timer) => window.clearTimeout(timer));
         timers.clear();
 
@@ -236,7 +244,8 @@ const {
         return;
       }
 
-      restartPreloaderImage(overlay);
+      const video = overlay.querySelector('.home-preloader__media');
+      const preloaderVideo = video instanceof HTMLVideoElement ? video : null;
 
       if (playOnce) storage.set();
       document.documentElement.classList.add('home-preloader-active');
@@ -244,11 +253,11 @@ const {
       document.documentElement.classList.remove('home-preloader-booting');
 
       let isPageReady = false;
-      let hasMetImageDuration = false;
+      let hasMetMediaMoment = false;
       let isHiding = false;
 
       const hideOverlay = () => {
-        if (isHiding || !isPageReady || !hasMetImageDuration) return;
+        if (isHiding || !isPageReady || !hasMetMediaMoment) return;
 
         isHiding = true;
         overlay.classList.add('is-image-fading');
@@ -258,10 +267,59 @@ const {
         }, imageFadeMs + whiteHoldMs);
       };
 
-      setTimer(() => {
-        hasMetImageDuration = true;
+      const markMediaMomentReached = () => {
+        hasMetMediaMoment = true;
         hideOverlay();
-      }, imageVisibleMs);
+      };
+
+      const startVideoCycle = () => {
+        if (!preloaderVideo || hasRemoved || isHiding) return;
+
+        restartPreloaderVideo(preloaderVideo).then((didPlay) => {
+          if (didPlay === false && !hasRemoved) {
+            markMediaMomentReached();
+          }
+        });
+      };
+
+      if (preloaderVideo) {
+        preparePassivePreloaderVideo(preloaderVideo);
+
+        const onEnded = () => {
+          if (hasRemoved || isHiding) return;
+
+          if (!isPageReady) {
+            startVideoCycle();
+            return;
+          }
+
+          hideOverlay();
+        };
+        const onError = markMediaMomentReached;
+        const onReady = () => playPreloaderVideo(preloaderVideo);
+
+        preloaderVideo.addEventListener('ended', onEnded);
+        preloaderVideo.addEventListener('error', onError, { once: true });
+        preloaderVideo.addEventListener('loadeddata', onReady, { once: true });
+        preloaderVideo.addEventListener('canplaythrough', onReady, { once: true });
+
+        cleanupVideo = () => {
+          preloaderVideo.removeEventListener('ended', onEnded);
+          preloaderVideo.removeEventListener('error', onError);
+          preloaderVideo.removeEventListener('loadeddata', onReady);
+          preloaderVideo.removeEventListener('canplaythrough', onReady);
+
+          try {
+            preloaderVideo.pause();
+          } catch {
+            // Ignore media cleanup failures.
+          }
+        };
+
+        startVideoCycle();
+      }
+
+      setTimer(markMediaMomentReached, imageVisibleMs);
 
       waitForStablePageFrame(overlay).then(() => {
         if (hasRemoved) return;
@@ -271,7 +329,7 @@ const {
 
       setTimer(() => {
         isPageReady = true;
-        hasMetImageDuration = true;
+        markMediaMomentReached();
         hideOverlay();
       }, fallbackMs);
     };
@@ -334,24 +392,21 @@ const {
     visibility: hidden;
   }
 
-  .home-preloader__media,
-  .home-preloader__image {
+  .home-preloader__media {
     display: block;
     height: auto;
     max-height: min(34vh, 18rem);
     max-width: min(48vw, 22rem);
     object-fit: contain;
     opacity: 1;
+    pointer-events: none;
     transition: opacity 300ms ease;
+    user-select: none;
     width: min(48vw, 22rem);
+    background: transparent;
   }
 
-  .home-preloader__image {
-    height: auto;
-    width: 100%;
-  }
-
-  .home-preloader.is-image-fading .home-preloader__image {
+  .home-preloader.is-image-fading .home-preloader__media {
     opacity: 0;
   }
 
@@ -361,15 +416,10 @@ const {
   }
 
   @media (max-width: 720px) {
-    .home-preloader__media,
-    .home-preloader__image {
+    .home-preloader__media {
       max-height: min(28vh, 13rem);
       max-width: min(62vw, 16rem);
       width: min(62vw, 16rem);
-    }
-
-    .home-preloader__image {
-      width: 100%;
     }
   }
 </style>
