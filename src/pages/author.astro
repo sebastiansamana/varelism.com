@@ -930,12 +930,14 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       const path = stage.querySelector('[data-author-connector-path]');
       const booklistLink = stage.querySelector('[data-author-link="books"]');
       const memoriesLink = stage.querySelector('[data-author-link="memories"]');
+      const shell = stage.closest('.site-shell');
 
       if (
         !isSvgElementTag(connector, 'svg') ||
         !isSvgElementTag(path, 'path') ||
         !isElementTag(booklistLink, 'a') ||
-        !isElementTag(memoriesLink, 'a')
+        !isElementTag(memoriesLink, 'a') ||
+        !(shell instanceof HTMLElement)
       ) {
         return;
       }
@@ -1141,6 +1143,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       };
 
       const clearInlinePositions = () => {
+        shell.style.removeProperty('--author-viewport-height');
         stage.style.removeProperty('--author-stage-height');
         booklistLink.style.removeProperty('--author-link-x');
         booklistLink.style.removeProperty('--author-link-y');
@@ -1266,6 +1269,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
         resetPathStyles(path);
         stage.style.removeProperty('--author-stage-height');
+        shell.style.setProperty('--author-viewport-height', `${getViewportSnapshot().height}px`);
 
         try {
           if (document.fonts?.ready) {
@@ -1417,20 +1421,17 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
   :global(.site-shell) {
     --author-footer-offset: 7.5rem;
+    --author-viewport-height: 100svh;
 
     background: #ffffff;
-    min-height: calc(100vh + var(--author-footer-offset));
-    min-height: calc(100svh + var(--author-footer-offset));
-    min-height: calc(100dvh + var(--author-footer-offset));
+    min-height: calc(var(--author-viewport-height) + var(--author-footer-offset));
   }
 
   :global(.site-shell > main) {
     --author-main-top: clamp(6rem, 12vh, 8rem);
 
     max-width: none;
-    min-height: calc(100vh + var(--author-footer-offset));
-    min-height: calc(100svh + var(--author-footer-offset));
-    min-height: calc(100dvh + var(--author-footer-offset));
+    min-height: calc(var(--author-viewport-height) + var(--author-footer-offset));
     padding: var(--author-main-top) clamp(1rem, 4vw, 3rem) 0;
     width: 100%;
   }
@@ -1441,9 +1442,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     pointer-events: none;
     position: absolute;
     right: 0;
-    top: 100vh;
-    top: 100svh;
-    top: 100dvh;
+    top: var(--author-viewport-height);
     width: 100%;
     z-index: 20;
   }
@@ -1451,9 +1450,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   .author-stage {
     background: #ffffff;
     display: block;
-    height: calc(100vh - var(--author-main-top));
-    height: calc(100svh - var(--author-main-top));
-    height: var(--author-stage-height, calc(100dvh - var(--author-main-top)));
+    height: var(--author-stage-height, calc(var(--author-viewport-height) - var(--author-main-top)));
     isolation: isolate;
     min-height: 24rem;
     overflow: hidden;
