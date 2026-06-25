@@ -253,14 +253,17 @@ const {
       };
       // Match the single-pass animation duration so ready pages reveal after one full iteration.
       const imageVisibleMs = Math.round(3070 * timingScale);
-      const imageFadeMs = getDuration('imageFadeMs', 300 * timingScale);
-      const whiteHoldMs = getDuration('whiteHoldMs', 300 * timingScale);
-      const overlayFadeMs = getDuration('overlayFadeMs', 300 * timingScale);
+      const requestedImageFadeMs = getDuration('imageFadeMs', 300 * timingScale);
+      const requestedWhiteHoldMs = getDuration('whiteHoldMs', 300 * timingScale);
+      const requestedOverlayFadeMs = getDuration('overlayFadeMs', 300 * timingScale);
       const fallbackMs = Math.round(10000 * timingScale);
       const isActivePath = activePaths.some((path) => isSamePath(path, window.location.pathname));
       const forcePreloader = isForcedByPendingNavigation(activePaths);
       const handoffState = getPendingHandoffState(activePaths);
       const isNavigationPreloader = Boolean(handoffState || window[pendingPreloaderKey]?.navigationPreloader);
+      const imageFadeMs = isNavigationPreloader ? Math.min(requestedImageFadeMs, 90) : requestedImageFadeMs;
+      const whiteHoldMs = isNavigationPreloader ? Math.min(requestedWhiteHoldMs, 24) : requestedWhiteHoldMs;
+      const overlayFadeMs = isNavigationPreloader ? Math.min(requestedOverlayFadeMs, 180) : requestedOverlayFadeMs;
       let hasRemoved = false;
       let cleanupVideo = () => {};
       let cleanupHandoffCompletion = () => {};

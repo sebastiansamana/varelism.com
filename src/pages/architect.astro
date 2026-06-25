@@ -254,9 +254,9 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
         );
 
       const imageVisibleMs = 1000;
-      const imageFadeMs = 300;
-      const whiteHoldMs = 300;
-      const overlayFadeMs = 300;
+      const imageFadeMs = handoffState ? 90 : 300;
+      const whiteHoldMs = handoffState ? 24 : 300;
+      const overlayFadeMs = handoffState ? 180 : 300;
 
       const setPreloaderTimer = (callback, delay) => {
         const timer = window.setTimeout(() => {
