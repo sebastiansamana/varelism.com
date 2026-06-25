@@ -28,7 +28,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     </svg>
 
     <nav class="author-links" aria-label="Author sections">
-      <a class="author-link" href="/booklist/" data-author-link="books">Books </a>
+      <a class="author-link" href="/booklist/" data-author-link="books">Books</a>
       <a class="author-link" href="/memories/" data-author-link="memories">Memories</a>
     </nav>
   </section>
@@ -45,7 +45,6 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     const preloaderCompleteEvent = 'varelism:author-preloader-complete';
     const TEXT_TO_LINE_GAP = 10;
     const DEFAULT_HORIZONTAL_LEAD_LENGTH = 64;
-    const DESKTOP_BOOKS_SPACE_QUERY = '(min-width: 1200px)';
     const MOBILE_AUTHOR_VIEWPORT_QUERY = '(max-width: 1199px)';
     const TOUCH_VIEWPORT_QUERY = '(any-pointer: coarse), (pointer: coarse)';
     const VIEWPORT_RESIZE_EPSILON = 1;
@@ -153,7 +152,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     }
 
     // DOM Range keeps connector endpoints tied to the rendered glyph bounds.
-    function getCharacterRect(link, charIndex, stageRect, { preserveWhitespace = false } = {}) {
+    function getCharacterRect(link, charIndex, stageRect) {
       const textNode = getTextNode(link);
 
       if (!textNode || !textNode.nodeValue) {
@@ -161,13 +160,13 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       }
 
       const raw = textNode.nodeValue;
-      const measuredText = preserveWhitespace ? raw : raw.trim();
+      const measuredText = raw.trim();
 
       if (!measuredText.length) {
         return toStageRect(link.getBoundingClientRect(), stageRect);
       }
 
-      const textStart = preserveWhitespace ? 0 : raw.indexOf(measuredText);
+      const textStart = raw.indexOf(measuredText);
 
       const safeIndex = Math.min(
         Math.max(charIndex, 0),
@@ -188,35 +187,19 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       return toStageRect(browserRect, stageRect);
     }
 
-    function shouldMeasureDesktopBooksSpace(booklistLink, memoriesIsRight) {
-      return Boolean(
-        memoriesIsRight &&
-        booklistLink.dataset.authorLink === 'books' &&
-        booklistLink.textContent?.endsWith(' ') &&
-        window.matchMedia?.(DESKTOP_BOOKS_SPACE_QUERY)?.matches &&
-        getComputedStyle(booklistLink).whiteSpace === 'pre'
-      );
-    }
-
     function computeConnectorEndpoints(booklistLink, memoriesLink, stageRect) {
       const booklistRect = toStageRect(booklistLink.getBoundingClientRect(), stageRect);
       const memoriesRect = toStageRect(memoriesLink.getBoundingClientRect(), stageRect);
 
       const memoriesIsRight = memoriesRect.centerX >= booklistRect.centerX;
-      const measureBooklistSpace = shouldMeasureDesktopBooksSpace(booklistLink, memoriesIsRight);
 
-      const booklistRawText = booklistLink.textContent || '';
       const booklistText = booklistLink.textContent.trim();
       const memoriesText = memoriesLink.textContent.trim();
 
-      const booklistCharIndex = measureBooklistSpace
-        ? Math.max(booklistRawText.length - 1, 0)
-        : memoriesIsRight ? booklistText.length - 1 : 0;
+      const booklistCharIndex = memoriesIsRight ? booklistText.length - 1 : 0;
       const memoriesCharIndex = memoriesIsRight ? 0 : memoriesText.length - 1;
 
-      const booklistCharRect = getCharacterRect(booklistLink, booklistCharIndex, stageRect, {
-        preserveWhitespace: measureBooklistSpace,
-      });
+      const booklistCharRect = getCharacterRect(booklistLink, booklistCharIndex, stageRect);
       const memoriesCharRect = getCharacterRect(memoriesLink, memoriesCharIndex, stageRect);
 
       const horizontalDirection = memoriesIsRight
@@ -1342,12 +1325,6 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       opacity 900ms ease;
     visibility: hidden;
     white-space: nowrap;
-  }
-
-  @media (min-width: 1200px) {
-    .author-link[data-author-link='books'] {
-      white-space: pre;
-    }
   }
 
   .author-stage.is-positioned.is-books-visible [data-author-link='books'],
