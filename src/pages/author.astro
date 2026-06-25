@@ -69,8 +69,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       const compactViewport = stageWidth <= 900;
 
       return {
-        amplitudeFactorMax: portraitPhoneViewport ? 0.24 : 0.2,
-        amplitudeFactorMin: portraitPhoneViewport ? 0.15 : 0.13,
+        amplitudeFactorMax: portraitPhoneViewport ? 0.22 : 0.2,
+        amplitudeFactorMin: portraitPhoneViewport ? 0.16 : 0.13,
         amplitudeMaximum: portraitPhoneViewport
           ? clamp(stageHeight * 0.2, 82, 168)
           : clamp(stageHeight * 0.18, 72, 170),
@@ -112,7 +112,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           : compactViewport
             ? clamp(stageHeight * 0.18, 136, 240)
             : 0,
-        normalXScale: portraitPhoneViewport ? 0.75 : 1,
+        normalXScale: portraitPhoneViewport ? 0.72 : 1,
         normalYScale: 1,
         terminalTangentFactorMax: portraitPhoneViewport ? 0.34 : 0.5,
         terminalTangentFactorMin: portraitPhoneViewport ? 0.24 : 0.34,
@@ -537,9 +537,9 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       const bodySegmentCount =
         curveScale.bodySegmentCount || (distance > 620 ? 4 : distance > 240 ? 3 : 2);
       const bodyPoints = [{ ...bodyStart, curveT: 0 }];
-      const portraitPhoneCycles = portraitPhoneCurve ? randomBetween(1.88, 2.08) : 0;
-      const portraitPhonePhase = portraitPhoneCurve ? randomBetween(-0.1, 0.1) : 0;
-      const portraitPhoneWarp = portraitPhoneCurve ? randomBetween(-0.032, 0.032) : 0;
+      const portraitPhoneCycles = portraitPhoneCurve ? randomBetween(1.9, 2) : 0;
+      const portraitPhonePhase = portraitPhoneCurve ? randomBetween(-0.04, 0.04) : 0;
+      const portraitPhoneWarp = portraitPhoneCurve ? randomBetween(-0.018, 0.018) : 0;
       const getPortraitPhoneSampleT = (index) => {
         const internalCount = Math.max(1, bodySegmentCount - 1);
 
@@ -547,13 +547,13 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           return 0.5;
         }
 
-        return 0.12 + ((index - 1) / (internalCount - 1)) * 0.76;
+        return 0.14 + ((index - 1) / (internalCount - 1)) * 0.72;
       };
       const getPortraitPhoneWave = (t) => {
         const endpointEase = smootherstep(t / 0.34) * smootherstep((1 - t) / 0.34);
         const centerBreath = 0.86 + Math.sin(Math.PI * t) * 0.14;
         const memoriesHalfEnergy =
-          smootherstep((t - 0.48) / 0.22) * smootherstep((0.9 - t) / 0.24);
+          smootherstep((t - 0.5) / 0.2) * smootherstep((0.88 - t) / 0.24);
         const warpedT = clamp(
           t +
             Math.sin(Math.PI * 2 * t) * portraitPhoneWarp +
@@ -571,8 +571,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         );
 
         return (
-          (primaryWave * (centerBreath + memoriesHalfEnergy * 0.18) +
-            memoriesAccent * memoriesHalfEnergy * 0.18) *
+          (primaryWave * (centerBreath + memoriesHalfEnergy * 0.14) +
+            memoriesAccent * memoriesHalfEnergy * 0.12) *
           endpointEase
         );
       };
