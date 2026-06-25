@@ -54,6 +54,19 @@ const {
     const shouldKeepBootingAfterSwap = () =>
       Boolean(window[pendingPreloaderKey]?.keepBootingAfterSwap);
 
+    const isSamePath = (pathA, pathB) =>
+      pathA === pathB ||
+      `${pathA.replace(/\/$/, '')}/` === `${pathB.replace(/\/$/, '')}/`;
+
+    const isForcedByPendingNavigation = (activePaths) => {
+      const pendingNavigation = window[pendingPreloaderKey];
+
+      return Boolean(
+        pendingNavigation?.forcePreloader &&
+          activePaths.some((path) => isSamePath(path, pendingNavigation.pathname || window.location.pathname))
+      );
+    };
+
     const initOverlay = (overlay) => {
       if (!(overlay instanceof HTMLElement) || overlay.dataset.homePreloaderBooted === 'true') return;
 
@@ -71,6 +84,7 @@ const {
       const overlayFadeMs = Math.round(300 * timingScale);
       const fallbackMs = Math.round(10000 * timingScale);
       const isActivePath = activePaths.includes(window.location.pathname);
+      const forcePreloader = isForcedByPendingNavigation(activePaths);
       let hasRemoved = false;
       let onLoad = null;
       const timers = new Set();
@@ -125,7 +139,7 @@ const {
         window.dispatchEvent(new CustomEvent(completeEvent));
       };
 
-      if (!isActivePath || (playOnce && storage.get() === 'true')) {
+      if (!isActivePath || (playOnce && storage.get() === 'true' && !forcePreloader)) {
         removeOverlay();
         return;
       }

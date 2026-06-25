@@ -45,6 +45,14 @@ const { title, description = 'Website under construction.' } = Astro.props;
             paths: ['/architect/', '/architect'],
           },
         ];
+        const triptychHandoffPaths = [
+          '/architect/',
+          '/architect',
+          '/artist/',
+          '/artist',
+          '/author/',
+          '/author',
+        ];
         const getPreloaderRoute = (pathname) =>
           preloaderRoutes.find(({ paths }) => paths.includes(pathname));
         const getStandaloneHandoffRoute = (pathname) =>
@@ -56,9 +64,10 @@ const { title, description = 'Website under construction.' } = Astro.props;
             return false;
           }
         };
-        const shouldPlayPreloader = (route) =>
-          Boolean(route && (!route.playOnce || !hasRoutePlayed(route)));
+        const shouldPlayPreloader = (route, { force = false } = {}) =>
+          Boolean(route && (force || !route.playOnce || !hasRoutePlayed(route)));
         const route = getPreloaderRoute(window.location.pathname);
+        let skipNextHomePreloader = false;
 
         const showPreloaderShell = () => {
           document.documentElement.classList.add('home-preloader-active', 'home-preloader-booting');
@@ -116,17 +125,33 @@ const { title, description = 'Website under construction.' } = Astro.props;
           document.body?.append(overlay);
         };
 
-        const preparePreloaderNavigation = (url) => {
+        const isSamePath = (pathA, pathB) =>
+          pathA === pathB ||
+          `${pathA.replace(/\/$/, '')}/` === `${pathB.replace(/\/$/, '')}/`;
+
+        const getPendingPreloaderNavigation = () => window[pendingPreloaderKey] || null;
+
+        const isPendingPreloaderPath = (pathname) => {
+          const pendingNavigation = getPendingPreloaderNavigation();
+
+          return Boolean(pendingNavigation?.pathname && isSamePath(pendingNavigation.pathname, pathname));
+        };
+
+        const preparePreloaderNavigation = (url, { force = false } = {}) => {
           const nextRoute = getPreloaderRoute(url.pathname);
-          const shouldUseRoutePreloader = shouldPlayPreloader(nextRoute);
+          const forceTriptychPreloader = force && triptychHandoffPaths.includes(url.pathname);
+          const shouldUseRoutePreloader = shouldPlayPreloader(nextRoute, {
+            force: forceTriptychPreloader,
+          });
           const standaloneHandoffRoute = getStandaloneHandoffRoute(url.pathname);
 
-          if (!shouldUseRoutePreloader && !standaloneHandoffRoute) {
+          if (!shouldUseRoutePreloader && !standaloneHandoffRoute && !forceTriptychPreloader) {
             window[pendingPreloaderKey] = null;
             return;
           }
 
           window[pendingPreloaderKey] = {
+            forcePreloader: forceTriptychPreloader,
             keepBootingAfterSwap: shouldUseRoutePreloader,
             pathname: url.pathname,
           };
@@ -163,18 +188,44 @@ const { title, description = 'Website under construction.' } = Astro.props;
 
           if (url.origin !== window.location.origin) return;
 
-          preparePreloaderNavigation(url);
+          if (link.closest('.site-logo') && (url.pathname === '/' || url.pathname === '/index.html')) {
+            skipNextHomePreloader = true;
+            window[pendingPreloaderKey] = null;
+            removeHandoffPreloader();
+            return;
+          }
+
+          preparePreloaderNavigation(url, {
+            force: Boolean(link.closest('.triptych-item')),
+          });
         });
 
         document.addEventListener('astro:before-preparation', (event) => {
           const url = event?.to ? new URL(event.to, window.location.href) : null;
 
-          if (url) preparePreloaderNavigation(url);
+          if (!url) return;
+
+          if (skipNextHomePreloader && (url.pathname === '/' || url.pathname === '/index.html')) {
+            skipNextHomePreloader = false;
+            window[pendingPreloaderKey] = null;
+            removeHandoffPreloader();
+            return;
+          }
+
+          preparePreloaderNavigation(url, {
+            force: Boolean(isPendingPreloaderPath(url.pathname) && getPendingPreloaderNavigation()?.forcePreloader),
+          });
         });
 
         document.addEventListener('astro:page-load', () => {
           const currentRoute = getPreloaderRoute(window.location.pathname);
-          const shouldPreloadCurrentRoute = shouldPlayPreloader(currentRoute);
+          const pendingNavigation = getPendingPreloaderNavigation();
+          const shouldForceCurrentRoute = Boolean(
+            pendingNavigation?.forcePreloader && isPendingPreloaderPath(window.location.pathname)
+          );
+          const shouldPreloadCurrentRoute = shouldPlayPreloader(currentRoute, {
+            force: shouldForceCurrentRoute,
+          });
 
           if (!shouldPreloadCurrentRoute && !document.querySelector('[data-home-preloader]')) {
             document.documentElement.classList.remove('home-preloader-active', 'home-preloader-booting');
