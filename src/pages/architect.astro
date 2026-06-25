@@ -11,6 +11,7 @@ const preloaderImageUrl = `${basePath}/images/Logo_Animation_Preloader.gif`;
     <img
       class="architect-preloader__image"
       src={preloaderImageUrl}
+      data-preloader-image-src={preloaderImageUrl}
       alt=""
       decoding="async"
       draggable="false"
@@ -53,6 +54,26 @@ const preloaderImageUrl = `${basePath}/images/Logo_Animation_Preloader.gif`;
       }
     };
 
+    const getRestartedPreloaderImageSrc = (source) => {
+      const url = new URL(source, window.location.href);
+      url.searchParams.delete('run');
+      url.searchParams.set('run', `${Date.now()}-${Math.random().toString(36).slice(2)}`);
+
+      return url.href;
+    };
+
+    const restartPreloaderImage = (preloader) => {
+      const image = preloader?.querySelector('.architect-preloader__image');
+
+      if (!(image instanceof HTMLImageElement)) return;
+
+      const source = image.dataset.preloaderImageSrc || image.getAttribute('src') || image.currentSrc;
+
+      if (source) {
+        image.src = getRestartedPreloaderImageSrc(source);
+      }
+    };
+
     const initArchitectViewer = () => {
       const viewer = document.querySelector('[data-architect-viewer]');
       const preloader = document.querySelector('[data-architect-preloader]');
@@ -69,6 +90,7 @@ const preloaderImageUrl = `${basePath}/images/Logo_Animation_Preloader.gif`;
 
       disposeCurrentViewer();
       viewer.dataset.viewerBooted = 'true';
+      restartPreloaderImage(preloader);
       document.documentElement.classList.add('architect-preloader-active');
 
       let didStart = false;

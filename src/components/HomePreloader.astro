@@ -30,6 +30,7 @@ const {
   <img
     class="home-preloader__image"
     src={imageSrc}
+    data-preloader-image-src={imageSrc}
     alt=""
     decoding="async"
     draggable="false"
@@ -57,6 +58,26 @@ const {
     const isSamePath = (pathA, pathB) =>
       pathA === pathB ||
       `${pathA.replace(/\/$/, '')}/` === `${pathB.replace(/\/$/, '')}/`;
+
+    const getRestartedImageSrc = (source) => {
+      const url = new URL(source, window.location.href);
+      url.searchParams.delete('run');
+      url.searchParams.set('run', `${Date.now()}-${Math.random().toString(36).slice(2)}`);
+
+      return url.href;
+    };
+
+    const restartPreloaderImage = (overlay) => {
+      const image = overlay.querySelector('.home-preloader__image');
+
+      if (!(image instanceof HTMLImageElement)) return;
+
+      const source = image.dataset.preloaderImageSrc || image.getAttribute('src') || image.currentSrc;
+
+      if (source) {
+        image.src = getRestartedImageSrc(source);
+      }
+    };
 
     const isForcedByPendingNavigation = (activePaths) => {
       const pendingNavigation = window[pendingPreloaderKey];
@@ -143,6 +164,8 @@ const {
         removeOverlay();
         return;
       }
+
+      restartPreloaderImage(overlay);
 
       if (playOnce) storage.set();
       document.documentElement.classList.add('home-preloader-active');

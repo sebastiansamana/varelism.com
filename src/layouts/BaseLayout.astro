@@ -23,6 +23,8 @@ const { title, description = 'Website under construction.' } = Astro.props;
       (() => {
         const preloaderImageSrc = '/images/Logo_Animation_Preloader.gif';
         const pendingPreloaderKey = '__varelismPendingPreloaderNavigation';
+        const astroNavigateKey = '__varelismAstroNavigate';
+        const triptychHandoffDelayMs = 950;
         const preloaderRoutes = [
           {
             paths: ['/', '/index.html'],
@@ -57,6 +59,7 @@ const { title, description = 'Website under construction.' } = Astro.props;
           preloaderRoutes.find(({ paths }) => paths.includes(pathname));
         const getStandaloneHandoffRoute = (pathname) =>
           standaloneHandoffRoutes.find(({ paths }) => paths.includes(pathname));
+        const shouldForceTriptychPreloader = (pathname) => triptychHandoffPaths.includes(pathname);
         const hasRoutePlayed = (route) => {
           try {
             return sessionStorage.getItem(route.sessionKey) === 'true';
@@ -64,10 +67,21 @@ const { title, description = 'Website under construction.' } = Astro.props;
             return false;
           }
         };
+        const markRoutePlayed = (route) => {
+          if (!route?.sessionKey) return;
+
+          try {
+            sessionStorage.setItem(route.sessionKey, 'true');
+          } catch {
+            // Storage can be unavailable in strict privacy contexts.
+          }
+        };
         const shouldPlayPreloader = (route, { force = false } = {}) =>
           Boolean(route && (force || !route.playOnce || !hasRoutePlayed(route)));
         const route = getPreloaderRoute(window.location.pathname);
         let skipNextHomePreloader = false;
+        let activeTriptychNavigation = null;
+        let preloaderRunId = 0;
 
         const showPreloaderShell = () => {
           document.documentElement.classList.add('home-preloader-active', 'home-preloader-booting');
@@ -83,8 +97,24 @@ const { title, description = 'Website under construction.' } = Astro.props;
           });
         };
 
+        const getRestartedPreloaderSrc = () => {
+          const url = new URL(preloaderImageSrc, window.location.origin);
+          preloaderRunId += 1;
+          url.searchParams.set('run', `${Date.now()}-${preloaderRunId}`);
+
+          return `${url.pathname}${url.search}`;
+        };
+
         const ensureHandoffPreloader = () => {
-          if (document.querySelector('[data-home-preloader], [data-home-preloader-handoff]')) {
+          const existingOverlay = document.querySelector('[data-home-preloader-handoff]');
+
+          if (existingOverlay instanceof HTMLElement) {
+            const existingImage = existingOverlay.querySelector('img');
+
+            if (existingImage instanceof HTMLImageElement) {
+              existingImage.src = getRestartedPreloaderSrc();
+            }
+
             return;
           }
 
@@ -111,7 +141,7 @@ const { title, description = 'Website under construction.' } = Astro.props;
           image.decoding = 'async';
           image.draggable = false;
           image.loading = 'eager';
-          image.src = preloaderImageSrc;
+          image.src = getRestartedPreloaderSrc();
           Object.assign(image.style, {
             display: 'block',
             height: 'auto',
@@ -149,7 +179,7 @@ const { title, description = 'Website under construction.' } = Astro.props;
 
         const preparePreloaderNavigation = (url, { force = false } = {}) => {
           const nextRoute = getPreloaderRoute(url.pathname);
-          const forceTriptychPreloader = force && triptychHandoffPaths.includes(url.pathname);
+          const forceTriptychPreloader = force && shouldForceTriptychPreloader(url.pathname);
           const shouldUseRoutePreloader = shouldPlayPreloader(nextRoute, {
             force: forceTriptychPreloader,
           });
@@ -167,6 +197,31 @@ const { title, description = 'Website under construction.' } = Astro.props;
           };
           showPreloaderShell();
           ensureHandoffPreloader();
+        };
+
+        const continueTriptychNavigation = (url) => {
+          const navigate = window[astroNavigateKey];
+
+          if (typeof navigate === 'function') {
+            navigate(url.href);
+            return;
+          }
+
+          window.location.assign(url.href);
+        };
+
+        const startTriptychNavigation = (url) => {
+          if (activeTriptychNavigation) {
+            window.clearTimeout(activeTriptychNavigation);
+            activeTriptychNavigation = null;
+          }
+
+          preparePreloaderNavigation(url, { force: true });
+
+          activeTriptychNavigation = window.setTimeout(() => {
+            activeTriptychNavigation = null;
+            continueTriptychNavigation(url);
+          }, triptychHandoffDelayMs);
         };
 
         const listenerKey = '__varelismPreloaderNavigationListeners';
@@ -198,17 +253,31 @@ const { title, description = 'Website under construction.' } = Astro.props;
 
           if (url.origin !== window.location.origin) return;
 
+          const isTriptychLink = Boolean(link.closest('.triptych-item'));
+
           if (link.closest('.site-logo') && (url.pathname === '/' || url.pathname === '/index.html')) {
             skipNextHomePreloader = true;
+            markRoutePlayed(getPreloaderRoute('/'));
+            if (activeTriptychNavigation) {
+              window.clearTimeout(activeTriptychNavigation);
+              activeTriptychNavigation = null;
+            }
             window[pendingPreloaderKey] = null;
             removeHandoffPreloader();
             return;
           }
 
+          if (isTriptychLink && shouldForceTriptychPreloader(url.pathname)) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            startTriptychNavigation(url);
+            return;
+          }
+
           preparePreloaderNavigation(url, {
-            force: Boolean(link.closest('.triptych-item')),
+            force: isTriptychLink,
           });
-        });
+        }, { capture: true });
 
         document.addEventListener('astro:before-preparation', (event) => {
           const url = event?.to ? new URL(event.to, window.location.href) : null;
@@ -246,6 +315,11 @@ const { title, description = 'Website under construction.' } = Astro.props;
           }
         });
       })();
+    </script>
+    <script>
+      import { navigate } from 'astro:transitions/client';
+
+      window.__varelismAstroNavigate = navigate;
     </script>
     <title>{title}</title>
   </head>
