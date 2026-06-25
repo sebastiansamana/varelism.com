@@ -55,6 +55,7 @@ const {
     const stateKey = '__varelismHomePreloader';
     const pendingPreloaderKey = '__varelismPendingPreloaderNavigation';
     const activeHandoffKey = '__varelismActivePreloaderHandoff';
+    const navigationPreloaderClass = 'home-preloader-navigation-active';
     const state = (window[stateKey] ||= {
       cleanups: new Set(),
       listenersAttached: false,
@@ -70,6 +71,18 @@ const {
 
     const shouldPreservePendingHandoffAfterSwap = () =>
       Boolean(window[activeHandoffKey]?.startedAt || window[pendingPreloaderKey]?.handoffStartedAt);
+
+    const clearNavigationPreloaderClassIfIdle = () => {
+      if (
+        document.querySelector(
+          '[data-home-preloader-handoff], [data-home-preloader][data-navigation-preloader="true"], [data-architect-preloader][data-navigation-preloader="true"]'
+        )
+      ) {
+        return;
+      }
+
+      document.documentElement.classList.remove(navigationPreloaderClass);
+    };
 
     const isSamePath = (pathA, pathB) =>
       pathA === pathB ||
@@ -247,6 +260,7 @@ const {
       const isActivePath = activePaths.some((path) => isSamePath(path, window.location.pathname));
       const forcePreloader = isForcedByPendingNavigation(activePaths);
       const handoffState = getPendingHandoffState(activePaths);
+      const isNavigationPreloader = Boolean(handoffState || window[pendingPreloaderKey]?.navigationPreloader);
       let hasRemoved = false;
       let cleanupVideo = () => {};
       let cleanupHandoffCompletion = () => {};
@@ -297,6 +311,8 @@ const {
         cleanupOverlay();
         overlay.remove();
         document.documentElement.classList.remove('home-preloader-active', 'home-preloader-booting');
+        delete overlay.dataset.navigationPreloader;
+        clearNavigationPreloaderClassIfIdle();
         clearPendingPreloaderNavigation();
         window.dispatchEvent(new CustomEvent(completeEvent));
       };
@@ -323,6 +339,10 @@ const {
 
       if (playOnce) storage.set();
       document.documentElement.classList.add('home-preloader-active');
+      if (isNavigationPreloader) {
+        overlay.dataset.navigationPreloader = 'true';
+        document.documentElement.classList.add(navigationPreloaderClass);
+      }
       overlay.classList.add('is-visible');
       document.documentElement.classList.remove('home-preloader-booting');
 
@@ -469,6 +489,7 @@ const {
         state.cleanups.clear();
         if (!shouldKeepBootingAfterSwap()) {
           document.documentElement.classList.remove('home-preloader-active', 'home-preloader-booting');
+          clearNavigationPreloaderClassIfIdle();
           if (!shouldPreservePendingHandoffAfterSwap()) {
             clearPendingPreloaderNavigation();
           }
@@ -502,6 +523,10 @@ const {
     z-index: 9999;
   }
 
+  :global(html.home-preloader-navigation-active) .home-preloader {
+    z-index: 10;
+  }
+
   .home-preloader.is-visible {
     opacity: 1;
     pointer-events: auto;
@@ -532,8 +557,8 @@ const {
     opacity: 0;
   }
 
-  :global(html.home-preloader-active),
-  :global(html.home-preloader-active body) {
+  :global(html.home-preloader-active:not(.home-preloader-navigation-active)),
+  :global(html.home-preloader-active:not(.home-preloader-navigation-active) body) {
     overflow: hidden;
   }
 

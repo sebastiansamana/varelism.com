@@ -27,6 +27,7 @@ const { title, description = 'Website under construction.' } = Astro.props;
         const activeHandoffKey = '__varelismActivePreloaderHandoff';
         const pendingHomeReturnKey = '__varelismPendingHomeReturn';
         const astroNavigateKey = '__varelismAstroNavigate';
+        const navigationPreloaderClass = 'home-preloader-navigation-active';
         const preloaderCycleDurationMs = 3067;
         const handoffCycleFallbackMs = preloaderCycleDurationMs + 350;
         const handoffMediaFadeMs = 220;
@@ -93,8 +94,23 @@ const { title, description = 'Website under construction.' } = Astro.props;
 
         window.__varelismPreloaderCycleDurationMs = preloaderCycleDurationMs;
 
-        const showPreloaderShell = () => {
+        const clearNavigationPreloaderClassIfIdle = () => {
+          if (
+            document.querySelector(
+              '[data-home-preloader-handoff], [data-home-preloader][data-navigation-preloader="true"], [data-architect-preloader][data-navigation-preloader="true"]',
+            )
+          ) {
+            return;
+          }
+
+          document.documentElement.classList.remove(navigationPreloaderClass);
+        };
+
+        const showPreloaderShell = ({ navigation = false } = {}) => {
           document.documentElement.classList.add('home-preloader-active', 'home-preloader-booting');
+          if (navigation) {
+            document.documentElement.classList.add(navigationPreloaderClass);
+          }
         };
 
         if (shouldPlayPreloader(route)) {
@@ -107,6 +123,7 @@ const { title, description = 'Website under construction.' } = Astro.props;
           });
           document.documentElement.classList.remove('home-preloader-handoff-active');
           window[activeHandoffKey] = null;
+          clearNavigationPreloaderClassIfIdle();
         };
 
         const preparePassivePreloaderVideo = (video) => {
@@ -143,7 +160,7 @@ const { title, description = 'Website under construction.' } = Astro.props;
         };
 
         const ensureHandoffPreloader = ({ restart = true } = {}) => {
-          document.documentElement.classList.add('home-preloader-handoff-active');
+          document.documentElement.classList.add('home-preloader-handoff-active', navigationPreloaderClass);
 
           const existingOverlay = document.querySelector('[data-home-preloader-handoff]');
 
@@ -179,7 +196,7 @@ const { title, description = 'Website under construction.' } = Astro.props;
             position: 'fixed',
             visibility: 'visible',
             willChange: 'opacity',
-            zIndex: '10001',
+            zIndex: '10',
           });
 
           video.className = 'home-preloader__media';
@@ -232,7 +249,7 @@ const { title, description = 'Website under construction.' } = Astro.props;
             return;
           }
 
-          showPreloaderShell();
+          showPreloaderShell({ navigation: Boolean(pendingNavigation.navigationPreloader) });
         };
 
         const preparePreloaderNavigation = (url, { force = false, restartHandoff = true } = {}) => {
@@ -282,12 +299,13 @@ const { title, description = 'Website under construction.' } = Astro.props;
             handoffCycleDurationMs: currentPendingNavigation?.handoffCycleDurationMs || preloaderCycleDurationMs,
             handoffStartedAt: nextHandoffStartedAt,
             keepBootingAfterSwap: shouldUseRoutePreloader,
+            navigationPreloader: true,
             pathname: url.pathname,
             suppressRoutePreloaderVideo:
               shouldUseHandoffSurface ||
               (shouldReuseHandoff && Boolean(currentPendingNavigation?.suppressRoutePreloaderVideo)),
           };
-          showPreloaderShell();
+          showPreloaderShell({ navigation: true });
 
           const handoffPreloader = ensureHandoffPreloader({ restart: restartHandoff && !shouldReuseHandoff });
 
@@ -533,6 +551,7 @@ const { title, description = 'Website under construction.' } = Astro.props;
           skipNextHomePreloader = true;
           markRoutePlayed(getPreloaderRoute('/'));
           window[pendingPreloaderKey] = null;
+          document.documentElement.classList.remove(navigationPreloaderClass);
           window[pendingHomeReturnKey] = {
             pathname: url.pathname,
           };
@@ -674,6 +693,7 @@ const { title, description = 'Website under construction.' } = Astro.props;
             document.documentElement.classList.remove('home-preloader-active', 'home-preloader-booting');
             window[pendingPreloaderKey] = null;
             removeHandoffPreloader();
+            clearNavigationPreloaderClassIfIdle();
           }
 
           revealHomeFromWhite();

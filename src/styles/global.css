@@ -59,9 +59,9 @@ html.home-preloader-booting body {
   overflow: hidden;
 }
 
-html.home-preloader-booting .site-header,
-html.home-preloader-booting main > :not(.home-preloader),
-html.home-preloader-booting .site-footer {
+html.home-preloader-booting:not(.home-preloader-navigation-active) .site-header,
+html.home-preloader-booting:not(.home-preloader-navigation-active) main > :not(.home-preloader),
+html.home-preloader-booting:not(.home-preloader-navigation-active) .site-footer {
   opacity: 0;
 }
 
@@ -69,6 +69,11 @@ html.home-preloader-booting .home-preloader {
   opacity: 1;
   pointer-events: auto;
   visibility: visible;
+}
+
+html.home-preloader-navigation-active .site-footer {
+  position: relative;
+  z-index: 20;
 }
 
 a {

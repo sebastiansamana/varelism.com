@@ -49,6 +49,19 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
       dispose: null,
       listenersAttached: false,
     });
+    const navigationPreloaderClass = 'home-preloader-navigation-active';
+
+    const clearNavigationPreloaderClassIfIdle = () => {
+      if (
+        document.querySelector(
+          '[data-home-preloader-handoff], [data-home-preloader][data-navigation-preloader="true"], [data-architect-preloader][data-navigation-preloader="true"]'
+        )
+      ) {
+        return;
+      }
+
+      document.documentElement.classList.remove(navigationPreloaderClass);
+    };
 
     const disposeCurrentViewer = () => {
       if (typeof state.dispose === 'function') {
@@ -268,7 +281,11 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
 
       const removePreloader = () => {
         clearPendingArchitectPreloader();
+        if (preloader instanceof HTMLElement) {
+          delete preloader.dataset.navigationPreloader;
+        }
         preloader?.remove();
+        clearNavigationPreloaderClassIfIdle();
       };
 
       const hidePreloaderWhenReady = () => {
@@ -337,6 +354,10 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
       };
 
       if (handoffState) {
+        if (preloader instanceof HTMLElement) {
+          preloader.dataset.navigationPreloader = 'true';
+        }
+        document.documentElement.classList.add(navigationPreloaderClass);
         hasMetMinimumDuration = Boolean(handoffState.cycleComplete);
         prepareHiddenHandoffPreloaderVideo();
         cleanupPreloaderVideo = startPreloaderVideo(
@@ -1342,6 +1363,10 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
     visibility: hidden;
   }
 
+  :global(html.home-preloader-navigation-active) .architect-preloader {
+    z-index: 10;
+  }
+
   .architect-preloader__media {
     background: transparent;
     display: block;
@@ -1365,8 +1390,8 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
     opacity: 0;
   }
 
-  :global(html.architect-preloader-active),
-  :global(html.architect-preloader-active body) {
+  :global(html.architect-preloader-active:not(.home-preloader-navigation-active)),
+  :global(html.architect-preloader-active:not(.home-preloader-navigation-active) body) {
     overflow: hidden;
   }
 
