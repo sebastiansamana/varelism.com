@@ -70,7 +70,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           ? clamp(stageHeight * 0.18, 78, 160)
           : clamp(stageHeight * 0.18, 72, 170),
         amplitudeMinimum: portraitPhoneViewport ? 28 : 26,
-        bodySegmentCount: portraitPhoneViewport ? 5 : null,
+        bodySegmentCount: portraitPhoneViewport ? 7 : null,
         fallbackBooksY: portraitPhoneViewport
           ? 0.72
           : mobileViewport
@@ -107,7 +107,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           : compactViewport
             ? clamp(stageHeight * 0.18, 136, 240)
             : 0,
-        normalXScale: portraitPhoneViewport ? 0.58 : 1,
+        normalXScale: portraitPhoneViewport ? 0.62 : 1,
         normalYScale: 1,
         terminalTangentFactorMax: 0.5,
         terminalTangentFactorMin: 0.34,
@@ -116,13 +116,14 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         textSeparationPadding: mobileViewport ? 88 : compactViewport ? 84 : 72,
         tensionMax: 0.68,
         tensionMin: 0.5,
-        wavelengthDriftFactor: portraitPhoneViewport ? 0.058 : 0.035,
-        waveEnvelopePower: portraitPhoneViewport ? 0.98 : 1.12,
+        wavelengthDriftFactor: portraitPhoneViewport ? 0.065 : 0.035,
+        waveEnvelopePower: portraitPhoneViewport ? 0.9 : 1.12,
         waveMagnitudeMax: portraitPhoneViewport ? 1.36 : 1.18,
-        waveMagnitudeMin: portraitPhoneViewport ? 0.58 : 0.72,
+        waveMagnitudeMin: portraitPhoneViewport ? 0.52 : 0.72,
+        waveTJitterFactor: portraitPhoneViewport ? 0.34 : 0.22,
         waveTJitter: portraitPhoneViewport ? 0.075 : 0.055,
-        waveTMax: portraitPhoneViewport ? 0.82 : 0.78,
-        waveTMin: portraitPhoneViewport ? 0.18 : 0.22,
+        waveTMax: portraitPhoneViewport ? 0.86 : 0.78,
+        waveTMin: portraitPhoneViewport ? 0.14 : 0.22,
       };
     };
 
@@ -542,7 +543,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
       for (let index = 1; index < bodySegmentCount; index += 1) {
         const baseT = index / bodySegmentCount;
-        const jitter = Math.min(curveScale.waveTJitter, 0.22 / bodySegmentCount);
+        const jitter = Math.min(curveScale.waveTJitter, curveScale.waveTJitterFactor / bodySegmentCount);
         const t = clamp(
           baseT + randomBetween(-jitter, jitter),
           curveScale.waveTMin,
@@ -1206,8 +1207,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     transform: translate(-50%, -50%);
     transition:
       color 180ms ease,
-      opacity 900ms ease,
-      visibility 0s linear 900ms;
+      opacity 900ms ease;
     visibility: hidden;
     white-space: nowrap;
   }
@@ -1224,8 +1224,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     pointer-events: auto;
     transition:
       color 180ms ease,
-      opacity 900ms ease,
-      visibility 0s linear 0s;
+      opacity 900ms ease;
     visibility: visible;
   }
 
