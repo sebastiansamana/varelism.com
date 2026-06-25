@@ -64,13 +64,13 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         mobileViewport && stageHeight > stageWidth && stageHeight >= 640;
 
       return {
-        amplitudeFactorMax: portraitPhoneViewport ? 0.21 : 0.2,
-        amplitudeFactorMin: portraitPhoneViewport ? 0.14 : 0.13,
+        amplitudeFactorMax: portraitPhoneViewport ? 0.235 : 0.2,
+        amplitudeFactorMin: portraitPhoneViewport ? 0.11 : 0.13,
         amplitudeMaximum: portraitPhoneViewport
-          ? clamp(stageHeight * 0.16, 72, 140)
+          ? clamp(stageHeight * 0.18, 78, 160)
           : clamp(stageHeight * 0.18, 72, 170),
         amplitudeMinimum: portraitPhoneViewport ? 28 : 26,
-        bodySegmentCount: portraitPhoneViewport ? 3 : null,
+        bodySegmentCount: portraitPhoneViewport ? 5 : null,
         fallbackBooksY: portraitPhoneViewport
           ? 0.72
           : mobileViewport
@@ -107,7 +107,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           : compactViewport
             ? clamp(stageHeight * 0.18, 136, 240)
             : 0,
-        normalXScale: portraitPhoneViewport ? 0.48 : 1,
+        normalXScale: portraitPhoneViewport ? 0.58 : 1,
         normalYScale: 1,
         terminalTangentFactorMax: 0.5,
         terminalTangentFactorMin: 0.34,
@@ -116,12 +116,13 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         textSeparationPadding: mobileViewport ? 88 : compactViewport ? 84 : 72,
         tensionMax: 0.68,
         tensionMin: 0.5,
-        wavelengthDriftFactor: 0.035,
-        waveEnvelopePower: 1.12,
-        waveMagnitudeMax: 1.18,
-        waveMagnitudeMin: 0.72,
-        waveTMax: 0.78,
-        waveTMin: 0.22,
+        wavelengthDriftFactor: portraitPhoneViewport ? 0.058 : 0.035,
+        waveEnvelopePower: portraitPhoneViewport ? 0.98 : 1.12,
+        waveMagnitudeMax: portraitPhoneViewport ? 1.36 : 1.18,
+        waveMagnitudeMin: portraitPhoneViewport ? 0.58 : 0.72,
+        waveTJitter: portraitPhoneViewport ? 0.075 : 0.055,
+        waveTMax: portraitPhoneViewport ? 0.82 : 0.78,
+        waveTMin: portraitPhoneViewport ? 0.18 : 0.22,
       };
     };
 
@@ -541,7 +542,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
       for (let index = 1; index < bodySegmentCount; index += 1) {
         const baseT = index / bodySegmentCount;
-        const jitter = Math.min(0.055, 0.22 / bodySegmentCount);
+        const jitter = Math.min(curveScale.waveTJitter, 0.22 / bodySegmentCount);
         const t = clamp(
           baseT + randomBetween(-jitter, jitter),
           curveScale.waveTMin,
