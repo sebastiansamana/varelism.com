@@ -70,7 +70,11 @@ const {
       Boolean(window[pendingPreloaderKey]?.keepBootingAfterSwap);
 
     const shouldPreservePendingHandoffAfterSwap = () =>
-      Boolean(window[activeHandoffKey]?.startedAt || window[pendingPreloaderKey]?.handoffStartedAt);
+      Boolean(
+        window[activeHandoffKey]?.startedAt ||
+          (window[pendingPreloaderKey]?.suppressRoutePreloaderVideo &&
+            window[pendingPreloaderKey]?.handoffStartedAt)
+      );
 
     const clearNavigationPreloaderClassIfIdle = () => {
       if (
@@ -202,15 +206,25 @@ const {
       const visibleHandoffPath = visibleHandoff instanceof HTMLElement ? visibleHandoff.dataset.handoffPath : '';
       const activeHandoff = window[activeHandoffKey];
       const pendingNavigation = window[pendingPreloaderKey];
+      const shouldHonorVisibleHandoff = Boolean(
+        activeHandoff?.startedAt || pendingNavigation?.suppressRoutePreloaderVideo
+      );
 
       if (
         visibleHandoff instanceof HTMLElement &&
+        shouldHonorVisibleHandoff &&
         activePaths.some((path) => isSamePath(path, visibleHandoffPath || window.location.pathname))
       ) {
         return {
           cycleComplete: visibleHandoff.dataset.handoffReleased === 'true',
           pathname: visibleHandoffPath || window.location.pathname,
         };
+      }
+
+      if (visibleHandoff instanceof HTMLElement && !shouldHonorVisibleHandoff) {
+        visibleHandoff.remove();
+        document.documentElement.classList.remove('home-preloader-handoff-active');
+        clearNavigationPreloaderClassIfIdle();
       }
 
       if (

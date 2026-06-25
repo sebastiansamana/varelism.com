@@ -26,6 +26,7 @@ const { title, description = 'Website under construction.' } = Astro.props;
         const pendingPreloaderKey = '__varelismPendingPreloaderNavigation';
         const activeHandoffKey = '__varelismActivePreloaderHandoff';
         const pendingHomeReturnKey = '__varelismPendingHomeReturn';
+        const forceAuthorReplayKey = '__varelismForceAuthorReplay';
         const astroNavigateKey = '__varelismAstroNavigate';
         const navigationPreloaderClass = 'home-preloader-navigation-active';
         const homeReturnClass = 'home-return-active';
@@ -65,6 +66,7 @@ const { title, description = 'Website under construction.' } = Astro.props;
           '/author/',
           '/author',
         ];
+        const authorReplayReturnPaths = ['/books/', '/books', '/memories/', '/memories'];
         const getPreloaderRoute = (pathname) =>
           preloaderRoutes.find(({ paths }) => paths.includes(pathname));
         const getStandaloneHandoffRoute = (pathname) =>
@@ -92,6 +94,7 @@ const { title, description = 'Website under construction.' } = Astro.props;
         let skipNextHomePreloader = false;
         let activeTriptychNavigation = null;
         let activeHomeReturnNavigation = null;
+        let lastPathname = window.location.pathname;
 
         window.__varelismPreloaderCycleDurationMs = preloaderCycleDurationMs;
 
@@ -231,6 +234,17 @@ const { title, description = 'Website under construction.' } = Astro.props;
           pathA === pathB ||
           `${pathA.replace(/\/$/, '')}/` === `${pathB.replace(/\/$/, '')}/`;
 
+        const isAuthorPath = (pathname) => isSamePath(pathname, '/author/');
+
+        const markAuthorReplayIfNeeded = (toPathname, fromPathname = lastPathname) => {
+          if (
+            isAuthorPath(toPathname) &&
+            authorReplayReturnPaths.some((path) => isSamePath(fromPathname, path))
+          ) {
+            window[forceAuthorReplayKey] = true;
+          }
+        };
+
         const getPendingPreloaderNavigation = () => window[pendingPreloaderKey] || null;
 
         const getActiveHandoff = () => window[activeHandoffKey] || null;
@@ -308,7 +322,10 @@ const { title, description = 'Website under construction.' } = Astro.props;
           };
           showPreloaderShell({ navigation: true });
 
-          const handoffPreloader = ensureHandoffPreloader({ restart: restartHandoff && !shouldReuseHandoff });
+          const handoffPreloader =
+            shouldUseHandoffSurface || shouldReuseHandoff
+              ? ensureHandoffPreloader({ restart: restartHandoff && !shouldReuseHandoff })
+              : null;
 
           if (handoffPreloader?.overlay) {
             handoffPreloader.overlay.dataset.handoffPath = url.pathname;
@@ -376,15 +393,22 @@ const { title, description = 'Website under construction.' } = Astro.props;
         const restoreActiveHandoffOverlay = () => {
           const pendingNavigation = getPendingPreloaderNavigation();
           const activeHandoff = getActiveHandoff();
+          const pendingHandoff = pendingNavigation?.suppressRoutePreloaderVideo ? pendingNavigation : null;
           const handoffState = activeHandoff
             ? {
                 handoffCycleComplete: activeHandoff.cycleComplete,
                 handoffStartedAt: activeHandoff.startedAt,
                 pathname: activeHandoff.pathname,
               }
-            : pendingNavigation;
+            : pendingHandoff;
 
-          if (!handoffState?.handoffStartedAt || handoffState.handoffCycleComplete) return;
+          if (!handoffState?.handoffStartedAt || handoffState.handoffCycleComplete) {
+            if (!activeHandoff && !pendingHandoff) {
+              removeHandoffPreloader();
+            }
+
+            return;
+          }
 
           const existingOverlay = document.querySelector('[data-home-preloader-handoff]');
           const existingVideo = existingOverlay?.querySelector('video');
@@ -658,6 +682,8 @@ const { title, description = 'Website under construction.' } = Astro.props;
 
           if (!url) return;
 
+          markAuthorReplayIfNeeded(url.pathname, window.location.pathname);
+
           if (skipNextHomePreloader && (url.pathname === '/' || url.pathname === '/index.html')) {
             skipNextHomePreloader = false;
             window[pendingPreloaderKey] = null;
@@ -673,6 +699,7 @@ const { title, description = 'Website under construction.' } = Astro.props;
         });
 
         document.addEventListener('astro:after-swap', () => {
+          markAuthorReplayIfNeeded(window.location.pathname);
           restoreRoutePreloaderShell();
           restoreActiveHandoffOverlay();
           if (getPendingHomeReturn()) showHomeReturnOverlay();
@@ -701,6 +728,11 @@ const { title, description = 'Website under construction.' } = Astro.props;
           }
 
           revealHomeFromWhite();
+          lastPathname = window.location.pathname;
+        });
+
+        window.addEventListener('popstate', () => {
+          markAuthorReplayIfNeeded(window.location.pathname);
         });
       })();
     </script>

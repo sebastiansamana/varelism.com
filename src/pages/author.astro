@@ -28,8 +28,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     </svg>
 
     <nav class="author-links" aria-label="Author sections">
-      <a class="author-link" href="/booklist/" data-author-link="books">Books</a>
-      <a class="author-link" href="/memories/" data-author-link="memories">Memories</a>
+      <a class="author-link" href="/books/" data-author-link="books" data-astro-reload>Books</a>
+      <a class="author-link" href="/memories/" data-author-link="memories" data-astro-reload>Memories</a>
     </nav>
   </section>
 </BaseLayout>
@@ -42,6 +42,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       listenersAttached: false,
     });
 
+    const forceAuthorReplayKey = '__varelismForceAuthorReplay';
     const preloaderCompleteEvent = 'varelism:author-preloader-complete';
     const TEXT_TO_LINE_GAP = 10;
     const DEFAULT_HORIZONTAL_LEAD_LENGTH = 64;
@@ -921,7 +922,16 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         return;
       }
 
-      if (stage.dataset.authorBooted === 'true') return;
+      const shouldForceReplay = window[forceAuthorReplayKey] === true;
+      if (shouldForceReplay) {
+        window[forceAuthorReplayKey] = false;
+      }
+
+      if (stage.dataset.authorBooted === 'true') {
+        if (!shouldForceReplay && typeof state.cleanup === 'function') return;
+
+        delete stage.dataset.authorBooted;
+      }
 
       state.cleanup?.();
       stage.dataset.authorBooted = 'true';
@@ -1396,18 +1406,59 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       };
     };
 
-    const restartAuthorPageFromHistory = (event) => {
-      if (!event?.persisted) return;
+    let pendingHistoryRestartFrame = 0;
 
-      state.cleanup?.();
-      initAuthorPage();
+    const isAuthorPath = () =>
+      window.location.pathname === '/author' || window.location.pathname === '/author/';
+
+    const isAuthorStageComplete = () => {
+      const stage = document.querySelector('[data-author-stage]');
+
+      return Boolean(
+        stage instanceof HTMLElement &&
+          stage.classList.contains('is-books-visible') &&
+          stage.classList.contains('is-memories-visible') &&
+          stage.classList.contains('is-line-drawing')
+      );
+    };
+
+    const restartAuthorPage = () => {
+      if (!isAuthorPath()) return;
+
+      if (pendingHistoryRestartFrame) {
+        window.cancelAnimationFrame(pendingHistoryRestartFrame);
+      }
+
+      pendingHistoryRestartFrame = window.requestAnimationFrame(() => {
+        pendingHistoryRestartFrame = 0;
+        state.cleanup?.();
+        initAuthorPage();
+      });
+    };
+
+    const restartAuthorPageFromHistory = (event) => {
+      if (!event?.persisted && !isAuthorStageComplete()) return;
+
+      restartAuthorPage();
+    };
+
+    const restartCompletedAuthorPage = () => {
+      if (!isAuthorStageComplete()) return;
+
+      restartAuthorPage();
     };
 
     if (!state.listenersAttached) {
       document.addEventListener('astro:before-swap', () => state.cleanup?.());
       document.addEventListener('astro:page-load', initAuthorPage);
-      window.addEventListener('pageshow', restartAuthorPageFromHistory);
       state.listenersAttached = true;
+    }
+
+    if (state.historyRestartVersion !== 1) {
+      document.addEventListener('astro:page-load', restartCompletedAuthorPage);
+      window.addEventListener('pageshow', restartAuthorPageFromHistory);
+      window.addEventListener('popstate', restartAuthorPage);
+      state.historyRestartVersion = 1;
     }
 
     if (document.readyState === 'loading') {
