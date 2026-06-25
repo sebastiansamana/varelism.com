@@ -2,18 +2,24 @@
 interface Props {
   activePaths?: string[];
   completeEvent?: string;
+  imageFadeMs?: number;
+  overlayFadeMs?: number;
   playOnce?: boolean;
   sessionKey?: string;
   timingScale?: number;
+  whiteHoldMs?: number;
 }
 
 const videoSrc = '/images/Logo_Animation_Preloader.mp4';
 const {
   activePaths = ['/', '/index.html'],
   completeEvent = 'varelism:preloader-complete',
+  imageFadeMs,
+  overlayFadeMs,
   playOnce = true,
   sessionKey = 'varelism-home-preloader-seen',
   timingScale = 1,
+  whiteHoldMs,
 } = Astro.props;
 ---
 
@@ -22,9 +28,12 @@ const {
   data-home-preloader
   data-active-paths={activePaths.join('|')}
   data-complete-event={completeEvent}
+  data-image-fade-ms={imageFadeMs}
+  data-overlay-fade-ms={overlayFadeMs}
   data-play-once={playOnce ? 'true' : 'false'}
   data-session-key={sessionKey}
   data-timing-scale={timingScale}
+  data-white-hold-ms={whiteHoldMs}
   aria-hidden="true"
 >
   <video
@@ -224,11 +233,16 @@ const {
       const activePaths = (overlay.dataset.activePaths || '/|/index.html').split('|').filter(Boolean);
       const playOnce = overlay.dataset.playOnce !== 'false';
       const timingScale = Math.max(0.1, Number.parseFloat(overlay.dataset.timingScale || '1') || 1);
+      const getDuration = (name, fallback) => {
+        const parsed = Number.parseFloat(overlay.dataset[name] || '');
+
+        return Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed) : Math.round(fallback);
+      };
       // Match the single-pass animation duration so ready pages reveal after one full iteration.
       const imageVisibleMs = Math.round(3070 * timingScale);
-      const imageFadeMs = Math.round(300 * timingScale);
-      const whiteHoldMs = Math.round(300 * timingScale);
-      const overlayFadeMs = Math.round(300 * timingScale);
+      const imageFadeMs = getDuration('imageFadeMs', 300 * timingScale);
+      const whiteHoldMs = getDuration('whiteHoldMs', 300 * timingScale);
+      const overlayFadeMs = getDuration('overlayFadeMs', 300 * timingScale);
       const fallbackMs = Math.round(10000 * timingScale);
       const isActivePath = activePaths.some((path) => isSamePath(path, window.location.pathname));
       const forcePreloader = isForcedByPendingNavigation(activePaths);
@@ -237,6 +251,8 @@ const {
       let cleanupVideo = () => {};
       let cleanupHandoffCompletion = () => {};
       const timers = new Set();
+      overlay.style.setProperty('--home-preloader-image-fade-ms', `${imageFadeMs}ms`);
+      overlay.style.setProperty('--home-preloader-overlay-fade-ms', `${overlayFadeMs}ms`);
       const storage = {
         get() {
           try {
@@ -479,7 +495,9 @@ const {
     opacity: 0;
     pointer-events: none;
     position: fixed;
-    transition: opacity 300ms ease, visibility 300ms ease;
+    transition:
+      opacity var(--home-preloader-overlay-fade-ms, 300ms) ease,
+      visibility var(--home-preloader-overlay-fade-ms, 300ms) ease;
     visibility: hidden;
     z-index: 9999;
   }
@@ -504,7 +522,7 @@ const {
     object-fit: contain;
     opacity: 1;
     pointer-events: none;
-    transition: opacity 300ms ease;
+    transition: opacity var(--home-preloader-image-fade-ms, 300ms) ease;
     user-select: none;
     width: min(48vw, 22rem);
     background: transparent;

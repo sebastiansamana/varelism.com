@@ -7,8 +7,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
   <HomePreloader
     activePaths={['/author/', '/author']}
     completeEvent="varelism:author-preloader-complete"
+    imageFadeMs={180}
+    overlayFadeMs={180}
     playOnce={false}
     sessionKey="varelism-author-preloader-seen"
+    whiteHoldMs={60}
   />
 
   <section class="author-stage" data-author-stage aria-label="Author">
@@ -57,19 +60,18 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     const isPortraitPhoneViewport = (stageWidth, stageHeight) =>
       stageWidth <= 600 && stageHeight > stageWidth * 1.35;
     const getAuthorCurveScale = ({ stageHeight = window.innerHeight, stageWidth }) => {
-      const mobileViewport = stageWidth <= 560;
+      const portraitPhoneViewport = isPortraitPhoneViewport(stageWidth, stageHeight);
+      const mobileViewport = stageWidth <= 560 || portraitPhoneViewport;
       const compactViewport = stageWidth <= 900;
-      const portraitPhoneViewport =
-        mobileViewport && stageHeight > stageWidth && stageHeight >= 640;
 
       return {
-        amplitudeFactorMax: portraitPhoneViewport ? 0.235 : 0.2,
-        amplitudeFactorMin: portraitPhoneViewport ? 0.11 : 0.13,
+        amplitudeFactorMax: portraitPhoneViewport ? 0.22 : 0.2,
+        amplitudeFactorMin: portraitPhoneViewport ? 0.13 : 0.13,
         amplitudeMaximum: portraitPhoneViewport
-          ? clamp(stageHeight * 0.18, 78, 160)
+          ? clamp(stageHeight * 0.2, 82, 168)
           : clamp(stageHeight * 0.18, 72, 170),
-        amplitudeMinimum: portraitPhoneViewport ? 28 : 26,
-        bodySegmentCount: portraitPhoneViewport ? 7 : null,
+        amplitudeMinimum: portraitPhoneViewport ? 34 : 26,
+        bodySegmentCount: portraitPhoneViewport ? 5 : null,
         fallbackBooksY: portraitPhoneViewport
           ? 0.72
           : mobileViewport
@@ -106,23 +108,23 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           : compactViewport
             ? clamp(stageHeight * 0.18, 136, 240)
             : 0,
-        normalXScale: portraitPhoneViewport ? 0.62 : 1,
+        normalXScale: portraitPhoneViewport ? 0.65 : 1,
         normalYScale: 1,
-        terminalTangentFactorMax: 0.5,
-        terminalTangentFactorMin: 0.34,
+        terminalTangentFactorMax: portraitPhoneViewport ? 0.62 : 0.5,
+        terminalTangentFactorMin: portraitPhoneViewport ? 0.44 : 0.34,
         terminalTangentMaximum: 220,
-        terminalTangentMinimum: 52,
+        terminalTangentMinimum: portraitPhoneViewport ? 78 : 52,
         textSeparationPadding: mobileViewport ? 88 : compactViewport ? 84 : 72,
         tensionMax: 0.68,
-        tensionMin: 0.5,
-        wavelengthDriftFactor: portraitPhoneViewport ? 0.065 : 0.035,
-        waveEnvelopePower: portraitPhoneViewport ? 0.9 : 1.12,
-        waveMagnitudeMax: portraitPhoneViewport ? 1.36 : 1.18,
-        waveMagnitudeMin: portraitPhoneViewport ? 0.52 : 0.72,
-        waveTJitterFactor: portraitPhoneViewport ? 0.34 : 0.22,
-        waveTJitter: portraitPhoneViewport ? 0.075 : 0.055,
-        waveTMax: portraitPhoneViewport ? 0.86 : 0.78,
-        waveTMin: portraitPhoneViewport ? 0.14 : 0.22,
+        tensionMin: portraitPhoneViewport ? 0.54 : 0.5,
+        wavelengthDriftFactor: portraitPhoneViewport ? 0.024 : 0.035,
+        waveEnvelopePower: portraitPhoneViewport ? 0.86 : 1.12,
+        waveMagnitudeMax: portraitPhoneViewport ? 1.08 : 1.18,
+        waveMagnitudeMin: portraitPhoneViewport ? 0.72 : 0.72,
+        waveTJitterFactor: portraitPhoneViewport ? 0.14 : 0.22,
+        waveTJitter: portraitPhoneViewport ? 0.028 : 0.055,
+        waveTMax: portraitPhoneViewport ? 0.9 : 0.78,
+        waveTMin: portraitPhoneViewport ? 0.1 : 0.22,
       };
     };
 
@@ -287,7 +289,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     }) {
       const viewportHeight =
         window.innerHeight || document.documentElement.clientHeight || stageHeight;
-      const requestedMinimumVerticalDistance = viewportHeight * 0.56;
+      const requestedMinimumVerticalDistance = viewportHeight * 0.62;
+      const requestedMinimumPathDistance = viewportHeight * 0.66;
       const getPointAtRandomX = (range, y) => ({
         x: randomBetween(range.minX, range.maxX),
         y,
@@ -307,26 +310,38 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         const upperMaxY = Math.min(upperRange.maxY, lowerRange.maxY - distance);
         const upperY = randomBetween(upperMinY, upperMaxY);
         const lowerY = upperY + distance;
+        const upperPoint = getPointAtRandomX(upperRange, upperY);
+        const lowerPoint = getPointAtRandomX(lowerRange, lowerY);
+        const pathDistance = Math.hypot(lowerPoint.x - upperPoint.x, lowerPoint.y - upperPoint.y);
+
+        if (pathDistance < Math.min(requestedMinimumPathDistance, maxDistance)) return null;
 
         return {
-          [upperKey]: getPointAtRandomX(upperRange, upperY),
-          [lowerKey]: getPointAtRandomX(lowerRange, lowerY),
+          [upperKey]: upperPoint,
+          [lowerKey]: lowerPoint,
         };
       };
-      const candidates = [
-        getCandidate({
+
+      const candidates = [];
+
+      for (let attempt = 0; attempt < 60; attempt += 1) {
+        const booksLowerCandidate = getCandidate({
           lowerKey: 'books',
           lowerRange: booklistRange,
           upperKey: 'memories',
           upperRange: memoriesRange,
-        }),
-        getCandidate({
+        });
+        const memoriesLowerCandidate = getCandidate({
           lowerKey: 'memories',
           lowerRange: memoriesRange,
           upperKey: 'books',
           upperRange: booklistRange,
-        }),
-      ].filter(Boolean);
+        });
+
+        if (booksLowerCandidate) candidates.push(booksLowerCandidate);
+        if (memoriesLowerCandidate) candidates.push(memoriesLowerCandidate);
+        if (candidates.length >= 12) break;
+      }
 
       if (candidates.length) {
         const { books, memories } = candidates[Math.floor(Math.random() * candidates.length)];
@@ -482,6 +497,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         stageWidth = window.innerWidth,
         startPoint,
       } = endpointData;
+      const portraitPhoneCurve = isPortraitPhoneViewport(stageWidth, stageHeight);
       const curveScale = getAuthorCurveScale({ stageHeight, stageWidth });
       const pathStartPoint = {
         x: startPoint.x,
@@ -548,7 +564,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           curveScale.waveTMin,
           curveScale.waveTMax
         );
-        const waveEnvelope = Math.sin(Math.PI * t) ** curveScale.waveEnvelopePower;
+        const rawEnvelope = Math.sin(Math.PI * t) ** curveScale.waveEnvelopePower;
+        const waveEnvelope = portraitPhoneCurve ? Math.max(0.56, rawEnvelope) : rawEnvelope;
         const waveSign = bendSign * (index % 2 === 0 ? -1 : 1);
         const waveAmplitude =
           amplitude *
@@ -575,6 +592,25 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
       bodyPoints.push(bodyEnd);
 
+      if (portraitPhoneCurve && bodyPoints.length > 3) {
+        const originalPoints = bodyPoints.map((point) => ({ ...point }));
+
+        for (let index = 1; index < bodyPoints.length - 1; index += 1) {
+          const previousPoint = originalPoints[index - 1];
+          const point = originalPoints[index];
+          const nextPoint = originalPoints[index + 1];
+          const midpoint = {
+            x: (previousPoint.x + nextPoint.x) / 2,
+            y: (previousPoint.y + nextPoint.y) / 2,
+          };
+
+          bodyPoints[index] = {
+            x: point.x * 0.82 + midpoint.x * 0.18,
+            y: point.y * 0.94 + midpoint.y * 0.06,
+          };
+        }
+      }
+
       const getBodyTangent = (index) => {
         if (index === 0 || index === bodyPoints.length - 1) {
           return {
@@ -584,7 +620,25 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         }
 
         const previousPoint = bodyPoints[index - 1];
+        const point = bodyPoints[index];
         const nextPoint = bodyPoints[index + 1];
+
+        if (portraitPhoneCurve) {
+          const tangentX = nextPoint.x - previousPoint.x;
+          const tangentY = nextPoint.y - previousPoint.y;
+          const tangentLength = Math.hypot(tangentX, tangentY);
+          const previousLength = Math.hypot(point.x - previousPoint.x, point.y - previousPoint.y);
+          const nextLength = Math.hypot(nextPoint.x - point.x, nextPoint.y - point.y);
+          const handleLength = Math.min(previousLength, nextLength) * 1.08;
+
+          if (tangentLength > 0.001) {
+            return {
+              x: (tangentX / tangentLength) * handleLength,
+              y: (tangentY / tangentLength) * handleLength,
+            };
+          }
+        }
+
         const tension = randomBetween(curveScale.tensionMin, curveScale.tensionMax);
 
         return {
