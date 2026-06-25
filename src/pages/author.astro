@@ -587,6 +587,36 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             Number.isFinite(portraitPhoneAmplitudeLimit) ? portraitPhoneAmplitudeLimit : amplitude
           )
         : amplitude;
+      const getPortraitPhonePoint = (t) => {
+        const portraitPhoneWave = getPortraitPhoneWave(t);
+        const waveOffset = portraitPhoneAmplitude * portraitPhoneWave * bendSign;
+        const progressT = getPortraitPhoneProgressT(t);
+
+        return {
+          x:
+            bodyStart.x +
+            dx * progressT +
+            normal.x * curveScale.normalXScale * waveOffset,
+          y:
+            bodyStart.y +
+            dy * progressT +
+            normal.y * curveScale.normalYScale * waveOffset,
+          curveT: t,
+        };
+      };
+      const getPortraitPhoneDerivative = (t) => {
+        const sampleSize = 0.012;
+        const previousT = Math.max(0, t - sampleSize);
+        const nextT = Math.min(1, t + sampleSize);
+        const previousPoint = getPortraitPhonePoint(previousT);
+        const nextPoint = getPortraitPhonePoint(nextT);
+        const sampleDistance = Math.max(nextT - previousT, 0.001);
+
+        return {
+          x: (nextPoint.x - previousPoint.x) / sampleDistance,
+          y: (nextPoint.y - previousPoint.y) / sampleDistance,
+        };
+      };
       const terminalTangentLength = clamp(
         distance *
           randomBetween(curveScale.terminalTangentFactorMin, curveScale.terminalTangentFactorMax),
@@ -606,11 +636,6 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         );
         const rawEnvelope = Math.sin(Math.PI * t) ** curveScale.waveEnvelopePower;
         const waveEnvelope = portraitPhoneCurve ? Math.max(0.72, rawEnvelope) : rawEnvelope;
-        const portraitPhoneWave = portraitPhoneCurve ? getPortraitPhoneWave(t) : 0;
-        const waveOffset = portraitPhoneCurve
-          ? portraitPhoneAmplitude * portraitPhoneWave * bendSign
-          : 0;
-        const progressT = portraitPhoneCurve ? getPortraitPhoneProgressT(t) : t;
         const waveSign = bendSign * (index % 2 === 0 ? -1 : 1);
         const waveAmplitude = portraitPhoneCurve
           ? 0
@@ -623,42 +648,45 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             randomBetween(-curveScale.wavelengthDriftFactor, curveScale.wavelengthDriftFactor) *
             waveEnvelope;
 
-        bodyPoints.push({
-          x:
-            bodyStart.x +
-            dx * progressT +
-            bodyDirection.x * wavelengthDrift +
-            normal.x *
-              curveScale.normalXScale *
-              (portraitPhoneCurve ? waveOffset : waveAmplitude * waveSign),
-          y:
-            bodyStart.y +
-            dy * progressT +
-            bodyDirection.y * wavelengthDrift +
-            normal.y *
-              curveScale.normalYScale *
-              (portraitPhoneCurve ? waveOffset : waveAmplitude * waveSign),
-          curveT: t,
-        });
+        if (portraitPhoneCurve) {
+          bodyPoints.push(getPortraitPhonePoint(t));
+        } else {
+          bodyPoints.push({
+            x:
+              bodyStart.x +
+              dx * t +
+              bodyDirection.x * wavelengthDrift +
+              normal.x * curveScale.normalXScale * waveAmplitude * waveSign,
+            y:
+              bodyStart.y +
+              dy * t +
+              bodyDirection.y * wavelengthDrift +
+              normal.y * curveScale.normalYScale * waveAmplitude * waveSign,
+            curveT: t,
+          });
+        }
       }
 
       bodyPoints.push({ ...bodyEnd, curveT: 1 });
 
+      const getTerminalTangentLength = (index) => {
+        const adjacentPoint = index === 0
+          ? bodyPoints[index + 1]
+          : bodyPoints[index - 1];
+        const point = bodyPoints[index];
+        const adjacentDistance = adjacentPoint
+          ? Math.hypot(adjacentPoint.x - point.x, adjacentPoint.y - point.y)
+          : terminalTangentLength;
+
+        return portraitPhoneCurve
+          ? Math.min(terminalTangentLength, adjacentDistance * 0.9)
+          : terminalTangentLength;
+      };
+
       const getBodyTangent = (index) => {
         if (index === 0 || index === bodyPoints.length - 1) {
-          const adjacentPoint = index === 0
-            ? bodyPoints[index + 1]
-            : bodyPoints[index - 1];
-          const point = bodyPoints[index];
-          const adjacentDistance = adjacentPoint
-            ? Math.hypot(adjacentPoint.x - point.x, adjacentPoint.y - point.y)
-            : terminalTangentLength;
-          const tangentLength = portraitPhoneCurve
-            ? Math.min(terminalTangentLength, adjacentDistance * 0.9)
-            : terminalTangentLength;
-
           return {
-            x: horizontalDirection.x * tangentLength,
+            x: horizontalDirection.x * getTerminalTangentLength(index),
             y: 0,
           };
         }
@@ -694,14 +722,25 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       const tangents = bodyPoints.map((_, index) => getBodyTangent(index));
       const cubicCommands = bodyPoints.slice(0, -1).map((point, index) => {
         const nextPoint = bodyPoints[index + 1];
-        const controlOne = {
-          x: point.x + tangents[index].x / 3,
-          y: point.y + tangents[index].y / 3,
-        };
-        const controlTwo = {
-          x: nextPoint.x - tangents[index + 1].x / 3,
-          y: nextPoint.y - tangents[index + 1].y / 3,
-        };
+        const segmentT = Math.max((nextPoint.curveT ?? 1) - (point.curveT ?? 0), 0.001);
+        const controlOne = portraitPhoneCurve && index > 0
+          ? {
+              x: point.x + (getPortraitPhoneDerivative(point.curveT).x * segmentT) / 3,
+              y: point.y + (getPortraitPhoneDerivative(point.curveT).y * segmentT) / 3,
+            }
+          : {
+              x: point.x + tangents[index].x / 3,
+              y: point.y + tangents[index].y / 3,
+            };
+        const controlTwo = portraitPhoneCurve && index + 1 < bodyPoints.length - 1
+          ? {
+              x: nextPoint.x - (getPortraitPhoneDerivative(nextPoint.curveT).x * segmentT) / 3,
+              y: nextPoint.y - (getPortraitPhoneDerivative(nextPoint.curveT).y * segmentT) / 3,
+            }
+          : {
+              x: nextPoint.x - tangents[index + 1].x / 3,
+              y: nextPoint.y - tangents[index + 1].y / 3,
+            };
 
         return [
           'C',
