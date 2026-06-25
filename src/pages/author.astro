@@ -56,6 +56,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
     const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
     const randomBetween = (min, max) => (max <= min ? min : min + Math.random() * (max - min));
+    const smoothstep = (value) => {
+      const t = clamp(value, 0, 1);
+
+      return t * t * (3 - 2 * t);
+    };
     const formatPathNumber = (value) => (Number.isFinite(value) ? String(value) : '0');
     const isPortraitPhoneViewport = (stageWidth, stageHeight) =>
       stageWidth <= 600 && stageHeight > stageWidth * 1.35;
@@ -71,7 +76,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           ? clamp(stageHeight * 0.2, 82, 168)
           : clamp(stageHeight * 0.18, 72, 170),
         amplitudeMinimum: portraitPhoneViewport ? 34 : 26,
-        bodySegmentCount: portraitPhoneViewport ? 5 : null,
+        bodySegmentCount: portraitPhoneViewport ? 12 : null,
         fallbackBooksY: portraitPhoneViewport
           ? 0.72
           : mobileViewport
@@ -110,17 +115,17 @@ import BaseLayout from '../layouts/BaseLayout.astro';
             : 0,
         normalXScale: portraitPhoneViewport ? 0.65 : 1,
         normalYScale: 1,
-        terminalTangentFactorMax: portraitPhoneViewport ? 0.62 : 0.5,
-        terminalTangentFactorMin: portraitPhoneViewport ? 0.44 : 0.34,
-        terminalTangentMaximum: 220,
-        terminalTangentMinimum: portraitPhoneViewport ? 78 : 52,
+        terminalTangentFactorMax: portraitPhoneViewport ? 0.34 : 0.5,
+        terminalTangentFactorMin: portraitPhoneViewport ? 0.24 : 0.34,
+        terminalTangentMaximum: portraitPhoneViewport ? 118 : 220,
+        terminalTangentMinimum: portraitPhoneViewport ? 46 : 52,
         textSeparationPadding: mobileViewport ? 88 : compactViewport ? 84 : 72,
         tensionMax: 0.68,
         tensionMin: portraitPhoneViewport ? 0.54 : 0.5,
         wavelengthDriftFactor: portraitPhoneViewport ? 0.024 : 0.035,
         waveEnvelopePower: portraitPhoneViewport ? 0.86 : 1.12,
-        waveMagnitudeMax: portraitPhoneViewport ? 1.08 : 1.18,
-        waveMagnitudeMin: portraitPhoneViewport ? 0.72 : 0.72,
+        waveMagnitudeMax: portraitPhoneViewport ? 1.12 : 1.18,
+        waveMagnitudeMin: portraitPhoneViewport ? 0.82 : 0.72,
         waveTJitterFactor: portraitPhoneViewport ? 0.14 : 0.22,
         waveTJitter: portraitPhoneViewport ? 0.028 : 0.055,
         waveTMax: portraitPhoneViewport ? 0.9 : 0.78,
@@ -548,7 +553,57 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       const bendSign = Math.random() < 0.5 ? -1 : 1;
       const bodySegmentCount =
         curveScale.bodySegmentCount || (distance > 620 ? 4 : distance > 240 ? 3 : 2);
-      const bodyPoints = [bodyStart];
+      const bodyPoints = [{ ...bodyStart, curveT: 0 }];
+      const portraitPhoneCycles = portraitPhoneCurve ? 1.5 : 0;
+      const portraitPhoneWarp = portraitPhoneCurve ? randomBetween(-0.032, 0.032) : 0;
+      const getPortraitPhoneSampleT = (index) => {
+        const internalCount = Math.max(1, bodySegmentCount - 1);
+
+        if (internalCount === 1) {
+          return 0.5;
+        }
+
+        return 0.22 + ((index - 1) / (internalCount - 1)) * 0.56;
+      };
+      const getPortraitPhoneProgressT = (t) => t * 0.72 + smoothstep(t) * 0.28;
+      const getPortraitPhoneWave = (t) => {
+        const edgeEase = Math.sin(Math.PI * t);
+        const endpointEase = smoothstep(t / 0.34) * smoothstep((1 - t) / 0.34);
+        const envelope = (0.36 + Math.max(0, edgeEase) ** 0.44 * 0.64) * endpointEase;
+        const warpedT = clamp(
+          t +
+            Math.sin(Math.PI * 2 * t) * portraitPhoneWarp +
+            Math.sin(Math.PI * 4 * t) * 0.004,
+          0,
+          1
+        );
+
+        return Math.sin(Math.PI * 2 * portraitPhoneCycles * warpedT) * envelope;
+      };
+      const portraitPhoneAmplitudeLimit = portraitPhoneCurve
+        ? Array.from({ length: bodySegmentCount - 1 }, (_, index) => getPortraitPhoneSampleT(index + 1))
+            .reduce((limit, t) => {
+              const progressT = getPortraitPhoneProgressT(t);
+              const baselineX = bodyStart.x + dx * progressT;
+              const waveX = Math.abs(getPortraitPhoneWave(t) * normal.x * curveScale.normalXScale);
+
+              if (waveX < 0.001) {
+                return limit;
+              }
+
+              return Math.min(
+                limit,
+                Math.abs(baselineX - TEXT_TO_LINE_GAP) / waveX,
+                Math.abs(stageWidth - TEXT_TO_LINE_GAP - baselineX) / waveX
+              );
+            }, Number.POSITIVE_INFINITY)
+        : amplitude;
+      const portraitPhoneAmplitude = portraitPhoneCurve
+        ? Math.min(
+            amplitude,
+            Number.isFinite(portraitPhoneAmplitudeLimit) ? portraitPhoneAmplitudeLimit : amplitude
+          )
+        : amplitude;
       const terminalTangentLength = clamp(
         distance *
           randomBetween(curveScale.terminalTangentFactorMin, curveScale.terminalTangentFactorMax),
@@ -557,64 +612,70 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       );
 
       for (let index = 1; index < bodySegmentCount; index += 1) {
-        const baseT = index / bodySegmentCount;
-        const jitter = Math.min(curveScale.waveTJitter, curveScale.waveTJitterFactor / bodySegmentCount);
+        const baseT = portraitPhoneCurve ? getPortraitPhoneSampleT(index) : index / bodySegmentCount;
+        const jitter = portraitPhoneCurve
+          ? 0
+          : Math.min(curveScale.waveTJitter, curveScale.waveTJitterFactor / bodySegmentCount);
         const t = clamp(
           baseT + randomBetween(-jitter, jitter),
-          curveScale.waveTMin,
-          curveScale.waveTMax
+          portraitPhoneCurve ? 0 : curveScale.waveTMin,
+          portraitPhoneCurve ? 1 : curveScale.waveTMax
         );
         const rawEnvelope = Math.sin(Math.PI * t) ** curveScale.waveEnvelopePower;
-        const waveEnvelope = portraitPhoneCurve ? Math.max(0.56, rawEnvelope) : rawEnvelope;
+        const waveEnvelope = portraitPhoneCurve ? Math.max(0.72, rawEnvelope) : rawEnvelope;
+        const portraitPhoneWave = portraitPhoneCurve ? getPortraitPhoneWave(t) : 0;
+        const waveOffset = portraitPhoneCurve
+          ? portraitPhoneAmplitude * portraitPhoneWave * bendSign
+          : 0;
+        const progressT = portraitPhoneCurve ? getPortraitPhoneProgressT(t) : t;
         const waveSign = bendSign * (index % 2 === 0 ? -1 : 1);
-        const waveAmplitude =
-          amplitude *
-          waveEnvelope *
-          randomBetween(curveScale.waveMagnitudeMin, curveScale.waveMagnitudeMax);
-        const wavelengthDrift =
-          distance *
-          randomBetween(-curveScale.wavelengthDriftFactor, curveScale.wavelengthDriftFactor) *
-          waveEnvelope;
+        const waveAmplitude = portraitPhoneCurve
+          ? 0
+          : amplitude *
+            waveEnvelope *
+            randomBetween(curveScale.waveMagnitudeMin, curveScale.waveMagnitudeMax);
+        const wavelengthDrift = portraitPhoneCurve
+          ? 0
+          : distance *
+            randomBetween(-curveScale.wavelengthDriftFactor, curveScale.wavelengthDriftFactor) *
+            waveEnvelope;
 
         bodyPoints.push({
           x:
             bodyStart.x +
-            dx * t +
+            dx * progressT +
             bodyDirection.x * wavelengthDrift +
-            normal.x * curveScale.normalXScale * waveAmplitude * waveSign,
+            normal.x *
+              curveScale.normalXScale *
+              (portraitPhoneCurve ? waveOffset : waveAmplitude * waveSign),
           y:
             bodyStart.y +
-            dy * t +
+            dy * progressT +
             bodyDirection.y * wavelengthDrift +
-            normal.y * curveScale.normalYScale * waveAmplitude * waveSign,
+            normal.y *
+              curveScale.normalYScale *
+              (portraitPhoneCurve ? waveOffset : waveAmplitude * waveSign),
+          curveT: t,
         });
       }
 
-      bodyPoints.push(bodyEnd);
-
-      if (portraitPhoneCurve && bodyPoints.length > 3) {
-        const originalPoints = bodyPoints.map((point) => ({ ...point }));
-
-        for (let index = 1; index < bodyPoints.length - 1; index += 1) {
-          const previousPoint = originalPoints[index - 1];
-          const point = originalPoints[index];
-          const nextPoint = originalPoints[index + 1];
-          const midpoint = {
-            x: (previousPoint.x + nextPoint.x) / 2,
-            y: (previousPoint.y + nextPoint.y) / 2,
-          };
-
-          bodyPoints[index] = {
-            x: point.x * 0.82 + midpoint.x * 0.18,
-            y: point.y * 0.94 + midpoint.y * 0.06,
-          };
-        }
-      }
+      bodyPoints.push({ ...bodyEnd, curveT: 1 });
 
       const getBodyTangent = (index) => {
         if (index === 0 || index === bodyPoints.length - 1) {
+          const adjacentPoint = index === 0
+            ? bodyPoints[index + 1]
+            : bodyPoints[index - 1];
+          const point = bodyPoints[index];
+          const adjacentDistance = adjacentPoint
+            ? Math.hypot(adjacentPoint.x - point.x, adjacentPoint.y - point.y)
+            : terminalTangentLength;
+          const tangentLength = portraitPhoneCurve
+            ? Math.min(terminalTangentLength, adjacentDistance * 0.9)
+            : terminalTangentLength;
+
           return {
-            x: horizontalDirection.x * terminalTangentLength,
+            x: horizontalDirection.x * tangentLength,
             y: 0,
           };
         }
@@ -629,7 +690,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           const tangentLength = Math.hypot(tangentX, tangentY);
           const previousLength = Math.hypot(point.x - previousPoint.x, point.y - previousPoint.y);
           const nextLength = Math.hypot(nextPoint.x - point.x, nextPoint.y - point.y);
-          const handleLength = Math.min(previousLength, nextLength) * 1.08;
+          const handleLength = Math.min(previousLength, nextLength) * 0.96;
 
           if (tangentLength > 0.001) {
             return {
