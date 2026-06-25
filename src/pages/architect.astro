@@ -69,7 +69,11 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
       video.tabIndex = -1;
     };
 
-    const startPreloaderVideo = (preloader, shouldReplay) => {
+    const startPreloaderVideo = (
+      preloader,
+      shouldReplay,
+      { autoStart = true, onCycleStart = () => {}, onCycleEnd = () => {} } = {},
+    ) => {
       const video = preloader?.querySelector('.architect-preloader__media');
 
       if (!(video instanceof HTMLVideoElement)) return () => {};
@@ -85,15 +89,19 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
           const playAttempt = video.play();
 
           if (playAttempt?.catch) {
-            playAttempt.catch(() => {});
+            playAttempt.catch(() => {
+              onCycleEnd();
+            });
           }
         } catch {
           // A rejected autoplay attempt should never expose browser controls or block the page.
+          onCycleEnd();
         }
       };
 
       const restartVideo = () => {
         preparePassivePreloaderVideo(video);
+        onCycleStart();
 
         try {
           video.pause();
@@ -106,18 +114,36 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
       };
 
       const onEnded = () => {
-        if (!isDisposed && shouldReplay()) restartVideo();
+        if (isDisposed) return;
+
+        onCycleEnd();
+
+        if (shouldReplay()) restartVideo();
       };
+      const onError = onCycleEnd;
       const onReady = playVideo;
 
       video.addEventListener('ended', onEnded);
+      video.addEventListener('error', onError, { once: true });
       video.addEventListener('loadeddata', onReady, { once: true });
       video.addEventListener('canplaythrough', onReady, { once: true });
-      restartVideo();
+      if (autoStart) {
+        restartVideo();
+      } else {
+        preparePassivePreloaderVideo(video);
+
+        try {
+          video.pause();
+          video.currentTime = 0;
+        } catch {
+          // Astro can insert the autoplaying video before this script runs.
+        }
+      }
 
       return () => {
         isDisposed = true;
         video.removeEventListener('ended', onEnded);
+        video.removeEventListener('error', onError);
         video.removeEventListener('loadeddata', onReady);
         video.removeEventListener('canplaythrough', onReady);
 
@@ -126,6 +152,36 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
         } catch {
           // Ignore media cleanup failures.
         }
+      };
+    };
+
+    const isSamePath = (pathA, pathB) =>
+      pathA === pathB ||
+      `${pathA.replace(/\/$/, '')}/` === `${pathB.replace(/\/$/, '')}/`;
+
+    const getPendingHandoffPlayback = () => {
+      const pendingNavigation = window.__varelismPendingPreloaderNavigation;
+
+      if (
+        !pendingNavigation?.handoffStartedAt ||
+        !pendingNavigation.pathname ||
+        !isSamePath(pendingNavigation.pathname, window.location.pathname)
+      ) {
+        return null;
+      }
+
+      const cycleDurationMs = Math.max(
+        500,
+        pendingNavigation.handoffCycleDurationMs || window.__varelismPreloaderCycleDurationMs || 3067
+      );
+      const elapsedMs = Math.max(0, window.performance.now() - pendingNavigation.handoffStartedAt);
+      const cycleElapsed = elapsedMs >= cycleDurationMs;
+      const remainingMs = Math.max(0, cycleDurationMs - elapsedMs);
+
+      return {
+        cycleElapsed,
+        currentTime: cycleElapsed ? 0 : elapsedMs / 1000,
+        remainingMs,
       };
     };
 
@@ -154,9 +210,11 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
       let hasMetMinimumDuration = false;
       let isModelReady = false;
       let isPreloaderHiding = false;
+      let isReplayCycleBlockingReveal = false;
       let cleanupSpatialLinks = () => {};
       let cleanupPreloaderVideo = () => {};
       let isPointCoveredByModel = () => true;
+      const handoffPlayback = getPendingHandoffPlayback();
       const preloaderTimers = new Set();
       const getSpatialLinks = () =>
         Array.from(controlsElement.querySelectorAll('[data-architect-spatial-link]')).filter(
@@ -167,11 +225,6 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
       const imageFadeMs = 300;
       const whiteHoldMs = 300;
       const overlayFadeMs = 300;
-
-      cleanupPreloaderVideo = startPreloaderVideo(
-        preloader,
-        () => !hasDisposed && !isPreloaderHiding && !isModelReady,
-      );
 
       const setPreloaderTimer = (callback, delay) => {
         const timer = window.setTimeout(() => {
@@ -186,12 +239,29 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
         document.documentElement.classList.remove('architect-preloader-active');
       };
 
+      const clearPendingArchitectPreloader = () => {
+        const pendingNavigation = window.__varelismPendingPreloaderNavigation;
+
+        if (pendingNavigation?.pathname && isSamePath(pendingNavigation.pathname, window.location.pathname)) {
+          window.__varelismPendingPreloaderNavigation = null;
+        }
+      };
+
       const removePreloader = () => {
+        clearPendingArchitectPreloader();
         preloader?.remove();
       };
 
       const hidePreloaderWhenReady = () => {
-        if (hasDisposed || isPreloaderHiding || !isModelReady || !hasMetMinimumDuration) return;
+        if (
+          hasDisposed ||
+          isPreloaderHiding ||
+          isReplayCycleBlockingReveal ||
+          !isModelReady ||
+          !hasMetMinimumDuration
+        ) {
+          return;
+        }
 
         isPreloaderHiding = true;
         preloader?.classList.add('is-image-fading');
@@ -204,6 +274,105 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
           }, whiteHoldMs);
         }, imageFadeMs);
       };
+
+      const startBlockingPreloaderCycle = () => {
+        cleanupPreloaderVideo();
+        cleanupPreloaderVideo = startPreloaderVideo(
+          preloader,
+          () => !hasDisposed && !isPreloaderHiding && !isModelReady,
+          {
+            onCycleStart: () => {
+              isReplayCycleBlockingReveal = true;
+            },
+            onCycleEnd: () => {
+              isReplayCycleBlockingReveal = false;
+              hidePreloaderWhenReady();
+            },
+          },
+        );
+      };
+
+      const playPreloaderFromHandoffTime = () => {
+        const video = preloader?.querySelector('.architect-preloader__media');
+
+        if (!(video instanceof HTMLVideoElement) || !handoffPlayback) return;
+
+        preparePassivePreloaderVideo(video);
+
+        const seekAndPlay = () => {
+          if (hasDisposed || isPreloaderHiding) return;
+
+          try {
+            video.currentTime = handoffPlayback.currentTime;
+          } catch {
+            // If seeking is unavailable, playback still continues without exposing UI.
+          }
+
+          try {
+            const playAttempt = video.play();
+
+            if (playAttempt?.catch) {
+              playAttempt.catch(() => {
+                hidePreloaderWhenReady();
+              });
+            }
+          } catch {
+            hidePreloaderWhenReady();
+          }
+        };
+
+        try {
+          video.pause();
+        } catch {
+          // Astro can insert the autoplaying video before this script takes over.
+        }
+
+        if (video.readyState === 0) {
+          video.addEventListener('loadedmetadata', seekAndPlay, { once: true });
+          video.load();
+          return;
+        }
+
+        seekAndPlay();
+      };
+
+      if (handoffPlayback) {
+        hasMetMinimumDuration = true;
+        cleanupPreloaderVideo = startPreloaderVideo(
+          preloader,
+          () => !hasDisposed && !isPreloaderHiding && !isModelReady,
+          {
+            autoStart: false,
+            onCycleStart: () => {
+              isReplayCycleBlockingReveal = true;
+            },
+            onCycleEnd: () => {
+              isReplayCycleBlockingReveal = false;
+              hidePreloaderWhenReady();
+            },
+          },
+        );
+
+        if (handoffPlayback.cycleElapsed) {
+          setPreloaderTimer(() => {
+            if (!isModelReady && !isPreloaderHiding && !isReplayCycleBlockingReveal) {
+              startBlockingPreloaderCycle();
+            }
+          }, 0);
+        } else {
+          playPreloaderFromHandoffTime();
+          setPreloaderTimer(() => {
+            if (!isModelReady && !isPreloaderHiding && !isReplayCycleBlockingReveal) {
+              startBlockingPreloaderCycle();
+            }
+          }, handoffPlayback.remainingMs + 80);
+        }
+      } else {
+        cleanupPreloaderVideo = startPreloaderVideo(
+          preloader,
+          () => !hasDisposed && !isPreloaderHiding && !isModelReady,
+        );
+      }
 
       setPreloaderTimer(() => {
         hasMetMinimumDuration = true;

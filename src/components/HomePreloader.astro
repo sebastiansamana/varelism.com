@@ -58,6 +58,9 @@ const {
     const shouldKeepBootingAfterSwap = () =>
       Boolean(window[pendingPreloaderKey]?.keepBootingAfterSwap);
 
+    const shouldPreservePendingHandoffAfterSwap = () =>
+      Boolean(window[pendingPreloaderKey]?.handoffStartedAt);
+
     const isSamePath = (pathA, pathB) =>
       pathA === pathB ||
       `${pathA.replace(/\/$/, '')}/` === `${pathB.replace(/\/$/, '')}/`;
@@ -171,6 +174,31 @@ const {
       );
     };
 
+    const getPendingHandoffPlayback = (activePaths) => {
+      const pendingNavigation = window[pendingPreloaderKey];
+
+      if (
+        !pendingNavigation?.handoffStartedAt ||
+        !activePaths.some((path) => isSamePath(path, pendingNavigation.pathname || window.location.pathname))
+      ) {
+        return null;
+      }
+
+      const cycleDurationMs = Math.max(
+        500,
+        pendingNavigation.handoffCycleDurationMs || window.__varelismPreloaderCycleDurationMs || 3067
+      );
+      const elapsedMs = Math.max(0, window.performance.now() - pendingNavigation.handoffStartedAt);
+      const cycleElapsed = elapsedMs >= cycleDurationMs;
+      const remainingMs = Math.max(0, cycleDurationMs - elapsedMs);
+
+      return {
+        cycleElapsed,
+        currentTime: cycleElapsed ? 0 : elapsedMs / 1000,
+        remainingMs,
+      };
+    };
+
     const initOverlay = (overlay) => {
       if (!(overlay instanceof HTMLElement) || overlay.dataset.homePreloaderBooted === 'true') return;
 
@@ -189,6 +217,7 @@ const {
       const fallbackMs = Math.round(10000 * timingScale);
       const isActivePath = activePaths.some((path) => isSamePath(path, window.location.pathname));
       const forcePreloader = isForcedByPendingNavigation(activePaths);
+      const handoffPlayback = getPendingHandoffPlayback(activePaths);
       let hasRemoved = false;
       let cleanupVideo = () => {};
       const timers = new Set();
@@ -247,17 +276,29 @@ const {
       const video = overlay.querySelector('.home-preloader__media');
       const preloaderVideo = video instanceof HTMLVideoElement ? video : null;
 
+      if (handoffPlayback && preloaderVideo) {
+        preparePassivePreloaderVideo(preloaderVideo);
+
+        try {
+          preloaderVideo.pause();
+          preloaderVideo.currentTime = handoffPlayback.currentTime;
+        } catch {
+          // Astro can insert the autoplaying video before this script takes over.
+        }
+      }
+
       if (playOnce) storage.set();
       document.documentElement.classList.add('home-preloader-active');
       overlay.classList.add('is-visible');
       document.documentElement.classList.remove('home-preloader-booting');
 
       let isPageReady = false;
-      let hasMetMediaMoment = false;
+      let hasMetMediaMoment = Boolean(handoffPlayback);
       let isHiding = false;
+      let isReplayCycleBlockingReveal = false;
 
       const hideOverlay = () => {
-        if (isHiding || !isPageReady || !hasMetMediaMoment) return;
+        if (isHiding || isReplayCycleBlockingReveal || !isPageReady || !hasMetMediaMoment) return;
 
         isHiding = true;
         overlay.classList.add('is-image-fading');
@@ -272,14 +313,47 @@ const {
         hideOverlay();
       };
 
-      const startVideoCycle = () => {
+      const startVideoCycle = ({ blockRevealUntilEnded = false } = {}) => {
         if (!preloaderVideo || hasRemoved || isHiding) return;
+
+        if (blockRevealUntilEnded) {
+          isReplayCycleBlockingReveal = true;
+        }
 
         restartPreloaderVideo(preloaderVideo).then((didPlay) => {
           if (didPlay === false && !hasRemoved) {
+            isReplayCycleBlockingReveal = false;
             markMediaMomentReached();
           }
         });
+      };
+
+      const playVideoFromCurrentTime = () => {
+        if (!preloaderVideo || hasRemoved || isHiding) return;
+
+        const seekAndPlay = () => {
+          if (hasRemoved || isHiding) return;
+
+          try {
+            preloaderVideo.currentTime = handoffPlayback.currentTime;
+          } catch {
+            // If seeking is unavailable, playback still continues without exposing UI.
+          }
+
+          playPreloaderVideo(preloaderVideo).then((didPlay) => {
+            if (didPlay === false && !hasRemoved) {
+              markMediaMomentReached();
+            }
+          });
+        };
+
+        if (preloaderVideo.readyState === 0) {
+          preloaderVideo.addEventListener('loadedmetadata', seekAndPlay, { once: true });
+          preloaderVideo.load();
+          return;
+        }
+
+        seekAndPlay();
       };
 
       if (preloaderVideo) {
@@ -288,8 +362,11 @@ const {
         const onEnded = () => {
           if (hasRemoved || isHiding) return;
 
+          isReplayCycleBlockingReveal = false;
+          markMediaMomentReached();
+
           if (!isPageReady) {
-            startVideoCycle();
+            startVideoCycle({ blockRevealUntilEnded: true });
             return;
           }
 
@@ -316,7 +393,24 @@ const {
           }
         };
 
-        startVideoCycle();
+        if (handoffPlayback) {
+          if (handoffPlayback.cycleElapsed) {
+            setTimer(() => {
+              if (!isPageReady && !isHiding && !isReplayCycleBlockingReveal) {
+                startVideoCycle({ blockRevealUntilEnded: true });
+              }
+            }, 0);
+          } else {
+            playVideoFromCurrentTime();
+            setTimer(() => {
+              if (!isPageReady && !isHiding && !isReplayCycleBlockingReveal) {
+                startVideoCycle({ blockRevealUntilEnded: true });
+              }
+            }, handoffPlayback.remainingMs + 80);
+          }
+        } else {
+          startVideoCycle();
+        }
       }
 
       setTimer(markMediaMomentReached, imageVisibleMs);
@@ -351,7 +445,9 @@ const {
         state.cleanups.clear();
         if (!shouldKeepBootingAfterSwap()) {
           document.documentElement.classList.remove('home-preloader-active', 'home-preloader-booting');
-          clearPendingPreloaderNavigation();
+          if (!shouldPreservePendingHandoffAfterSwap()) {
+            clearPendingPreloaderNavigation();
+          }
         }
       });
       state.listenersAttached = true;
