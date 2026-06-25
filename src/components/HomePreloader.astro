@@ -83,7 +83,7 @@ const {
       const whiteHoldMs = Math.round(300 * timingScale);
       const overlayFadeMs = Math.round(300 * timingScale);
       const fallbackMs = Math.round(10000 * timingScale);
-      const isActivePath = activePaths.includes(window.location.pathname);
+      const isActivePath = activePaths.some((path) => isSamePath(path, window.location.pathname));
       const forcePreloader = isForcedByPendingNavigation(activePaths);
       let hasRemoved = false;
       let onLoad = null;
@@ -193,7 +193,13 @@ const {
       document.querySelectorAll('[data-home-preloader]').forEach(initOverlay);
     };
 
+    const initPreloadersAfterSwap = () => {
+      initPreloaders();
+      window.requestAnimationFrame(initPreloaders);
+    };
+
     if (!state.listenersAttached) {
+      document.addEventListener('astro:after-swap', initPreloadersAfterSwap);
       document.addEventListener('astro:page-load', initPreloaders);
       document.addEventListener('astro:before-swap', () => {
         state.cleanups.forEach((cleanup) => cleanup());

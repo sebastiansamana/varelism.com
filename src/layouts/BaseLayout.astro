@@ -137,6 +137,16 @@ const { title, description = 'Website under construction.' } = Astro.props;
           return Boolean(pendingNavigation?.pathname && isSamePath(pendingNavigation.pathname, pathname));
         };
 
+        const restoreRoutePreloaderShell = () => {
+          const pendingNavigation = getPendingPreloaderNavigation();
+
+          if (!pendingNavigation?.keepBootingAfterSwap || !isPendingPreloaderPath(window.location.pathname)) {
+            return;
+          }
+
+          showPreloaderShell();
+        };
+
         const preparePreloaderNavigation = (url, { force = false } = {}) => {
           const nextRoute = getPreloaderRoute(url.pathname);
           const forceTriptychPreloader = force && triptychHandoffPaths.includes(url.pathname);
@@ -216,6 +226,8 @@ const { title, description = 'Website under construction.' } = Astro.props;
             force: Boolean(isPendingPreloaderPath(url.pathname) && getPendingPreloaderNavigation()?.forcePreloader),
           });
         });
+
+        document.addEventListener('astro:after-swap', restoreRoutePreloaderShell);
 
         document.addEventListener('astro:page-load', () => {
           const currentRoute = getPreloaderRoute(window.location.pathname);
