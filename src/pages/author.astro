@@ -52,6 +52,38 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     const BOOKS_REVEAL_DELAY_MS = 240;
     const MEMORIES_REVEAL_DELAY_MS = BOOKS_REVEAL_DELAY_MS + 1500;
     const CONNECTOR_DRAW_DELAY_MS = MEMORIES_REVEAL_DELAY_MS + 900;
+    const PORTRAIT_PHONE_PRESETS = [
+      {
+        amplitudeFactor: 0.19,
+        bendSign: 1,
+        books: { x: 0.95, y: 0.9 },
+        memories: { x: 0.68, y: 0.1 },
+        memoriesAccentWeight: 0.12,
+        phase: 0.02,
+        waveCycles: 1.94,
+        warp: -0.006,
+      },
+      {
+        amplitudeFactor: 0.18,
+        bendSign: -1,
+        books: { x: 0.86, y: 0.12 },
+        memories: { x: 0.7, y: 0.9 },
+        memoriesAccentWeight: 0.12,
+        phase: -0.01,
+        waveCycles: 1.96,
+        warp: 0.004,
+      },
+      {
+        amplitudeFactor: 0.2,
+        bendSign: 1,
+        books: { x: 0.72, y: 0.9 },
+        memories: { x: 0.6, y: 0.1 },
+        memoriesAccentWeight: 0.1,
+        phase: 0.035,
+        waveCycles: 1.92,
+        warp: 0.008,
+      },
+    ];
 
     const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
     const randomBetween = (min, max) => (max <= min ? min : min + Math.random() * (max - min));
@@ -63,6 +95,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     const formatPathNumber = (value) => (Number.isFinite(value) ? String(value) : '0');
     const isPortraitPhoneViewport = (stageWidth, stageHeight) =>
       stageWidth <= 600 && stageHeight > stageWidth * 1.35;
+    const getRandomPortraitPhonePreset = () =>
+      PORTRAIT_PHONE_PRESETS[Math.floor(Math.random() * PORTRAIT_PHONE_PRESETS.length)];
     const getAuthorCurveScale = ({ stageHeight = window.innerHeight, stageWidth }) => {
       const portraitPhoneViewport = isPortraitPhoneViewport(stageWidth, stageHeight);
       const mobileViewport = stageWidth <= 560 || portraitPhoneViewport;
@@ -270,11 +304,24 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       y: randomBetween(range.minY, range.maxY),
     });
 
+    const getPresetPointInRange = (range, presetPoint) => ({
+      x: range.minX + (range.maxX - range.minX) * presetPoint.x,
+      y: range.minY + (range.maxY - range.minY) * presetPoint.y,
+    });
+
     function getPortraitPhonePlacement({
       booklistRange,
       memoriesRange,
+      preset,
       stageHeight,
     }) {
+      if (preset) {
+        return {
+          books: getPresetPointInRange(booklistRange, preset.books),
+          memories: getPresetPointInRange(memoriesRange, preset.memories),
+        };
+      }
+
       const viewportHeight =
         window.innerHeight || document.documentElement.clientHeight || stageHeight;
       const requestedMinimumVerticalDistance = viewportHeight * 0.62;
@@ -349,7 +396,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       };
     }
 
-    function placeAuthorLinks(stage, booklistLink, memoriesLink) {
+    function placeAuthorLinks(stage, booklistLink, memoriesLink, portraitPhonePreset = null) {
       const stageRect = stage.getBoundingClientRect();
       const stageWidth = Math.max(stageRect.width, 1);
       const stageHeight = Math.max(stageRect.height, 1);
@@ -381,6 +428,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         return getPortraitPhonePlacement({
           booklistRange,
           memoriesRange,
+          preset: portraitPhonePreset,
           stageHeight,
         });
       }
@@ -477,7 +525,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       }
     }
 
-    function buildConnectorPath(endpointData) {
+    function buildConnectorPath(endpointData, portraitPhonePreset = null) {
       const {
         endPoint,
         horizontalDirection,
@@ -528,18 +576,29 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         x: -bodyDirection.y,
         y: bodyDirection.x,
       };
+      const amplitudeFactor = portraitPhoneCurve && portraitPhonePreset
+        ? portraitPhonePreset.amplitudeFactor
+        : randomBetween(curveScale.amplitudeFactorMin, curveScale.amplitudeFactorMax);
       const amplitude = clamp(
-        distance * randomBetween(curveScale.amplitudeFactorMin, curveScale.amplitudeFactorMax),
+        distance * amplitudeFactor,
         curveScale.amplitudeMinimum,
         curveScale.amplitudeMaximum
       );
-      const bendSign = Math.random() < 0.5 ? -1 : 1;
+      const bendSign = portraitPhoneCurve && portraitPhonePreset
+        ? portraitPhonePreset.bendSign
+        : Math.random() < 0.5 ? -1 : 1;
       const bodySegmentCount =
         curveScale.bodySegmentCount || (distance > 620 ? 4 : distance > 240 ? 3 : 2);
       const bodyPoints = [{ ...bodyStart, curveT: 0 }];
-      const portraitPhoneCycles = portraitPhoneCurve ? randomBetween(1.88, 2.08) : 0;
-      const portraitPhonePhase = portraitPhoneCurve ? randomBetween(-0.1, 0.1) : 0;
-      const portraitPhoneWarp = portraitPhoneCurve ? randomBetween(-0.032, 0.032) : 0;
+      const portraitPhoneCycles = portraitPhoneCurve
+        ? portraitPhonePreset?.waveCycles ?? randomBetween(1.88, 2.08)
+        : 0;
+      const portraitPhonePhase = portraitPhoneCurve
+        ? portraitPhonePreset?.phase ?? randomBetween(-0.1, 0.1)
+        : 0;
+      const portraitPhoneWarp = portraitPhoneCurve
+        ? portraitPhonePreset?.warp ?? randomBetween(-0.032, 0.032)
+        : 0;
       const getPortraitPhoneSampleT = (index) => {
         const internalCount = Math.max(1, bodySegmentCount - 1);
 
@@ -552,6 +611,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       const getPortraitPhoneWave = (t) => {
         const endpointEase = smootherstep(t / 0.34) * smootherstep((1 - t) / 0.34);
         const centerBreath = 0.86 + Math.sin(Math.PI * t) * 0.14;
+        const memoriesAccentWeight = portraitPhonePreset?.memoriesAccentWeight ?? 0.18;
         const memoriesHalfEnergy =
           smootherstep((t - 0.48) / 0.22) * smootherstep((0.9 - t) / 0.24);
         const warpedT = clamp(
@@ -572,7 +632,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
         return (
           (primaryWave * (centerBreath + memoriesHalfEnergy * 0.18) +
-            memoriesAccent * memoriesHalfEnergy * 0.18) *
+            memoriesAccent * memoriesHalfEnergy * memoriesAccentWeight) *
           endpointEase
         );
       };
@@ -890,6 +950,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       const hasActivePreloaderSurface = () =>
         Boolean(document.querySelector('[data-home-preloader], [data-home-preloader-handoff]'));
       let preloaderComplete = !hasActivePreloaderSurface();
+      const portraitPhonePreset = getRandomPortraitPhonePreset();
       let sequenceComplete = false;
       let ignoreTouchResizeUntil = 0;
 
@@ -1222,7 +1283,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         const measuredStageHeight = Math.max(measuredStageRect.height, 1);
         stage.style.setProperty('--author-stage-height', `${measuredStageHeight}px`);
 
-        const placements = placeAuthorLinks(stage, booklistLink, memoriesLink);
+        const placements = placeAuthorLinks(stage, booklistLink, memoriesLink, portraitPhonePreset);
 
         booklistLink.style.setProperty('--author-link-x', `${placements.books.x}px`);
         booklistLink.style.setProperty('--author-link-y', `${placements.books.y}px`);
@@ -1238,7 +1299,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         const stageWidth = Math.max(stageRect.width, 1);
         const stageHeight = Math.max(stageRect.height, 1);
         const endpointData = computeConnectorEndpoints(booklistLink, memoriesLink, stageRect);
-        const pathData = buildConnectorPath(endpointData);
+        const pathData = buildConnectorPath(endpointData, portraitPhonePreset);
 
         connector.setAttribute('height', `${stageHeight}`);
         connector.setAttribute('viewBox', `0 0 ${stageWidth} ${stageHeight}`);
