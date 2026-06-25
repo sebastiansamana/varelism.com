@@ -105,6 +105,7 @@ const { title, description = 'Website under construction.' } = Astro.props;
           document.querySelectorAll('[data-home-preloader-handoff]').forEach((overlay) => {
             overlay.remove();
           });
+          document.documentElement.classList.remove('home-preloader-handoff-active');
           window[activeHandoffKey] = null;
         };
 
@@ -142,6 +143,8 @@ const { title, description = 'Website under construction.' } = Astro.props;
         };
 
         const ensureHandoffPreloader = ({ restart = true } = {}) => {
+          document.documentElement.classList.add('home-preloader-handoff-active');
+
           const existingOverlay = document.querySelector('[data-home-preloader-handoff]');
 
           if (existingOverlay instanceof HTMLElement) {
@@ -176,7 +179,7 @@ const { title, description = 'Website under construction.' } = Astro.props;
             position: 'fixed',
             visibility: 'visible',
             willChange: 'opacity',
-            zIndex: '9999',
+            zIndex: '10001',
           });
 
           video.className = 'home-preloader__media';

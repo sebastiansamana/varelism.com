@@ -1356,6 +1356,11 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
     width: min(48vw, 22rem);
   }
 
+  :global(html.home-preloader-handoff-active) .architect-preloader__media {
+    opacity: 0;
+    transition: none;
+  }
+
   .architect-preloader.is-image-fading .architect-preloader__media {
     opacity: 0;
   }
