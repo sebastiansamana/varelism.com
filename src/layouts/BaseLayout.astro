@@ -22,6 +22,7 @@ const { title, description = 'Website under construction.' } = Astro.props;
     <script is:inline>
       (() => {
         const preloaderImageSrc = '/images/Logo_Animation_Preloader.gif';
+        const preloaderWebpSrc = '/images/Logo_Animation_Preloader.webp';
         const pendingPreloaderKey = '__varelismPendingPreloaderNavigation';
         const astroNavigateKey = '__varelismAstroNavigate';
         const triptychHandoffDelayMs = 950;
@@ -97,8 +98,8 @@ const { title, description = 'Website under construction.' } = Astro.props;
           });
         };
 
-        const getRestartedPreloaderSrc = () => {
-          const url = new URL(preloaderImageSrc, window.location.origin);
+        const getRestartedPreloaderSrc = (source = preloaderImageSrc) => {
+          const url = new URL(source, window.location.origin);
           preloaderRunId += 1;
           url.searchParams.set('run', `${Date.now()}-${preloaderRunId}`);
 
@@ -110,6 +111,11 @@ const { title, description = 'Website under construction.' } = Astro.props;
 
           if (existingOverlay instanceof HTMLElement) {
             const existingImage = existingOverlay.querySelector('img');
+            const existingSource = existingOverlay.querySelector('source');
+
+            if (existingSource instanceof HTMLSourceElement) {
+              existingSource.srcset = getRestartedPreloaderSrc(preloaderWebpSrc);
+            }
 
             if (existingImage instanceof HTMLImageElement) {
               existingImage.src = getRestartedPreloaderSrc();
@@ -119,6 +125,8 @@ const { title, description = 'Website under construction.' } = Astro.props;
           }
 
           const overlay = document.createElement('div');
+          const picture = document.createElement('picture');
+          const source = document.createElement('source');
           const image = document.createElement('img');
           const isCompact = window.matchMedia?.('(max-width: 720px)').matches;
 
@@ -137,12 +145,15 @@ const { title, description = 'Website under construction.' } = Astro.props;
             zIndex: '9999',
           });
 
+          source.type = 'image/webp';
+          source.srcset = getRestartedPreloaderSrc(preloaderWebpSrc);
+
           image.alt = '';
           image.decoding = 'async';
           image.draggable = false;
           image.loading = 'eager';
           image.src = getRestartedPreloaderSrc();
-          Object.assign(image.style, {
+          Object.assign(picture.style, {
             display: 'block',
             height: 'auto',
             maxHeight: isCompact ? 'min(28vh, 13rem)' : 'min(34vh, 18rem)',
@@ -150,8 +161,15 @@ const { title, description = 'Website under construction.' } = Astro.props;
             objectFit: 'contain',
             width: isCompact ? 'min(62vw, 16rem)' : 'min(48vw, 22rem)',
           });
+          Object.assign(image.style, {
+            display: 'block',
+            height: 'auto',
+            objectFit: 'contain',
+            width: '100%',
+          });
 
-          overlay.append(image);
+          picture.append(source, image);
+          overlay.append(picture);
           document.body?.append(overlay);
         };
 
@@ -328,8 +346,21 @@ const { title, description = 'Website under construction.' } = Astro.props;
       <header class="site-header" aria-label="Site navigation">
         <a class="site-logo" href="/" aria-label="Varelism home">
           <span class="image-swap">
-            <img class="image-swap__base" src="/images/Samana_Logo_Text.png" alt="Varelism" />
-            <img class="image-swap__hover" src="/images/Samana_Logo_Text_Cursor.png" alt="" aria-hidden="true" />
+            <img
+              class="image-swap__base"
+              src="/images/Samana_Logo_Text.png"
+              alt="Varelism"
+              width="1095"
+              height="398"
+            />
+            <img
+              class="image-swap__hover"
+              src="/images/Samana_Logo_Text_Cursor.png"
+              alt=""
+              width="1095"
+              height="398"
+              aria-hidden="true"
+            />
           </span>
         </a>
         <nav class="site-nav" aria-label="Primary navigation">
@@ -337,8 +368,22 @@ const { title, description = 'Website under construction.' } = Astro.props;
           <a href="/about/">about</a>
           <a class="cart-link" href="/buy/" aria-label="buy">
             <span class="image-swap">
-              <img class="image-swap__base" src="/images/Basket.png" alt="" aria-hidden="true" />
-              <img class="image-swap__hover" src="/images/Basket_Cursor.png" alt="" aria-hidden="true" />
+              <img
+                class="image-swap__base"
+                src="/images/Basket.png"
+                alt=""
+                width="370"
+                height="368"
+                aria-hidden="true"
+              />
+              <img
+                class="image-swap__hover"
+                src="/images/Basket_Cursor.png"
+                alt=""
+                width="370"
+                height="368"
+                aria-hidden="true"
+              />
             </span>
           </a>
         </nav>

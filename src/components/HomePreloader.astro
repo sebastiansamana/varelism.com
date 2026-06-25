@@ -8,6 +8,7 @@ interface Props {
 }
 
 const imageSrc = '/images/Logo_Animation_Preloader.gif';
+const webpSrc = '/images/Logo_Animation_Preloader.webp';
 const {
   activePaths = ['/', '/index.html'],
   completeEvent = 'varelism:preloader-complete',
@@ -27,15 +28,23 @@ const {
   data-timing-scale={timingScale}
   aria-hidden="true"
 >
-  <img
-    class="home-preloader__image"
-    src={imageSrc}
-    data-preloader-image-src={imageSrc}
-    alt=""
-    decoding="async"
-    draggable="false"
-    loading="eager"
-  />
+  <picture class="home-preloader__media">
+    <source
+      srcset={webpSrc}
+      type="image/webp"
+      data-preloader-source
+      data-preloader-source-src={webpSrc}
+    />
+    <img
+      class="home-preloader__image"
+      src={imageSrc}
+      data-preloader-image-src={imageSrc}
+      alt=""
+      decoding="async"
+      draggable="false"
+      loading="eager"
+    />
+  </picture>
 </div>
 
 <script is:inline>
@@ -69,14 +78,82 @@ const {
 
     const restartPreloaderImage = (overlay) => {
       const image = overlay.querySelector('.home-preloader__image');
+      const pictureSource = overlay.querySelector('[data-preloader-source]');
+
+      if (pictureSource instanceof HTMLSourceElement) {
+        const sourceSrc = pictureSource.dataset.preloaderSourceSrc || pictureSource.srcset;
+
+        if (sourceSrc) {
+          pictureSource.srcset = getRestartedImageSrc(sourceSrc);
+        }
+      }
 
       if (!(image instanceof HTMLImageElement)) return;
 
-      const source = image.dataset.preloaderImageSrc || image.getAttribute('src') || image.currentSrc;
+      const fallbackSource = image.dataset.preloaderImageSrc || image.getAttribute('src') || image.currentSrc;
 
-      if (source) {
-        image.src = getRestartedImageSrc(source);
+      if (fallbackSource) {
+        image.src = getRestartedImageSrc(fallbackSource);
       }
+    };
+
+    const waitForWindowLoad = () => {
+      if (document.readyState === 'complete') return Promise.resolve();
+
+      return new Promise((resolve) => {
+        window.addEventListener('load', resolve, { once: true });
+      });
+    };
+
+    const waitForFonts = () => {
+      if (!document.fonts?.ready) return Promise.resolve();
+
+      return document.fonts.ready.catch(() => {});
+    };
+
+    const waitForImage = (image) => {
+      if (!(image instanceof HTMLImageElement) || !image.src) return Promise.resolve();
+
+      if (image.complete && image.naturalWidth > 0) {
+        return image.decode ? image.decode().catch(() => {}) : Promise.resolve();
+      }
+
+      return new Promise((resolve) => {
+        const done = () => {
+          image.removeEventListener('load', done);
+          image.removeEventListener('error', done);
+          if (image.decode && image.naturalWidth > 0) {
+            image.decode().catch(() => {}).then(resolve);
+            return;
+          }
+          resolve();
+        };
+
+        image.addEventListener('load', done, { once: true });
+        image.addEventListener('error', done, { once: true });
+      });
+    };
+
+    const waitForPageImages = (overlay) => {
+      const images = Array.from(document.images).filter(
+        (image) =>
+          !overlay.contains(image) &&
+          !image.closest('[data-home-preloader]') &&
+          !image.closest('[data-home-preloader-handoff]')
+      );
+
+      return Promise.all(images.map(waitForImage));
+    };
+
+    const waitForAnimationFrame = () =>
+      new Promise((resolve) => {
+        window.requestAnimationFrame(resolve);
+      });
+
+    const waitForStablePageFrame = async (overlay) => {
+      await Promise.all([waitForWindowLoad(), waitForFonts(), waitForPageImages(overlay)]);
+      await waitForAnimationFrame();
+      await waitForAnimationFrame();
     };
 
     const isForcedByPendingNavigation = (activePaths) => {
@@ -98,8 +175,8 @@ const {
       const activePaths = (overlay.dataset.activePaths || '/|/index.html').split('|').filter(Boolean);
       const playOnce = overlay.dataset.playOnce !== 'false';
       const timingScale = Math.max(0.1, Number.parseFloat(overlay.dataset.timingScale || '1') || 1);
-      // Match the single-pass GIF duration so ready pages reveal after one full iteration.
-      const imageVisibleMs = Math.round(3020 * timingScale);
+      // Match the single-pass animation duration so ready pages reveal after one full iteration.
+      const imageVisibleMs = Math.round(3070 * timingScale);
       const imageFadeMs = Math.round(300 * timingScale);
       const whiteHoldMs = Math.round(300 * timingScale);
       const overlayFadeMs = Math.round(300 * timingScale);
@@ -107,7 +184,6 @@ const {
       const isActivePath = activePaths.some((path) => isSamePath(path, window.location.pathname));
       const forcePreloader = isForcedByPendingNavigation(activePaths);
       let hasRemoved = false;
-      let onLoad = null;
       const timers = new Set();
       const storage = {
         get() {
@@ -140,11 +216,6 @@ const {
         timers.forEach((timer) => window.clearTimeout(timer));
         timers.clear();
 
-        if (onLoad) {
-          window.removeEventListener('load', onLoad);
-          onLoad = null;
-        }
-
         state.cleanups.delete(cleanupOverlay);
       };
 
@@ -172,7 +243,7 @@ const {
       overlay.classList.add('is-visible');
       document.documentElement.classList.remove('home-preloader-booting');
 
-      let isPageReady = document.readyState === 'complete';
+      let isPageReady = false;
       let hasMetImageDuration = false;
       let isHiding = false;
 
@@ -192,24 +263,17 @@ const {
         hideOverlay();
       }, imageVisibleMs);
 
-      const fallbackTimer = setTimer(() => {
+      waitForStablePageFrame(overlay).then(() => {
+        if (hasRemoved) return;
+        isPageReady = true;
+        hideOverlay();
+      });
+
+      setTimer(() => {
         isPageReady = true;
         hasMetImageDuration = true;
         hideOverlay();
       }, fallbackMs);
-
-      if (document.readyState === 'complete') {
-        hideOverlay();
-      } else {
-        onLoad = () => {
-          isPageReady = true;
-          window.clearTimeout(fallbackTimer);
-          timers.delete(fallbackTimer);
-          hideOverlay();
-        };
-
-        window.addEventListener('load', onLoad, { once: true });
-      }
     };
 
     const initPreloaders = () => {
@@ -270,6 +334,7 @@ const {
     visibility: hidden;
   }
 
+  .home-preloader__media,
   .home-preloader__image {
     display: block;
     height: auto;
@@ -279,6 +344,11 @@ const {
     opacity: 1;
     transition: opacity 300ms ease;
     width: min(48vw, 22rem);
+  }
+
+  .home-preloader__image {
+    height: auto;
+    width: 100%;
   }
 
   .home-preloader.is-image-fading .home-preloader__image {
@@ -291,10 +361,15 @@ const {
   }
 
   @media (max-width: 720px) {
+    .home-preloader__media,
     .home-preloader__image {
       max-height: min(28vh, 13rem);
       max-width: min(62vw, 16rem);
       width: min(62vw, 16rem);
+    }
+
+    .home-preloader__image {
+      width: 100%;
     }
   }
 </style>
