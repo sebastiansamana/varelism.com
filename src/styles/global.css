@@ -256,7 +256,7 @@ main {
   }
 
   .site-nav {
-    gap: clamp(0.72rem, 4vw, 1.08rem);
+    gap: clamp(0.65rem, 3.7vw, 1rem);
   }
 
   .site-nav a {
