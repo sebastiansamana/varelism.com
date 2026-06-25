@@ -55,10 +55,10 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
     const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
     const randomBetween = (min, max) => (max <= min ? min : min + Math.random() * (max - min));
-    const smoothstep = (value) => {
+    const smootherstep = (value) => {
       const t = clamp(value, 0, 1);
 
-      return t * t * (3 - 2 * t);
+      return t * t * t * (t * (t * 6 - 15) + 10);
     };
     const formatPathNumber = (value) => (Number.isFinite(value) ? String(value) : '0');
     const isPortraitPhoneViewport = (stageWidth, stageHeight) =>
@@ -69,13 +69,13 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       const compactViewport = stageWidth <= 900;
 
       return {
-        amplitudeFactorMax: portraitPhoneViewport ? 0.22 : 0.2,
-        amplitudeFactorMin: portraitPhoneViewport ? 0.13 : 0.13,
+        amplitudeFactorMax: portraitPhoneViewport ? 0.24 : 0.2,
+        amplitudeFactorMin: portraitPhoneViewport ? 0.15 : 0.13,
         amplitudeMaximum: portraitPhoneViewport
           ? clamp(stageHeight * 0.2, 82, 168)
           : clamp(stageHeight * 0.18, 72, 170),
         amplitudeMinimum: portraitPhoneViewport ? 34 : 26,
-        bodySegmentCount: portraitPhoneViewport ? 12 : null,
+        bodySegmentCount: portraitPhoneViewport ? 16 : null,
         fallbackBooksY: portraitPhoneViewport
           ? 0.72
           : mobileViewport
@@ -112,7 +112,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           : compactViewport
             ? clamp(stageHeight * 0.18, 136, 240)
             : 0,
-        normalXScale: portraitPhoneViewport ? 0.65 : 1,
+        normalXScale: portraitPhoneViewport ? 0.75 : 1,
         normalYScale: 1,
         terminalTangentFactorMax: portraitPhoneViewport ? 0.34 : 0.5,
         terminalTangentFactorMin: portraitPhoneViewport ? 0.24 : 0.34,
@@ -537,7 +537,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       const bodySegmentCount =
         curveScale.bodySegmentCount || (distance > 620 ? 4 : distance > 240 ? 3 : 2);
       const bodyPoints = [{ ...bodyStart, curveT: 0 }];
-      const portraitPhoneCycles = portraitPhoneCurve ? 1.5 : 0;
+      const portraitPhoneCycles = portraitPhoneCurve ? randomBetween(1.88, 2.08) : 0;
+      const portraitPhonePhase = portraitPhoneCurve ? randomBetween(-0.1, 0.1) : 0;
       const portraitPhoneWarp = portraitPhoneCurve ? randomBetween(-0.032, 0.032) : 0;
       const getPortraitPhoneSampleT = (index) => {
         const internalCount = Math.max(1, bodySegmentCount - 1);
@@ -546,28 +547,39 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           return 0.5;
         }
 
-        return 0.22 + ((index - 1) / (internalCount - 1)) * 0.56;
+        return 0.12 + ((index - 1) / (internalCount - 1)) * 0.76;
       };
-      const getPortraitPhoneProgressT = (t) => t * 0.72 + smoothstep(t) * 0.28;
       const getPortraitPhoneWave = (t) => {
-        const edgeEase = Math.sin(Math.PI * t);
-        const endpointEase = smoothstep(t / 0.34) * smoothstep((1 - t) / 0.34);
-        const envelope = (0.36 + Math.max(0, edgeEase) ** 0.44 * 0.64) * endpointEase;
+        const endpointEase = smootherstep(t / 0.34) * smootherstep((1 - t) / 0.34);
+        const centerBreath = 0.86 + Math.sin(Math.PI * t) * 0.14;
+        const memoriesHalfEnergy =
+          smootherstep((t - 0.48) / 0.22) * smootherstep((0.9 - t) / 0.24);
         const warpedT = clamp(
           t +
             Math.sin(Math.PI * 2 * t) * portraitPhoneWarp +
-            Math.sin(Math.PI * 4 * t) * 0.004,
+            Math.sin(Math.PI * 4 * t + portraitPhonePhase) * 0.003,
           0,
           1
         );
+        const primaryWave = Math.sin(
+          Math.PI * 2 * portraitPhoneCycles * warpedT + portraitPhonePhase
+        );
+        const memoriesAccent = Math.sin(
+          Math.PI * 2 * (portraitPhoneCycles + 0.58) * warpedT +
+            portraitPhonePhase +
+            Math.PI * 0.42
+        );
 
-        return Math.sin(Math.PI * 2 * portraitPhoneCycles * warpedT) * envelope;
+        return (
+          (primaryWave * (centerBreath + memoriesHalfEnergy * 0.18) +
+            memoriesAccent * memoriesHalfEnergy * 0.18) *
+          endpointEase
+        );
       };
       const portraitPhoneAmplitudeLimit = portraitPhoneCurve
         ? Array.from({ length: bodySegmentCount - 1 }, (_, index) => getPortraitPhoneSampleT(index + 1))
             .reduce((limit, t) => {
-              const progressT = getPortraitPhoneProgressT(t);
-              const baselineX = bodyStart.x + dx * progressT;
+              const baselineX = bodyStart.x + dx * t;
               const waveX = Math.abs(getPortraitPhoneWave(t) * normal.x * curveScale.normalXScale);
 
               if (waveX < 0.001) {
@@ -590,16 +602,16 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       const getPortraitPhonePoint = (t) => {
         const portraitPhoneWave = getPortraitPhoneWave(t);
         const waveOffset = portraitPhoneAmplitude * portraitPhoneWave * bendSign;
-        const progressT = getPortraitPhoneProgressT(t);
+        const verticalProgress = smootherstep(t);
 
         return {
           x:
             bodyStart.x +
-            dx * progressT +
+            dx * t +
             normal.x * curveScale.normalXScale * waveOffset,
           y:
             bodyStart.y +
-            dy * progressT +
+            dy * verticalProgress +
             normal.y * curveScale.normalYScale * waveOffset,
           curveT: t,
         };
@@ -685,77 +697,47 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         };
       };
 
-      // Portrait phone curves use clamped spline derivatives so adjacent cubics
-      // share a steadier radius through the full Books -> Memories stroke.
-      const getPortraitPhoneSplineTangents = () => {
-        const lastIndex = bodyPoints.length - 1;
-        const tangents = Array.from({ length: bodyPoints.length }, () => ({ x: 0, y: 0 }));
+      const getPortraitPhoneWaveDerivative = (t) => {
+        const sampleSize = 0.004;
+        const previousT = Math.max(0, t - sampleSize);
+        const nextT = Math.min(1, t + sampleSize);
+        const previousPoint = getPortraitPhonePoint(previousT);
+        const nextPoint = getPortraitPhonePoint(nextT);
+        const sampleDistance = Math.max(nextT - previousT, 0.001);
 
-        tangents[0] = getPortraitPhoneTerminalDerivative(0);
-        tangents[lastIndex] = getPortraitPhoneTerminalDerivative(lastIndex);
+        return {
+          x: (nextPoint.x - previousPoint.x) / sampleDistance,
+          y: (nextPoint.y - previousPoint.y) / sampleDistance,
+        };
+      };
 
-        if (bodyPoints.length <= 2) {
-          return tangents;
+      const getPortraitPhoneTangent = (index) => {
+        if (index === 0 || index === bodyPoints.length - 1) {
+          return getPortraitPhoneTerminalDerivative(index);
         }
 
-        const solveDimension = (axis) => {
-          const internalCount = bodyPoints.length - 2;
-          const lower = new Array(internalCount).fill(0);
-          const diagonal = new Array(internalCount).fill(0);
-          const upper = new Array(internalCount).fill(0);
-          const rhs = new Array(internalCount).fill(0);
+        const point = bodyPoints[index];
+        const previousPoint = bodyPoints[index - 1];
+        const nextPoint = bodyPoints[index + 1];
+        const hPrevious = Math.max(point.curveT - previousPoint.curveT, 0.001);
+        const hNext = Math.max(nextPoint.curveT - point.curveT, 0.001);
+        const previousDistance = Math.hypot(point.x - previousPoint.x, point.y - previousPoint.y);
+        const nextDistance = Math.hypot(nextPoint.x - point.x, nextPoint.y - point.y);
+        const maxDerivativeLength =
+          Math.min(previousDistance / hPrevious, nextDistance / hNext) * 1.38;
+        const derivative = getPortraitPhoneWaveDerivative(point.curveT);
+        const derivativeLength = Math.hypot(derivative.x, derivative.y);
 
-          for (let solverIndex = 0; solverIndex < internalCount; solverIndex += 1) {
-            const pointIndex = solverIndex + 1;
-            const previousPoint = bodyPoints[pointIndex - 1];
-            const point = bodyPoints[pointIndex];
-            const nextPoint = bodyPoints[pointIndex + 1];
-            const hPrevious = Math.max(point.curveT - previousPoint.curveT, 0.001);
-            const hNext = Math.max(nextPoint.curveT - point.curveT, 0.001);
+        if (derivativeLength > maxDerivativeLength && derivativeLength > 0.001) {
+          const scale = maxDerivativeLength / derivativeLength;
 
-            lower[solverIndex] = solverIndex === 0 ? 0 : hNext;
-            diagonal[solverIndex] = 2 * (hPrevious + hNext);
-            upper[solverIndex] = solverIndex === internalCount - 1 ? 0 : hPrevious;
-            rhs[solverIndex] =
-              3 *
-              (
-                hPrevious * (nextPoint[axis] - point[axis]) / hNext +
-                hNext * (point[axis] - previousPoint[axis]) / hPrevious
-              );
+          return {
+            x: derivative.x * scale,
+            y: derivative.y * scale,
+          };
+        }
 
-            if (solverIndex === 0) {
-              rhs[solverIndex] -= hNext * tangents[0][axis];
-            }
-
-            if (solverIndex === internalCount - 1) {
-              rhs[solverIndex] -= hPrevious * tangents[lastIndex][axis];
-            }
-          }
-
-          for (let solverIndex = 1; solverIndex < internalCount; solverIndex += 1) {
-            const factor = lower[solverIndex] / diagonal[solverIndex - 1];
-            diagonal[solverIndex] -= factor * upper[solverIndex - 1];
-            rhs[solverIndex] -= factor * rhs[solverIndex - 1];
-          }
-
-          const solution = new Array(internalCount).fill(0);
-          solution[internalCount - 1] = rhs[internalCount - 1] / diagonal[internalCount - 1];
-
-          for (let solverIndex = internalCount - 2; solverIndex >= 0; solverIndex -= 1) {
-            solution[solverIndex] =
-              (rhs[solverIndex] - upper[solverIndex] * solution[solverIndex + 1]) /
-              diagonal[solverIndex];
-          }
-
-          solution.forEach((value, solverIndex) => {
-            tangents[solverIndex + 1][axis] = value;
-          });
-        };
-
-        solveDimension('x');
-        solveDimension('y');
-
-        return tangents;
+        return derivative;
       };
 
       const getBodyTangent = (index) => {
@@ -795,7 +777,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       };
 
       const tangents = portraitPhoneCurve
-        ? getPortraitPhoneSplineTangents()
+        ? bodyPoints.map((_, index) => getPortraitPhoneTangent(index))
         : bodyPoints.map((_, index) => getBodyTangent(index));
       const cubicCommands = bodyPoints.slice(0, -1).map((point, index) => {
         const nextPoint = bodyPoints[index + 1];
