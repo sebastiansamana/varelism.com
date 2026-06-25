@@ -1396,9 +1396,17 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       };
     };
 
+    const restartAuthorPageFromHistory = (event) => {
+      if (!event?.persisted) return;
+
+      state.cleanup?.();
+      initAuthorPage();
+    };
+
     if (!state.listenersAttached) {
       document.addEventListener('astro:before-swap', () => state.cleanup?.());
       document.addEventListener('astro:page-load', initAuthorPage);
+      window.addEventListener('pageshow', restartAuthorPageFromHistory);
       state.listenersAttached = true;
     }
 
