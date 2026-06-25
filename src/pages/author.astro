@@ -604,19 +604,6 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           curveT: t,
         };
       };
-      const getPortraitPhoneDerivative = (t) => {
-        const sampleSize = 0.012;
-        const previousT = Math.max(0, t - sampleSize);
-        const nextT = Math.min(1, t + sampleSize);
-        const previousPoint = getPortraitPhonePoint(previousT);
-        const nextPoint = getPortraitPhonePoint(nextT);
-        const sampleDistance = Math.max(nextT - previousT, 0.001);
-
-        return {
-          x: (nextPoint.x - previousPoint.x) / sampleDistance,
-          y: (nextPoint.y - previousPoint.y) / sampleDistance,
-        };
-      };
       const terminalTangentLength = clamp(
         distance *
           randomBetween(curveScale.terminalTangentFactorMin, curveScale.terminalTangentFactorMax),
@@ -682,6 +669,94 @@ import BaseLayout from '../layouts/BaseLayout.astro';
           ? Math.min(terminalTangentLength, adjacentDistance * 0.9)
           : terminalTangentLength;
       };
+      const getPortraitPhoneTerminalDerivative = (index) => {
+        const adjacentPoint = index === 0
+          ? bodyPoints[index + 1]
+          : bodyPoints[index - 1];
+        const point = bodyPoints[index];
+        const segmentT = adjacentPoint
+          ? Math.abs((adjacentPoint.curveT ?? 0) - (point.curveT ?? 0))
+          : 1;
+        const tangentLength = getTerminalTangentLength(index);
+
+        return {
+          x: horizontalDirection.x * tangentLength / Math.max(segmentT, 0.001),
+          y: 0,
+        };
+      };
+
+      // Portrait phone curves use clamped spline derivatives so adjacent cubics
+      // share a steadier radius through the full Books -> Memories stroke.
+      const getPortraitPhoneSplineTangents = () => {
+        const lastIndex = bodyPoints.length - 1;
+        const tangents = Array.from({ length: bodyPoints.length }, () => ({ x: 0, y: 0 }));
+
+        tangents[0] = getPortraitPhoneTerminalDerivative(0);
+        tangents[lastIndex] = getPortraitPhoneTerminalDerivative(lastIndex);
+
+        if (bodyPoints.length <= 2) {
+          return tangents;
+        }
+
+        const solveDimension = (axis) => {
+          const internalCount = bodyPoints.length - 2;
+          const lower = new Array(internalCount).fill(0);
+          const diagonal = new Array(internalCount).fill(0);
+          const upper = new Array(internalCount).fill(0);
+          const rhs = new Array(internalCount).fill(0);
+
+          for (let solverIndex = 0; solverIndex < internalCount; solverIndex += 1) {
+            const pointIndex = solverIndex + 1;
+            const previousPoint = bodyPoints[pointIndex - 1];
+            const point = bodyPoints[pointIndex];
+            const nextPoint = bodyPoints[pointIndex + 1];
+            const hPrevious = Math.max(point.curveT - previousPoint.curveT, 0.001);
+            const hNext = Math.max(nextPoint.curveT - point.curveT, 0.001);
+
+            lower[solverIndex] = solverIndex === 0 ? 0 : hNext;
+            diagonal[solverIndex] = 2 * (hPrevious + hNext);
+            upper[solverIndex] = solverIndex === internalCount - 1 ? 0 : hPrevious;
+            rhs[solverIndex] =
+              3 *
+              (
+                hPrevious * (nextPoint[axis] - point[axis]) / hNext +
+                hNext * (point[axis] - previousPoint[axis]) / hPrevious
+              );
+
+            if (solverIndex === 0) {
+              rhs[solverIndex] -= hNext * tangents[0][axis];
+            }
+
+            if (solverIndex === internalCount - 1) {
+              rhs[solverIndex] -= hPrevious * tangents[lastIndex][axis];
+            }
+          }
+
+          for (let solverIndex = 1; solverIndex < internalCount; solverIndex += 1) {
+            const factor = lower[solverIndex] / diagonal[solverIndex - 1];
+            diagonal[solverIndex] -= factor * upper[solverIndex - 1];
+            rhs[solverIndex] -= factor * rhs[solverIndex - 1];
+          }
+
+          const solution = new Array(internalCount).fill(0);
+          solution[internalCount - 1] = rhs[internalCount - 1] / diagonal[internalCount - 1];
+
+          for (let solverIndex = internalCount - 2; solverIndex >= 0; solverIndex -= 1) {
+            solution[solverIndex] =
+              (rhs[solverIndex] - upper[solverIndex] * solution[solverIndex + 1]) /
+              diagonal[solverIndex];
+          }
+
+          solution.forEach((value, solverIndex) => {
+            tangents[solverIndex + 1][axis] = value;
+          });
+        };
+
+        solveDimension('x');
+        solveDimension('y');
+
+        return tangents;
+      };
 
       const getBodyTangent = (index) => {
         if (index === 0 || index === bodyPoints.length - 1) {
@@ -719,23 +794,25 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         };
       };
 
-      const tangents = bodyPoints.map((_, index) => getBodyTangent(index));
+      const tangents = portraitPhoneCurve
+        ? getPortraitPhoneSplineTangents()
+        : bodyPoints.map((_, index) => getBodyTangent(index));
       const cubicCommands = bodyPoints.slice(0, -1).map((point, index) => {
         const nextPoint = bodyPoints[index + 1];
         const segmentT = Math.max((nextPoint.curveT ?? 1) - (point.curveT ?? 0), 0.001);
-        const controlOne = portraitPhoneCurve && index > 0
+        const controlOne = portraitPhoneCurve
           ? {
-              x: point.x + (getPortraitPhoneDerivative(point.curveT).x * segmentT) / 3,
-              y: point.y + (getPortraitPhoneDerivative(point.curveT).y * segmentT) / 3,
+              x: point.x + (tangents[index].x * segmentT) / 3,
+              y: point.y + (tangents[index].y * segmentT) / 3,
             }
           : {
               x: point.x + tangents[index].x / 3,
               y: point.y + tangents[index].y / 3,
             };
-        const controlTwo = portraitPhoneCurve && index + 1 < bodyPoints.length - 1
+        const controlTwo = portraitPhoneCurve
           ? {
-              x: nextPoint.x - (getPortraitPhoneDerivative(nextPoint.curveT).x * segmentT) / 3,
-              y: nextPoint.y - (getPortraitPhoneDerivative(nextPoint.curveT).y * segmentT) / 3,
+              x: nextPoint.x - (tangents[index + 1].x * segmentT) / 3,
+              y: nextPoint.y - (tangents[index + 1].y * segmentT) / 3,
             }
           : {
               x: nextPoint.x - tangents[index + 1].x / 3,
@@ -832,9 +909,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         Boolean(document.querySelector('[data-home-preloader], [data-home-preloader-handoff]'));
       let preloaderComplete = !hasActivePreloaderSurface();
       let sequenceComplete = false;
+      let ignoreTouchResizeUntil = 0;
 
       const getViewportSnapshot = () => ({
         height: window.innerHeight || document.documentElement.clientHeight || 0,
+        scale: window.visualViewport?.scale || 1,
         width: window.innerWidth || document.documentElement.clientWidth || 0,
       });
 
@@ -851,14 +930,31 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
       const getViewportDelta = (nextViewport) => ({
         heightChanged: Math.abs(nextViewport.height - viewportSnapshot.height) > VIEWPORT_RESIZE_EPSILON,
+        scaleChanged: Math.abs(nextViewport.scale - viewportSnapshot.scale) > 0.001,
         widthChanged: Math.abs(nextViewport.width - viewportSnapshot.width) > VIEWPORT_RESIZE_EPSILON,
       });
+
+      const markTouchInteraction = () => {
+        ignoreTouchResizeUntil = Date.now() + 900;
+      };
 
       const isIgnoredMobileHeightResize = (eventType, nextViewport) => {
         if (eventType === 'orientationchange') return false;
 
-        const { heightChanged, widthChanged } = getViewportDelta(nextViewport);
-        return (isTouchViewport() || isMobileAuthorViewport()) && heightChanged && !widthChanged;
+        const { heightChanged, scaleChanged, widthChanged } = getViewportDelta(nextViewport);
+        const mobileTouchViewport = isTouchViewport() || isMobileAuthorViewport();
+
+        if (!mobileTouchViewport) return false;
+
+        if (
+          Date.now() < ignoreTouchResizeUntil ||
+          scaleChanged ||
+          Math.abs((window.visualViewport?.scale || 1) - 1) > 0.001
+        ) {
+          return true;
+        }
+
+        return heightChanged && !widthChanged;
       };
 
       const clearTimers = () => {
@@ -1195,9 +1291,9 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       const onResize = (event) => {
         const nextViewport = getViewportSnapshot();
         const eventType = event?.type || 'resize';
-        const { heightChanged, widthChanged } = getViewportDelta(nextViewport);
+        const { heightChanged, scaleChanged, widthChanged } = getViewportDelta(nextViewport);
 
-        if (eventType !== 'orientationchange' && !heightChanged && !widthChanged) {
+        if (eventType !== 'orientationchange' && !heightChanged && !scaleChanged && !widthChanged) {
           return;
         }
 
@@ -1227,6 +1323,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       window.addEventListener('varelism:handoff-complete', onPreloaderComplete);
       window.addEventListener('resize', onResize);
       window.addEventListener('orientationchange', onResize);
+      window.addEventListener('touchstart', markTouchInteraction, { passive: true });
+      window.addEventListener('touchmove', markTouchInteraction, { passive: true });
+      window.addEventListener('touchend', markTouchInteraction, { passive: true });
+      window.addEventListener('touchcancel', markTouchInteraction, { passive: true });
+      window.visualViewport?.addEventListener('resize', onResize);
       setTimer(clearStalePreloader, 250);
       rebuildConnector();
 
@@ -1237,6 +1338,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         window.removeEventListener('varelism:handoff-complete', onPreloaderComplete);
         window.removeEventListener('resize', onResize);
         window.removeEventListener('orientationchange', onResize);
+        window.removeEventListener('touchstart', markTouchInteraction);
+        window.removeEventListener('touchmove', markTouchInteraction);
+        window.removeEventListener('touchend', markTouchInteraction);
+        window.removeEventListener('touchcancel', markTouchInteraction);
+        window.visualViewport?.removeEventListener('resize', onResize);
         resetStage();
         delete stage.dataset.authorBooted;
         state.cleanup = null;
