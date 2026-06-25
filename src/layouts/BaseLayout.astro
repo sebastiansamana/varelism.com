@@ -17,12 +17,14 @@ const { title, description = 'Website under construction.' } = Astro.props;
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content={description} />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=2" />
+    <link rel="preload" as="video" href="/images/Logo_Animation_Preloader.mp4" type="video/mp4" />
     <meta name="generator" content={Astro.generator} />
     <ViewTransitions />
     <script is:inline>
       (() => {
         const preloaderVideoSrc = '/images/Logo_Animation_Preloader.mp4';
         const pendingPreloaderKey = '__varelismPendingPreloaderNavigation';
+        const activeHandoffKey = '__varelismActivePreloaderHandoff';
         const pendingHomeReturnKey = '__varelismPendingHomeReturn';
         const astroNavigateKey = '__varelismAstroNavigate';
         const preloaderCycleDurationMs = 3067;
@@ -103,6 +105,7 @@ const { title, description = 'Website under construction.' } = Astro.props;
           document.querySelectorAll('[data-home-preloader-handoff]').forEach((overlay) => {
             overlay.remove();
           });
+          window[activeHandoffKey] = null;
         };
 
         const preparePassivePreloaderVideo = (video) => {
@@ -159,10 +162,12 @@ const { title, description = 'Website under construction.' } = Astro.props;
           const isCompact = window.matchMedia?.('(max-width: 720px)').matches;
 
           overlay.dataset.homePreloaderHandoff = 'true';
+          overlay.setAttribute('data-astro-transition-persist', 'varelism-home-preloader-handoff');
           overlay.setAttribute('aria-hidden', 'true');
           Object.assign(overlay.style, {
             alignItems: 'center',
             background: '#ffffff',
+            contain: 'layout paint style',
             display: 'flex',
             inset: '0',
             justifyContent: 'center',
@@ -170,6 +175,7 @@ const { title, description = 'Website under construction.' } = Astro.props;
             pointerEvents: 'auto',
             position: 'fixed',
             visibility: 'visible',
+            willChange: 'opacity',
             zIndex: '9999',
           });
 
@@ -186,12 +192,14 @@ const { title, description = 'Website under construction.' } = Astro.props;
             objectFit: 'contain',
             pointerEvents: 'none',
             transition: `opacity ${handoffMediaFadeMs}ms ease`,
+            transform: 'translateZ(0)',
             userSelect: 'none',
+            willChange: 'opacity',
             width: isCompact ? 'min(62vw, 16rem)' : 'min(48vw, 22rem)',
           });
 
           overlay.append(video);
-          document.body?.append(overlay);
+          document.documentElement.append(overlay);
 
           if (restart) restartHandoffVideo(video);
 
@@ -203,6 +211,8 @@ const { title, description = 'Website under construction.' } = Astro.props;
           `${pathA.replace(/\/$/, '')}/` === `${pathB.replace(/\/$/, '')}/`;
 
         const getPendingPreloaderNavigation = () => window[pendingPreloaderKey] || null;
+
+        const getActiveHandoff = () => window[activeHandoffKey] || null;
 
         const getPendingHomeReturn = () => window[pendingHomeReturnKey] || null;
 
@@ -231,34 +241,59 @@ const { title, description = 'Website under construction.' } = Astro.props;
           const standaloneHandoffRoute = getStandaloneHandoffRoute(url.pathname);
           const currentPendingNavigation = getPendingPreloaderNavigation();
           const shouldReuseHandoff = Boolean(
-            currentPendingNavigation?.handoffStartedAt &&
+            (currentPendingNavigation?.handoffStartedAt &&
               currentPendingNavigation.pathname &&
-              isSamePath(currentPendingNavigation.pathname, url.pathname)
+              isSamePath(currentPendingNavigation.pathname, url.pathname)) ||
+              (getActiveHandoff()?.startedAt &&
+                getActiveHandoff()?.pathname &&
+                isSamePath(getActiveHandoff().pathname, url.pathname))
           );
+          const shouldUseHandoffSurface = forceTriptychPreloader || Boolean(standaloneHandoffRoute);
+          const currentActiveHandoff = getActiveHandoff();
+          const nextHandoffStartedAt =
+            shouldReuseHandoff && currentActiveHandoff?.startedAt
+              ? currentActiveHandoff.startedAt
+              : shouldReuseHandoff && currentPendingNavigation?.handoffStartedAt
+                ? currentPendingNavigation.handoffStartedAt
+                : window.performance.now();
 
           if (!shouldUseRoutePreloader && !standaloneHandoffRoute && !forceTriptychPreloader) {
             window[pendingPreloaderKey] = null;
             return null;
           }
 
+          if (shouldUseHandoffSurface) {
+            window[activeHandoffKey] = {
+              cycleComplete: shouldReuseHandoff && Boolean(currentActiveHandoff?.cycleComplete),
+              cycleDurationMs: currentActiveHandoff?.cycleDurationMs || preloaderCycleDurationMs,
+              pathname: url.pathname,
+              startedAt: nextHandoffStartedAt,
+            };
+          }
+
           window[pendingPreloaderKey] = {
             forcePreloader: forceTriptychPreloader,
             handoffCycleComplete:
-              shouldReuseHandoff && Boolean(currentPendingNavigation?.handoffCycleComplete),
+              shouldReuseHandoff &&
+              Boolean(currentPendingNavigation?.handoffCycleComplete || currentActiveHandoff?.cycleComplete),
             handoffCycleDurationMs: currentPendingNavigation?.handoffCycleDurationMs || preloaderCycleDurationMs,
-            handoffStartedAt: shouldReuseHandoff
-              ? currentPendingNavigation.handoffStartedAt
-              : window.performance.now(),
+            handoffStartedAt: nextHandoffStartedAt,
             keepBootingAfterSwap: shouldUseRoutePreloader,
             pathname: url.pathname,
             suppressRoutePreloaderVideo:
-              forceTriptychPreloader ||
-              Boolean(standaloneHandoffRoute) ||
+              shouldUseHandoffSurface ||
               (shouldReuseHandoff && Boolean(currentPendingNavigation?.suppressRoutePreloaderVideo)),
           };
           showPreloaderShell();
 
-          return ensureHandoffPreloader({ restart: restartHandoff && !shouldReuseHandoff });
+          const handoffPreloader = ensureHandoffPreloader({ restart: restartHandoff && !shouldReuseHandoff });
+
+          if (handoffPreloader?.overlay) {
+            handoffPreloader.overlay.dataset.handoffPath = url.pathname;
+            delete handoffPreloader.overlay.dataset.handoffReleased;
+          }
+
+          return handoffPreloader;
         };
 
         const continueTriptychNavigation = (url) => {
@@ -318,11 +353,33 @@ const { title, description = 'Website under construction.' } = Astro.props;
 
         const restoreActiveHandoffOverlay = () => {
           const pendingNavigation = getPendingPreloaderNavigation();
+          const activeHandoff = getActiveHandoff();
+          const handoffState = activeHandoff
+            ? {
+                handoffCycleComplete: activeHandoff.cycleComplete,
+                handoffStartedAt: activeHandoff.startedAt,
+                pathname: activeHandoff.pathname,
+              }
+            : pendingNavigation;
 
-          if (!pendingNavigation?.handoffStartedAt || pendingNavigation.handoffCycleComplete) return;
+          if (!handoffState?.handoffStartedAt || handoffState.handoffCycleComplete) return;
+
+          const existingOverlay = document.querySelector('[data-home-preloader-handoff]');
+          const existingVideo = existingOverlay?.querySelector('video');
+
+          if (
+            existingOverlay instanceof HTMLElement &&
+            existingVideo instanceof HTMLVideoElement &&
+            !existingVideo.paused &&
+            !existingVideo.ended &&
+            existingVideo.currentTime > 0 &&
+            existingVideo.style.opacity !== '0'
+          ) {
+            return;
+          }
 
           const handoffPreloader = ensureHandoffPreloader({ restart: false });
-          syncHandoffVideoToPending(handoffPreloader?.video, pendingNavigation);
+          syncHandoffVideoToPending(handoffPreloader?.video, handoffState);
         };
 
         const waitForHandoffCycle = (video) =>
@@ -379,16 +436,33 @@ const { title, description = 'Website under construction.' } = Astro.props;
             window.setTimeout(resolve, handoffMediaFadeMs + handoffBlankHoldMs);
           });
 
-        const markHandoffCycleComplete = (url) => {
+        const releaseHandoffPreloader = (url) => {
           const pendingNavigation = getPendingPreloaderNavigation();
+          const activeHandoff = getActiveHandoff();
 
-          if (!pendingNavigation || !isSamePath(pendingNavigation.pathname || '', url.pathname)) return;
+          if (activeHandoff?.pathname && !isSamePath(activeHandoff.pathname, url.pathname)) return;
+          if (pendingNavigation?.pathname && !isSamePath(pendingNavigation.pathname, url.pathname)) return;
 
-          window[pendingPreloaderKey] = {
-            ...pendingNavigation,
-            handoffCycleComplete: true,
-            suppressRoutePreloaderVideo: true,
-          };
+          if (activeHandoff) {
+            window[activeHandoffKey] = {
+              ...activeHandoff,
+              cycleComplete: true,
+            };
+          }
+
+          if (pendingNavigation) {
+            window[pendingPreloaderKey] = {
+              ...pendingNavigation,
+              handoffCycleComplete: true,
+              suppressRoutePreloaderVideo: true,
+            };
+          }
+
+          const handoffOverlay = document.querySelector('[data-home-preloader-handoff]');
+
+          if (handoffOverlay instanceof HTMLElement) {
+            handoffOverlay.dataset.handoffReleased = 'true';
+          }
 
           window.dispatchEvent(
             new CustomEvent('varelism:handoff-complete', {
@@ -484,11 +558,11 @@ const { title, description = 'Website under construction.' } = Astro.props;
           waitForHandoffCycle(handoffPreloader?.video)
             .then(() => {
               if (navigation.cancelled) return;
-              markHandoffCycleComplete(url);
               return fadeHandoffToBlank(ensureHandoffPreloader({ restart: false }));
             })
             .then(() => {
               if (navigation.cancelled) return;
+              releaseHandoffPreloader(url);
               removeHandoffPreloader();
               if (activeTriptychNavigation === navigation) {
                 activeTriptychNavigation = null;

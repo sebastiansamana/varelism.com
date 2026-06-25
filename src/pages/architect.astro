@@ -163,7 +163,31 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
       `${pathA.replace(/\/$/, '')}/` === `${pathB.replace(/\/$/, '')}/`;
 
     const getPendingHandoffState = () => {
+      const visibleHandoff = document.querySelector('[data-home-preloader-handoff]');
+      const visibleHandoffPath = visibleHandoff instanceof HTMLElement ? visibleHandoff.dataset.handoffPath : '';
+      const activeHandoff = window.__varelismActivePreloaderHandoff;
       const pendingNavigation = window.__varelismPendingPreloaderNavigation;
+
+      if (
+        visibleHandoff instanceof HTMLElement &&
+        isSamePath(visibleHandoffPath || window.location.pathname, window.location.pathname)
+      ) {
+        return {
+          cycleComplete: visibleHandoff.dataset.handoffReleased === 'true',
+          pathname: visibleHandoffPath || window.location.pathname,
+        };
+      }
+
+      if (
+        activeHandoff?.startedAt &&
+        activeHandoff.pathname &&
+        isSamePath(activeHandoff.pathname, window.location.pathname)
+      ) {
+        return {
+          cycleComplete: Boolean(activeHandoff.cycleComplete),
+          pathname: activeHandoff.pathname,
+        };
+      }
 
       if (
         !pendingNavigation?.suppressRoutePreloaderVideo ||

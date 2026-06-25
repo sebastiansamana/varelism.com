@@ -9,7 +9,6 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     completeEvent="varelism:author-preloader-complete"
     playOnce={false}
     sessionKey="varelism-author-preloader-seen"
-    timingScale={0.25}
   />
 
   <section class="author-stage" data-author-stage aria-label="Author">
@@ -692,7 +691,9 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       let hasStartedSequence = false;
       let layoutToken = 0;
       let pathLength = 0;
-      let preloaderComplete = !document.querySelector('[data-home-preloader]');
+      const hasActivePreloaderSurface = () =>
+        Boolean(document.querySelector('[data-home-preloader], [data-home-preloader-handoff]'));
+      let preloaderComplete = !hasActivePreloaderSurface();
       let sequenceComplete = false;
 
       const getViewportSnapshot = () => ({
@@ -754,16 +755,14 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         const overlay = document.querySelector('[data-home-preloader]');
 
         if (!(overlay instanceof HTMLElement)) {
-          preloaderComplete = true;
-          tryStartSequence();
+          waitForPreloaderSurfacesToClear();
           return;
         }
 
         if (overlay.dataset.homePreloaderBooted !== 'true' && !overlay.classList.contains('is-visible')) {
           overlay.remove();
           document.documentElement.classList.remove('home-preloader-active');
-          preloaderComplete = true;
-          tryStartSequence();
+          waitForPreloaderSurfacesToClear();
         }
       };
 
@@ -932,6 +931,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
       const tryStartSequence = () => {
         if (disposed || hasStartedSequence || !preloaderComplete || !pathLength) return;
+        if (hasActivePreloaderSurface()) {
+          preloaderComplete = false;
+          waitForPreloaderSurfacesToClear();
+          return;
+        }
 
         hasStartedSequence = true;
 
@@ -1036,6 +1040,17 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       };
 
       const onPreloaderComplete = () => {
+        waitForPreloaderSurfacesToClear();
+      };
+
+      const waitForPreloaderSurfacesToClear = () => {
+        if (disposed) return;
+
+        if (hasActivePreloaderSurface()) {
+          setTimer(waitForPreloaderSurfacesToClear, 60);
+          return;
+        }
+
         preloaderComplete = true;
         tryStartSequence();
       };
@@ -1072,6 +1087,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       };
 
       window.addEventListener(preloaderCompleteEvent, onPreloaderComplete);
+      window.addEventListener('varelism:handoff-complete', onPreloaderComplete);
       window.addEventListener('resize', onResize);
       window.addEventListener('orientationchange', onResize);
       setTimer(clearStalePreloader, 250);
@@ -1081,6 +1097,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         disposed = true;
         ++layoutToken;
         window.removeEventListener(preloaderCompleteEvent, onPreloaderComplete);
+        window.removeEventListener('varelism:handoff-complete', onPreloaderComplete);
         window.removeEventListener('resize', onResize);
         window.removeEventListener('orientationchange', onResize);
         resetStage();

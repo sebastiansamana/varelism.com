@@ -45,6 +45,7 @@ const {
   (() => {
     const stateKey = '__varelismHomePreloader';
     const pendingPreloaderKey = '__varelismPendingPreloaderNavigation';
+    const activeHandoffKey = '__varelismActivePreloaderHandoff';
     const state = (window[stateKey] ||= {
       cleanups: new Set(),
       listenersAttached: false,
@@ -59,7 +60,7 @@ const {
       Boolean(window[pendingPreloaderKey]?.keepBootingAfterSwap);
 
     const shouldPreservePendingHandoffAfterSwap = () =>
-      Boolean(window[pendingPreloaderKey]?.handoffStartedAt);
+      Boolean(window[activeHandoffKey]?.startedAt || window[pendingPreloaderKey]?.handoffStartedAt);
 
     const isSamePath = (pathA, pathB) =>
       pathA === pathB ||
@@ -175,7 +176,30 @@ const {
     };
 
     const getPendingHandoffState = (activePaths) => {
+      const visibleHandoff = document.querySelector('[data-home-preloader-handoff]');
+      const visibleHandoffPath = visibleHandoff instanceof HTMLElement ? visibleHandoff.dataset.handoffPath : '';
+      const activeHandoff = window[activeHandoffKey];
       const pendingNavigation = window[pendingPreloaderKey];
+
+      if (
+        visibleHandoff instanceof HTMLElement &&
+        activePaths.some((path) => isSamePath(path, visibleHandoffPath || window.location.pathname))
+      ) {
+        return {
+          cycleComplete: visibleHandoff.dataset.handoffReleased === 'true',
+          pathname: visibleHandoffPath || window.location.pathname,
+        };
+      }
+
+      if (
+        activeHandoff?.startedAt &&
+        activePaths.some((path) => isSamePath(path, activeHandoff.pathname || window.location.pathname))
+      ) {
+        return {
+          cycleComplete: Boolean(activeHandoff.cycleComplete),
+          pathname: activeHandoff.pathname || window.location.pathname,
+        };
+      }
 
       if (
         !pendingNavigation?.suppressRoutePreloaderVideo ||
