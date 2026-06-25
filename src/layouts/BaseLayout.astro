@@ -21,6 +21,8 @@ const { title, description = 'Website under construction.' } = Astro.props;
     <ViewTransitions />
     <script is:inline>
       (() => {
+        const preloaderImageSrc = '/images/Logo_Animation_Preloader.gif';
+        const pendingPreloaderKey = '__varelismPendingPreloaderNavigation';
         const preloaderRoutes = [
           {
             paths: ['/', '/index.html'],
@@ -38,21 +40,99 @@ const { title, description = 'Website under construction.' } = Astro.props;
             sessionKey: 'varelism-author-preloader-seen',
           },
         ];
-        const route = preloaderRoutes.find(({ paths }) => paths.includes(window.location.pathname));
+        const standaloneHandoffRoutes = [
+          {
+            paths: ['/architect/', '/architect'],
+          },
+        ];
+        const getPreloaderRoute = (pathname) =>
+          preloaderRoutes.find(({ paths }) => paths.includes(pathname));
+        const getStandaloneHandoffRoute = (pathname) =>
+          standaloneHandoffRoutes.find(({ paths }) => paths.includes(pathname));
+        const hasRoutePlayed = (route) => {
+          try {
+            return sessionStorage.getItem(route.sessionKey) === 'true';
+          } catch {
+            return false;
+          }
+        };
+        const shouldPlayPreloader = (route) =>
+          Boolean(route && (!route.playOnce || !hasRoutePlayed(route)));
+        const route = getPreloaderRoute(window.location.pathname);
 
-        if (!route) return;
-
-        let hasPlayed = false;
-
-        try {
-          hasPlayed = sessionStorage.getItem(route.sessionKey) === 'true';
-        } catch {
-          hasPlayed = false;
-        }
-
-        if (!route.playOnce || !hasPlayed) {
+        const showPreloaderShell = () => {
           document.documentElement.classList.add('home-preloader-active', 'home-preloader-booting');
+        };
+
+        if (shouldPlayPreloader(route)) {
+          showPreloaderShell();
         }
+
+        const removeHandoffPreloader = () => {
+          document.querySelectorAll('[data-home-preloader-handoff]').forEach((overlay) => {
+            overlay.remove();
+          });
+        };
+
+        const ensureHandoffPreloader = () => {
+          if (document.querySelector('[data-home-preloader], [data-home-preloader-handoff]')) {
+            return;
+          }
+
+          const overlay = document.createElement('div');
+          const image = document.createElement('img');
+          const isCompact = window.matchMedia?.('(max-width: 720px)').matches;
+
+          overlay.dataset.homePreloaderHandoff = 'true';
+          overlay.setAttribute('aria-hidden', 'true');
+          Object.assign(overlay.style, {
+            alignItems: 'center',
+            background: '#ffffff',
+            display: 'flex',
+            inset: '0',
+            justifyContent: 'center',
+            opacity: '1',
+            pointerEvents: 'auto',
+            position: 'fixed',
+            visibility: 'visible',
+            zIndex: '9999',
+          });
+
+          image.alt = '';
+          image.decoding = 'async';
+          image.draggable = false;
+          image.loading = 'eager';
+          image.src = preloaderImageSrc;
+          Object.assign(image.style, {
+            display: 'block',
+            height: 'auto',
+            maxHeight: isCompact ? 'min(28vh, 13rem)' : 'min(34vh, 18rem)',
+            maxWidth: isCompact ? 'min(62vw, 16rem)' : 'min(48vw, 22rem)',
+            objectFit: 'contain',
+            width: isCompact ? 'min(62vw, 16rem)' : 'min(48vw, 22rem)',
+          });
+
+          overlay.append(image);
+          document.body?.append(overlay);
+        };
+
+        const preparePreloaderNavigation = (url) => {
+          const nextRoute = getPreloaderRoute(url.pathname);
+          const shouldUseRoutePreloader = shouldPlayPreloader(nextRoute);
+          const standaloneHandoffRoute = getStandaloneHandoffRoute(url.pathname);
+
+          if (!shouldUseRoutePreloader && !standaloneHandoffRoute) {
+            window[pendingPreloaderKey] = null;
+            return;
+          }
+
+          window[pendingPreloaderKey] = {
+            keepBootingAfterSwap: shouldUseRoutePreloader,
+            pathname: url.pathname,
+          };
+          showPreloaderShell();
+          ensureHandoffPreloader();
+        };
 
         const listenerKey = '__varelismPreloaderNavigationListeners';
 
@@ -83,16 +163,23 @@ const { title, description = 'Website under construction.' } = Astro.props;
 
           if (url.origin !== window.location.origin) return;
 
-          if (url.pathname === '/author/' || url.pathname === '/author') {
-            document.documentElement.classList.add('home-preloader-active', 'home-preloader-booting');
-          }
+          preparePreloaderNavigation(url);
+        });
+
+        document.addEventListener('astro:before-preparation', (event) => {
+          const url = event?.to ? new URL(event.to, window.location.href) : null;
+
+          if (url) preparePreloaderNavigation(url);
         });
 
         document.addEventListener('astro:page-load', () => {
-          const shouldAuthorPreload = window.location.pathname === '/author/' || window.location.pathname === '/author';
+          const currentRoute = getPreloaderRoute(window.location.pathname);
+          const shouldPreloadCurrentRoute = shouldPlayPreloader(currentRoute);
 
-          if (!shouldAuthorPreload && !document.querySelector('[data-home-preloader]')) {
+          if (!shouldPreloadCurrentRoute && !document.querySelector('[data-home-preloader]')) {
             document.documentElement.classList.remove('home-preloader-active', 'home-preloader-booting');
+            window[pendingPreloaderKey] = null;
+            removeHandoffPreloader();
           }
         });
       })();

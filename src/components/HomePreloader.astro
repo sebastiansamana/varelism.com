@@ -40,11 +40,19 @@ const {
 <script is:inline>
   (() => {
     const stateKey = '__varelismHomePreloader';
+    const pendingPreloaderKey = '__varelismPendingPreloaderNavigation';
     const state = (window[stateKey] ||= {
       cleanups: new Set(),
       listenersAttached: false,
     });
     state.cleanups ||= new Set();
+
+    const clearPendingPreloaderNavigation = () => {
+      window[pendingPreloaderKey] = null;
+    };
+
+    const shouldKeepBootingAfterSwap = () =>
+      Boolean(window[pendingPreloaderKey]?.keepBootingAfterSwap);
 
     const initOverlay = (overlay) => {
       if (!(overlay instanceof HTMLElement) || overlay.dataset.homePreloaderBooted === 'true') return;
@@ -113,6 +121,7 @@ const {
         cleanupOverlay();
         overlay.remove();
         document.documentElement.classList.remove('home-preloader-active', 'home-preloader-booting');
+        clearPendingPreloaderNavigation();
         window.dispatchEvent(new CustomEvent(completeEvent));
       };
 
@@ -175,7 +184,10 @@ const {
       document.addEventListener('astro:before-swap', () => {
         state.cleanups.forEach((cleanup) => cleanup());
         state.cleanups.clear();
-        document.documentElement.classList.remove('home-preloader-active', 'home-preloader-booting');
+        if (!shouldKeepBootingAfterSwap()) {
+          document.documentElement.classList.remove('home-preloader-active', 'home-preloader-booting');
+          clearPendingPreloaderNavigation();
+        }
       });
       state.listenersAttached = true;
     }
