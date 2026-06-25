@@ -287,7 +287,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     }) {
       const viewportHeight =
         window.innerHeight || document.documentElement.clientHeight || stageHeight;
-      const requestedMinimumVerticalDistance = viewportHeight * 0.5;
+      const requestedMinimumVerticalDistance = viewportHeight * 0.56;
       const getPointAtRandomX = (range, y) => ({
         x: randomBetween(range.minX, range.maxX),
         y,
