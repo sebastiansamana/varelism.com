@@ -27,6 +27,7 @@ const { title, description = 'Website under construction.' } = Astro.props;
         const activeHandoffKey = '__varelismActivePreloaderHandoff';
         const pendingHomeReturnKey = '__varelismPendingHomeReturn';
         const forceAuthorReplayKey = '__varelismForceAuthorReplay';
+        const architectReturnReplayKey = 'varelism-architect-return-replay';
         const astroNavigateKey = '__varelismAstroNavigate';
         const navigationPreloaderClass = 'home-preloader-navigation-active';
         const homeReturnClass = 'home-return-active';
@@ -67,6 +68,7 @@ const { title, description = 'Website under construction.' } = Astro.props;
           '/author',
         ];
         const authorReplayReturnPaths = ['/books/', '/books', '/memories/', '/memories'];
+        const architectReplayReturnPaths = ['/projects/', '/projects', '/portfolios/', '/portfolios'];
         const getPreloaderRoute = (pathname) =>
           preloaderRoutes.find(({ paths }) => paths.includes(pathname));
         const getStandaloneHandoffRoute = (pathname) =>
@@ -235,6 +237,15 @@ const { title, description = 'Website under construction.' } = Astro.props;
           `${pathA.replace(/\/$/, '')}/` === `${pathB.replace(/\/$/, '')}/`;
 
         const isAuthorPath = (pathname) => isSamePath(pathname, '/author/');
+        const isArchitectPath = (pathname) => isSamePath(pathname, '/architect/');
+
+        const markArchitectReturnReplay = () => {
+          try {
+            sessionStorage.setItem(architectReturnReplayKey, 'true');
+          } catch {
+            // Storage can be unavailable in strict privacy contexts.
+          }
+        };
 
         const markAuthorReplayIfNeeded = (toPathname, fromPathname = lastPathname) => {
           if (
@@ -242,6 +253,24 @@ const { title, description = 'Website under construction.' } = Astro.props;
             authorReplayReturnPaths.some((path) => isSamePath(fromPathname, path))
           ) {
             window[forceAuthorReplayKey] = true;
+          }
+        };
+
+        const markArchitectReplayIfNeeded = (toPathname, fromPathname = lastPathname) => {
+          if (
+            isArchitectPath(toPathname) &&
+            architectReplayReturnPaths.some((path) => isSamePath(fromPathname, path))
+          ) {
+            markArchitectReturnReplay();
+          }
+        };
+
+        const markArchitectReplayOnExit = (fromPathname, toPathname) => {
+          if (
+            isArchitectPath(fromPathname) &&
+            architectReplayReturnPaths.some((path) => isSamePath(toPathname, path))
+          ) {
+            markArchitectReturnReplay();
           }
         };
 
@@ -656,6 +685,8 @@ const { title, description = 'Website under construction.' } = Astro.props;
 
           const isTriptychLink = Boolean(link.closest('.triptych-item'));
 
+          markArchitectReplayOnExit(window.location.pathname, url.pathname);
+
           if (link.closest('.site-logo') && (url.pathname === '/' || url.pathname === '/index.html')) {
             if (isSamePath(window.location.pathname, '/')) return;
 
@@ -683,6 +714,8 @@ const { title, description = 'Website under construction.' } = Astro.props;
           if (!url) return;
 
           markAuthorReplayIfNeeded(url.pathname, window.location.pathname);
+          markArchitectReplayIfNeeded(url.pathname, window.location.pathname);
+          markArchitectReplayOnExit(window.location.pathname, url.pathname);
 
           if (skipNextHomePreloader && (url.pathname === '/' || url.pathname === '/index.html')) {
             skipNextHomePreloader = false;
@@ -700,6 +733,7 @@ const { title, description = 'Website under construction.' } = Astro.props;
 
         document.addEventListener('astro:after-swap', () => {
           markAuthorReplayIfNeeded(window.location.pathname);
+          markArchitectReplayIfNeeded(window.location.pathname);
           restoreRoutePreloaderShell();
           restoreActiveHandoffOverlay();
           if (getPendingHomeReturn()) showHomeReturnOverlay();
@@ -733,6 +767,7 @@ const { title, description = 'Website under construction.' } = Astro.props;
 
         window.addEventListener('popstate', () => {
           markAuthorReplayIfNeeded(window.location.pathname);
+          markArchitectReplayIfNeeded(window.location.pathname);
         });
       })();
     </script>
