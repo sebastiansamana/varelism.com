@@ -54,6 +54,8 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
     const architectReturnBlankClass = 'architect-return-blank-active';
     const ARCHITECT_RETURN_BLANK_HOLD_MS = 360;
     const ARCHITECT_RETURN_ROCK_FADE_MS = 620;
+    const ARCHITECT_RETURN_LINK_DELAY_MS = ARCHITECT_RETURN_ROCK_FADE_MS + 120;
+    const ARCHITECT_RETURN_LINK_FADE_MS = 380;
 
     const clearNavigationPreloaderClassIfIdle = () => {
       if (
@@ -273,6 +275,10 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
         document.documentElement.classList.add(architectReturnBlankClass);
         viewer.style.setProperty('--architect-return-rock-fade-ms', `${ARCHITECT_RETURN_ROCK_FADE_MS}ms`);
         viewer.classList.add('is-return-reveal');
+        if (stage instanceof HTMLElement) {
+          stage.style.setProperty('--architect-return-link-fade-ms', `${ARCHITECT_RETURN_LINK_FADE_MS}ms`);
+          stage.classList.add('is-return-links-held');
+        }
         document.querySelectorAll('[data-home-preloader-handoff]').forEach((overlay) => overlay.remove());
         preloader?.remove();
         document.documentElement.classList.remove(
@@ -1349,6 +1355,15 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
             window.requestAnimationFrame(() => {
               if (hasDisposed) return;
               viewer.classList.add('is-return-reveal-visible');
+              if (stage instanceof HTMLElement) {
+                setPreloaderTimer(() => {
+                  stage.classList.add('is-return-links-visible');
+                }, ARCHITECT_RETURN_LINK_DELAY_MS);
+                setPreloaderTimer(() => {
+                  stage.classList.remove('is-return-links-held', 'is-return-links-visible');
+                  stage.style.removeProperty('--architect-return-link-fade-ms');
+                }, ARCHITECT_RETURN_LINK_DELAY_MS + ARCHITECT_RETURN_LINK_FADE_MS);
+              }
             });
           });
         }
@@ -1359,6 +1374,10 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
         startViewer().catch((error) => {
           document.documentElement.classList.remove(architectReturnBlankClass);
           viewer.classList.remove('is-return-reveal', 'is-return-reveal-visible');
+          if (stage instanceof HTMLElement) {
+            stage.classList.remove('is-return-links-held', 'is-return-links-visible');
+            stage.style.removeProperty('--architect-return-link-fade-ms');
+          }
           console.error('Architect viewer failed to load.', error);
         });
       };
@@ -1411,6 +1430,10 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
         delete viewer.dataset.viewerBooted;
         viewer.classList.remove('is-ready', 'is-return-reveal', 'is-return-reveal-visible');
         viewer.style.removeProperty('--architect-return-rock-fade-ms');
+        if (stage instanceof HTMLElement) {
+          stage.classList.remove('is-return-links-held', 'is-return-links-visible');
+          stage.style.removeProperty('--architect-return-link-fade-ms');
+        }
         cleanupSpatialLinks();
         cleanupPreloaderVideo();
         cleanupHandoffCompletion();
@@ -1603,6 +1626,25 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
   .architect-spatial-link.is-visible-hit {
     color: #000000;
     cursor: pointer;
+  }
+
+  .architect-stage.is-return-links-held .architect-spatial-link {
+    opacity: 0;
+    pointer-events: none;
+    transition:
+      opacity var(--architect-return-link-fade-ms, 380ms) ease,
+      visibility 0ms linear var(--architect-return-link-fade-ms, 380ms),
+      color 180ms ease;
+    visibility: hidden;
+  }
+
+  .architect-stage.is-return-links-held.is-return-links-visible .architect-spatial-link {
+    opacity: 1;
+    pointer-events: auto;
+    transition:
+      opacity var(--architect-return-link-fade-ms, 380ms) ease,
+      color 180ms ease;
+    visibility: visible;
   }
 
   .architect-spatial-link:focus-visible {
