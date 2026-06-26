@@ -90,12 +90,14 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
 
     const startPreloaderVideo = (
       preloader,
-      shouldReplay,
       { autoStart = true, onCycleStart = () => {}, onCycleEnd = () => {} } = {},
     ) => {
       const video = preloader?.querySelector('.architect-preloader__media');
 
-      if (!(video instanceof HTMLVideoElement)) return () => {};
+      if (!(video instanceof HTMLVideoElement)) {
+        window.requestAnimationFrame(onCycleEnd);
+        return () => {};
+      }
 
       let isDisposed = false;
 
@@ -118,27 +120,10 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
         }
       };
 
-      const restartVideo = () => {
-        preparePassivePreloaderVideo(video);
-        video.style.opacity = '1';
-        onCycleStart();
-
-        try {
-          video.pause();
-          video.currentTime = 0;
-        } catch {
-          // Metadata may not be available yet on slow connections.
-        }
-
-        playVideo();
-      };
-
       const onEnded = () => {
         if (isDisposed) return;
 
         onCycleEnd();
-
-        if (shouldReplay()) restartVideo();
       };
       const onError = onCycleEnd;
       const onReady = playVideo;
@@ -150,7 +135,9 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
         video.addEventListener('canplaythrough', onReady, { once: true });
       }
       if (autoStart) {
-        restartVideo();
+        video.style.opacity = '1';
+        onCycleStart();
+        playVideo();
       } else {
         preparePassivePreloaderVideo(video);
 
@@ -310,7 +297,6 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
       let hasMetMinimumDuration = shouldReplayWithoutPreloader;
       let isModelReady = false;
       let isPreloaderHiding = false;
-      let isReplayCycleBlockingReveal = false;
       let cleanupSpatialLinks = () => {};
       let cleanupPreloaderVideo = () => {};
       let cleanupHandoffCompletion = () => {};
@@ -322,7 +308,6 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
           (link) => link instanceof HTMLAnchorElement,
         );
 
-      const imageVisibleMs = 1000;
       const imageFadeMs = handoffState ? 90 : 300;
       const whiteHoldMs = handoffState ? 24 : 300;
       const overlayFadeMs = handoffState ? 180 : 300;
@@ -361,7 +346,6 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
         if (
           hasDisposed ||
           isPreloaderHiding ||
-          isReplayCycleBlockingReveal ||
           !isModelReady ||
           !hasMetMinimumDuration
         ) {
@@ -378,23 +362,6 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
             setPreloaderTimer(removePreloader, overlayFadeMs);
           }, whiteHoldMs);
         }, imageFadeMs);
-      };
-
-      const startBlockingPreloaderCycle = () => {
-        cleanupPreloaderVideo();
-        cleanupPreloaderVideo = startPreloaderVideo(
-          activePreloader,
-          () => !hasDisposed && !isPreloaderHiding && !isModelReady,
-          {
-            onCycleStart: () => {
-              isReplayCycleBlockingReveal = true;
-            },
-            onCycleEnd: () => {
-              isReplayCycleBlockingReveal = false;
-              hidePreloaderWhenReady();
-            },
-          },
-        );
       };
 
       const prepareHiddenHandoffPreloaderVideo = () => {
@@ -416,10 +383,6 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
       const completeHandoffMinimum = () => {
         hasMetMinimumDuration = true;
         hidePreloaderWhenReady();
-
-        if (!isModelReady && !isPreloaderHiding && !isReplayCycleBlockingReveal) {
-          startBlockingPreloaderCycle();
-        }
       };
 
       if (handoffState) {
@@ -431,16 +394,8 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
         prepareHiddenHandoffPreloaderVideo();
         cleanupPreloaderVideo = startPreloaderVideo(
           activePreloader,
-          () => !hasDisposed && !isPreloaderHiding && !isModelReady,
           {
             autoStart: false,
-            onCycleStart: () => {
-              isReplayCycleBlockingReveal = true;
-            },
-            onCycleEnd: () => {
-              isReplayCycleBlockingReveal = false;
-              hidePreloaderWhenReady();
-            },
           },
         );
 
@@ -465,15 +420,13 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
       } else {
         cleanupPreloaderVideo = startPreloaderVideo(
           activePreloader,
-          () => !hasDisposed && !isPreloaderHiding && !isModelReady,
+          {
+            onCycleEnd: () => {
+              hasMetMinimumDuration = true;
+              hidePreloaderWhenReady();
+            },
+          },
         );
-      }
-
-      if (!handoffState && !shouldReplayWithoutPreloader) {
-        setPreloaderTimer(() => {
-          hasMetMinimumDuration = true;
-          hidePreloaderWhenReady();
-        }, imageVisibleMs);
       }
 
       const installSpatialLinkGuards = () => {
@@ -1404,10 +1357,9 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
         }, ARCHITECT_RETURN_BLANK_HOLD_MS);
       } else if (observer) {
         observer.observe(viewer);
+        setPreloaderTimer(startViewerSafely, 0);
       } else {
-        window.setTimeout(() => {
-          startViewerSafely();
-        }, 1);
+        setPreloaderTimer(startViewerSafely, 0);
       }
 
       const dispose = () => {
@@ -1467,6 +1419,7 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
   .architect-preloader {
     align-items: center;
     background: #ffffff;
+    contain: layout paint style;
     display: flex;
     inset: 0;
     justify-content: center;
@@ -1475,6 +1428,7 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
     position: fixed;
     transition: opacity 300ms ease, visibility 0ms linear 300ms;
     visibility: visible;
+    will-change: opacity;
     z-index: 9999;
   }
 
@@ -1485,7 +1439,15 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
   }
 
   :global(html.home-preloader-navigation-active) .architect-preloader {
+    bottom: auto;
+    height: 100vh;
+    height: 100svh;
+    height: 100dvh;
+    left: 0;
     pointer-events: none;
+    position: absolute;
+    right: 0;
+    top: 0;
     z-index: 10;
   }
 
@@ -1507,7 +1469,9 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
     opacity: 1;
     pointer-events: none;
     transition: opacity 300ms ease;
+    transform: translateZ(0);
     user-select: none;
+    will-change: opacity;
     width: min(48vw, 22rem);
   }
 
@@ -1606,7 +1570,8 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
     color: #691b17;
     cursor: default;
     display: block;
-    font-family: 'SF Pro Display Ultralight', 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+      'Helvetica Neue', Arial, sans-serif;
     font-size: clamp(1.35rem, 2.1vw, 2.15rem);
     font-weight: 300;
     letter-spacing: 0;

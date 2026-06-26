@@ -2,32 +2,32 @@
   --bg: #ffffff;
   --ink: #1b3743;
   --content: 960px;
+  --font-sans: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
 }
 
 @font-face {
   font-family: 'SF Pro Display';
   font-style: normal;
   font-weight: 200;
-  src:
-    url('/fonts/SF-Pro-Display-Thin.otf') format('opentype'),
-    url('/fonts/SF-Pro-Display-Thin.ttf') format('truetype');
-  font-display: swap;
+  src: url('/fonts/SF-Pro-Display-Thin.woff2') format('woff2');
+  font-display: block;
 }
 
 @font-face {
   font-family: 'SF Pro Display';
   font-style: normal;
   font-weight: 300;
-  src: url('/fonts/SF-Pro-Display-Ultralight.ttf') format('truetype');
-  font-display: swap;
+  src: url('/fonts/SF-Pro-Display-Ultralight.woff2') format('woff2');
+  font-display: block;
 }
 
 @font-face {
   font-family: 'SF Pro Display';
   font-style: normal;
   font-weight: 400;
-  src: url('/fonts/SF-Pro-Display-Light.ttf') format('truetype');
-  font-display: swap;
+  src: url('/fonts/SF-Pro-Display-Light.woff2') format('woff2');
+  font-display: block;
 }
 
 * {
@@ -42,15 +42,23 @@ body {
 }
 
 html {
+  font-family: var(--font-sans);
   scrollbar-gutter: stable;
 }
 
 body {
   background: var(--bg);
   color: var(--ink);
-  font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: inherit;
   line-height: 1.6;
   text-rendering: optimizeLegibility;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
 }
 
 html.home-preloader-booting:not(.home-preloader-navigation-active),
@@ -71,7 +79,6 @@ html.home-preloader-booting .home-preloader {
   visibility: visible;
 }
 
-html.home-preloader-navigation-active .site-footer,
 html.home-return-active .site-footer {
   position: relative;
   z-index: 20;
@@ -125,7 +132,7 @@ button,
 .site-nav a {
   color: #000000;
   display: block;
-  font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: inherit;
   font-size: clamp(0.82rem, 1vw, 0.98rem);
   font-weight: 200;
   letter-spacing: 0;
@@ -231,7 +238,7 @@ main {
   color: #919191;
   display: flex;
   flex-direction: column;
-  font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: inherit;
   font-size: 0.58rem;
   font-weight: 200;
   gap: 0.35rem;

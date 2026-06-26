@@ -120,19 +120,6 @@ const {
       return Promise.resolve(true);
     };
 
-    const restartPreloaderVideo = (video) => {
-      preparePassivePreloaderVideo(video);
-
-      try {
-        video.pause();
-        video.currentTime = 0;
-      } catch {
-        // Some browsers reject currentTime writes before metadata exists.
-      }
-
-      return playPreloaderVideo(video);
-    };
-
     const waitForWindowLoad = () => {
       if (document.readyState === 'complete') return Promise.resolve();
 
@@ -265,12 +252,9 @@ const {
 
         return Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed) : Math.round(fallback);
       };
-      // Match the single-pass animation duration so ready pages reveal after one full iteration.
-      const imageVisibleMs = Math.round(3070 * timingScale);
       const requestedImageFadeMs = getDuration('imageFadeMs', 300 * timingScale);
       const requestedWhiteHoldMs = getDuration('whiteHoldMs', 300 * timingScale);
       const requestedOverlayFadeMs = getDuration('overlayFadeMs', 300 * timingScale);
-      const fallbackMs = Math.round(10000 * timingScale);
       const isActivePath = activePaths.some((path) => isSamePath(path, window.location.pathname));
       const forcePreloader = isForcedByPendingNavigation(activePaths);
       const handoffState = getPendingHandoffState(activePaths);
@@ -376,10 +360,10 @@ const {
       let isPageReady = false;
       let hasMetMediaMoment = Boolean(handoffState?.cycleComplete);
       let isHiding = false;
-      let isReplayCycleBlockingReveal = false;
+      let hasMediaDurationGuard = false;
 
       const hideOverlay = () => {
-        if (isHiding || isReplayCycleBlockingReveal || !isPageReady || !hasMetMediaMoment) return;
+        if (isHiding || !isPageReady || !hasMetMediaMoment) return;
 
         isHiding = true;
         overlay.classList.add('is-image-fading');
@@ -390,24 +374,37 @@ const {
       };
 
       const markMediaMomentReached = () => {
+        if (hasMetMediaMoment) return;
         hasMetMediaMoment = true;
         hideOverlay();
       };
 
-      const startVideoCycle = ({ blockRevealUntilEnded = false } = {}) => {
-        if (!preloaderVideo || hasRemoved || isHiding) return;
-
-        if (blockRevealUntilEnded) {
-          isReplayCycleBlockingReveal = true;
+      const setMediaDurationGuard = () => {
+        if (
+          hasMediaDurationGuard ||
+          !preloaderVideo ||
+          hasMetMediaMoment ||
+          !Number.isFinite(preloaderVideo.duration) ||
+          preloaderVideo.duration <= 0
+        ) {
+          return;
         }
 
+        hasMediaDurationGuard = true;
+        const remainingMs = Math.max(0, (preloaderVideo.duration - preloaderVideo.currentTime) * 1000);
+        setTimer(markMediaMomentReached, Math.ceil(remainingMs) + 180);
+      };
+
+      const startVideoCycle = () => {
+        if (!preloaderVideo || hasRemoved || isHiding) return;
+
         preloaderVideo.style.opacity = '1';
-        restartPreloaderVideo(preloaderVideo).then((didPlay) => {
+        playPreloaderVideo(preloaderVideo).then((didPlay) => {
           if (didPlay === false && !hasRemoved) {
-            isReplayCycleBlockingReveal = false;
             markMediaMomentReached();
           }
         });
+        setMediaDurationGuard();
       };
 
       if (preloaderVideo) {
@@ -416,24 +413,18 @@ const {
         const onEnded = () => {
           if (hasRemoved || isHiding) return;
 
-          isReplayCycleBlockingReveal = false;
           markMediaMomentReached();
-
-          if (!isPageReady) {
-            startVideoCycle({ blockRevealUntilEnded: true });
-            return;
-          }
-
-          hideOverlay();
         };
         const onError = () => {
           if (handoffState && !hasMetMediaMoment) return;
           markMediaMomentReached();
         };
         const onReady = () => playPreloaderVideo(preloaderVideo);
+        const onMetadata = () => setMediaDurationGuard();
 
         preloaderVideo.addEventListener('ended', onEnded);
         preloaderVideo.addEventListener('error', onError, { once: true });
+        preloaderVideo.addEventListener('loadedmetadata', onMetadata, { once: true });
         if (!handoffState) {
           preloaderVideo.addEventListener('loadeddata', onReady, { once: true });
           preloaderVideo.addEventListener('canplaythrough', onReady, { once: true });
@@ -442,6 +433,7 @@ const {
         cleanupVideo = () => {
           preloaderVideo.removeEventListener('ended', onEnded);
           preloaderVideo.removeEventListener('error', onError);
+          preloaderVideo.removeEventListener('loadedmetadata', onMetadata);
           preloaderVideo.removeEventListener('loadeddata', onReady);
           preloaderVideo.removeEventListener('canplaythrough', onReady);
 
@@ -455,6 +447,8 @@ const {
         if (!handoffState) {
           startVideoCycle();
         }
+      } else {
+        markMediaMomentReached();
       }
 
       if (handoffState && !handoffState.cycleComplete) {
@@ -465,10 +459,6 @@ const {
 
           cleanupHandoffCompletion();
           markMediaMomentReached();
-
-          if (!isPageReady && !isHiding && !isReplayCycleBlockingReveal) {
-            startVideoCycle({ blockRevealUntilEnded: true });
-          }
         };
 
         window.addEventListener('varelism:handoff-complete', onHandoffComplete);
@@ -476,14 +466,6 @@ const {
           window.removeEventListener('varelism:handoff-complete', onHandoffComplete);
           cleanupHandoffCompletion = () => {};
         };
-      } else if (handoffState?.cycleComplete) {
-        setTimer(() => {
-          if (!isPageReady && !isHiding && !isReplayCycleBlockingReveal) {
-            startVideoCycle({ blockRevealUntilEnded: true });
-          }
-        }, 0);
-      } else {
-        setTimer(markMediaMomentReached, imageVisibleMs);
       }
 
       waitForStablePageFrame(overlay).then(() => {
@@ -491,12 +473,6 @@ const {
         isPageReady = true;
         hideOverlay();
       });
-
-      setTimer(() => {
-        isPageReady = true;
-        markMediaMomentReached();
-        hideOverlay();
-      }, fallbackMs);
     };
 
     const initPreloaders = () => {
@@ -537,6 +513,7 @@ const {
   .home-preloader {
     align-items: center;
     background: #ffffff;
+    contain: layout paint style;
     display: flex;
     inset: 0;
     justify-content: center;
@@ -547,11 +524,20 @@ const {
       opacity var(--home-preloader-overlay-fade-ms, 300ms) ease,
       visibility var(--home-preloader-overlay-fade-ms, 300ms) ease;
     visibility: hidden;
+    will-change: opacity;
     z-index: 9999;
   }
 
   :global(html.home-preloader-navigation-active) .home-preloader {
+    bottom: auto;
+    height: 100vh;
+    height: 100svh;
+    height: 100dvh;
+    left: 0;
     pointer-events: none;
+    position: absolute;
+    right: 0;
+    top: 0;
     z-index: 10;
   }
 
@@ -576,7 +562,9 @@ const {
     opacity: 1;
     pointer-events: none;
     transition: opacity var(--home-preloader-image-fade-ms, 300ms) ease;
+    transform: translateZ(0);
     user-select: none;
+    will-change: opacity;
     width: min(48vw, 22rem);
     background: transparent;
   }
