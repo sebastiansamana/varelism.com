@@ -53,8 +53,8 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-html.home-preloader-booting,
-html.home-preloader-booting body {
+html.home-preloader-booting:not(.home-preloader-navigation-active),
+html.home-preloader-booting:not(.home-preloader-navigation-active) body {
   background: #ffffff;
   overflow: hidden;
 }

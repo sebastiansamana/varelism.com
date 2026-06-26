@@ -270,6 +270,10 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
         preloader?.remove();
         document.documentElement.classList.remove('architect-preloader-active', navigationPreloaderClass);
         clearNavigationPreloaderClassIfIdle();
+
+        if (window.scrollX || window.scrollY) {
+          window.scrollTo({ left: 0, top: 0, behavior: 'auto' });
+        }
       }
 
       disposeCurrentViewer();
@@ -282,6 +286,7 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
       let hasDisposed = false;
       let cleanup = () => {};
       let observer = null;
+      let startFrameId = 0;
       let hasMetMinimumDuration = shouldReplayWithoutPreloader;
       let isModelReady = false;
       let isPreloaderHiding = false;
@@ -1326,27 +1331,34 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
         hidePreloaderWhenReady();
       };
 
+      const startViewerSafely = () => {
+        startViewer().catch((error) => {
+          console.error('Architect viewer failed to load.', error);
+        });
+      };
+
       observer =
-        'IntersectionObserver' in window
+        !shouldReplayWithoutPreloader && 'IntersectionObserver' in window
           ? new IntersectionObserver(
               (entries) => {
                 if (!entries.some((entry) => entry.isIntersecting)) return;
                 observer?.disconnect();
-                startViewer().catch((error) => {
-                  console.error('Architect viewer failed to load.', error);
-                });
+                startViewerSafely();
               },
               { rootMargin: '280px' },
             )
           : null;
 
-      if (observer) {
+      if (shouldReplayWithoutPreloader) {
+        startFrameId = window.requestAnimationFrame(() => {
+          startFrameId = 0;
+          startViewerSafely();
+        });
+      } else if (observer) {
         observer.observe(viewer);
       } else {
         window.setTimeout(() => {
-          startViewer().catch((error) => {
-            console.error('Architect viewer failed to load.', error);
-          });
+          startViewerSafely();
         }, 1);
       }
 
@@ -1355,6 +1367,10 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
         hasDisposed = true;
         document.removeEventListener('astro:before-swap', dispose);
         window.removeEventListener('pagehide', dispose);
+        if (startFrameId) {
+          window.cancelAnimationFrame(startFrameId);
+          startFrameId = 0;
+        }
         observer?.disconnect();
         preloaderTimers.forEach((timer) => window.clearTimeout(timer));
         preloaderTimers.clear();
@@ -1411,6 +1427,7 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
   }
 
   :global(html.home-preloader-navigation-active) .architect-preloader {
+    pointer-events: none;
     z-index: 10;
   }
 
