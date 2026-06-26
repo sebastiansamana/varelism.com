@@ -27,7 +27,10 @@ const { title, description = 'Website under construction.' } = Astro.props;
         const activeHandoffKey = '__varelismActivePreloaderHandoff';
         const pendingHomeReturnKey = '__varelismPendingHomeReturn';
         const forceAuthorReplayKey = '__varelismForceAuthorReplay';
+        const authorReturnReplayKey = 'varelism-author-return-replay';
         const architectReturnReplayKey = 'varelism-architect-return-replay';
+        const authorReturnBlankClass = 'author-return-blank-active';
+        const architectReturnBlankClass = 'architect-return-blank-active';
         const astroNavigateKey = '__varelismAstroNavigate';
         const navigationPreloaderClass = 'home-preloader-navigation-active';
         const homeReturnClass = 'home-return-active';
@@ -247,21 +250,65 @@ const { title, description = 'Website under construction.' } = Astro.props;
           }
         };
 
+        const markAuthorReturnReplay = () => {
+          try {
+            sessionStorage.setItem(authorReturnReplayKey, 'true');
+          } catch {
+            // Storage can be unavailable in strict privacy contexts.
+          }
+        };
+
+        const hasAuthorReturnReplay = () => {
+          try {
+            return sessionStorage.getItem(authorReturnReplayKey) === 'true';
+          } catch {
+            return false;
+          }
+        };
+
+        const hasArchitectReturnReplay = () => {
+          try {
+            return sessionStorage.getItem(architectReturnReplayKey) === 'true';
+          } catch {
+            return false;
+          }
+        };
+
         const markAuthorReplayIfNeeded = (toPathname, fromPathname = lastPathname) => {
           if (
             isAuthorPath(toPathname) &&
-            authorReplayReturnPaths.some((path) => isSamePath(fromPathname, path))
+            (hasAuthorReturnReplay() ||
+              authorReplayReturnPaths.some((path) => isSamePath(fromPathname, path)))
           ) {
             window[forceAuthorReplayKey] = true;
+            markAuthorReturnReplay();
+            document.documentElement.classList.add(authorReturnBlankClass);
+            return true;
           }
+
+          return false;
         };
 
         const markArchitectReplayIfNeeded = (toPathname, fromPathname = lastPathname) => {
           if (
             isArchitectPath(toPathname) &&
-            architectReplayReturnPaths.some((path) => isSamePath(fromPathname, path))
+            (hasArchitectReturnReplay() ||
+              architectReplayReturnPaths.some((path) => isSamePath(fromPathname, path)))
           ) {
             markArchitectReturnReplay();
+            document.documentElement.classList.add(architectReturnBlankClass);
+            return true;
+          }
+
+          return false;
+        };
+
+        const markAuthorReplayOnExit = (fromPathname, toPathname) => {
+          if (
+            isAuthorPath(fromPathname) &&
+            authorReplayReturnPaths.some((path) => isSamePath(toPathname, path))
+          ) {
+            markAuthorReturnReplay();
           }
         };
 
@@ -279,6 +326,16 @@ const { title, description = 'Website under construction.' } = Astro.props;
         const getActiveHandoff = () => window[activeHandoffKey] || null;
 
         const getPendingHomeReturn = () => window[pendingHomeReturnKey] || null;
+
+        const clearPreloaderForReturnReplay = () => {
+          window[pendingPreloaderKey] = null;
+          document.documentElement.classList.remove(
+            'home-preloader-active',
+            'home-preloader-booting',
+            navigationPreloaderClass
+          );
+          removeHandoffPreloader();
+        };
 
         const isPendingPreloaderPath = (pathname) => {
           const pendingNavigation = getPendingPreloaderNavigation();
@@ -684,8 +741,12 @@ const { title, description = 'Website under construction.' } = Astro.props;
           if (url.origin !== window.location.origin) return;
 
           const isTriptychLink = Boolean(link.closest('.triptych-item'));
+          const isReturnReplayNavigation =
+            markAuthorReplayIfNeeded(url.pathname, window.location.pathname) ||
+            markArchitectReplayIfNeeded(url.pathname, window.location.pathname);
 
           markArchitectReplayOnExit(window.location.pathname, url.pathname);
+          markAuthorReplayOnExit(window.location.pathname, url.pathname);
 
           if (link.closest('.site-logo') && (url.pathname === '/' || url.pathname === '/index.html')) {
             if (isSamePath(window.location.pathname, '/')) return;
@@ -703,6 +764,11 @@ const { title, description = 'Website under construction.' } = Astro.props;
             return;
           }
 
+          if (isReturnReplayNavigation) {
+            clearPreloaderForReturnReplay();
+            return;
+          }
+
           preparePreloaderNavigation(url, {
             force: isTriptychLink,
           });
@@ -713,9 +779,16 @@ const { title, description = 'Website under construction.' } = Astro.props;
 
           if (!url) return;
 
-          markAuthorReplayIfNeeded(url.pathname, window.location.pathname);
-          markArchitectReplayIfNeeded(url.pathname, window.location.pathname);
+          const isReturnReplayNavigation =
+            markAuthorReplayIfNeeded(url.pathname, window.location.pathname) ||
+            markArchitectReplayIfNeeded(url.pathname, window.location.pathname);
           markArchitectReplayOnExit(window.location.pathname, url.pathname);
+          markAuthorReplayOnExit(window.location.pathname, url.pathname);
+
+          if (isReturnReplayNavigation) {
+            clearPreloaderForReturnReplay();
+            return;
+          }
 
           if (skipNextHomePreloader && (url.pathname === '/' || url.pathname === '/index.html')) {
             skipNextHomePreloader = false;
@@ -732,8 +805,12 @@ const { title, description = 'Website under construction.' } = Astro.props;
         });
 
         document.addEventListener('astro:after-swap', () => {
-          markAuthorReplayIfNeeded(window.location.pathname);
-          markArchitectReplayIfNeeded(window.location.pathname);
+          const isReturnReplayNavigation =
+            markAuthorReplayIfNeeded(window.location.pathname) ||
+            markArchitectReplayIfNeeded(window.location.pathname);
+          if (isReturnReplayNavigation) {
+            clearPreloaderForReturnReplay();
+          }
           restoreRoutePreloaderShell();
           restoreActiveHandoffOverlay();
           if (getPendingHomeReturn()) showHomeReturnOverlay();
@@ -766,8 +843,12 @@ const { title, description = 'Website under construction.' } = Astro.props;
         });
 
         window.addEventListener('popstate', () => {
-          markAuthorReplayIfNeeded(window.location.pathname);
-          markArchitectReplayIfNeeded(window.location.pathname);
+          const isReturnReplayNavigation =
+            markAuthorReplayIfNeeded(window.location.pathname) ||
+            markArchitectReplayIfNeeded(window.location.pathname);
+          if (isReturnReplayNavigation) {
+            clearPreloaderForReturnReplay();
+          }
         });
       })();
     </script>

@@ -43,6 +43,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     });
 
     const forceAuthorReplayKey = '__varelismForceAuthorReplay';
+    const authorReturnReplayKey = 'varelism-author-return-replay';
+    const authorReturnBlankClass = 'author-return-blank-active';
     const preloaderCompleteEvent = 'varelism:author-preloader-complete';
     const TEXT_TO_LINE_GAP = 10;
     const DEFAULT_HORIZONTAL_LEAD_LENGTH = 64;
@@ -53,6 +55,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     const BOOKS_REVEAL_DELAY_MS = 240;
     const MEMORIES_REVEAL_DELAY_MS = BOOKS_REVEAL_DELAY_MS + 1500;
     const CONNECTOR_DRAW_DELAY_MS = MEMORIES_REVEAL_DELAY_MS + 900;
+    const AUTHOR_RETURN_BLANK_HOLD_MS = 360;
     const PORTRAIT_PHONE_PRESETS = [
       {
         amplitudeFactor: 0.19,
@@ -914,6 +917,16 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     const isSvgElementTag = (element, tagName) =>
       isElementTag(element, tagName) && element.namespaceURI === 'http://www.w3.org/2000/svg';
 
+    const consumeAuthorReturnReplay = () => {
+      try {
+        if (sessionStorage.getItem(authorReturnReplayKey) !== 'true') return false;
+        sessionStorage.removeItem(authorReturnReplayKey);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
     const initAuthorPage = () => {
       const stage = document.querySelector('[data-author-stage]');
 
@@ -922,9 +935,19 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         return;
       }
 
-      const shouldForceReplay = window[forceAuthorReplayKey] === true;
+      const shouldForceReplayFromWindow = window[forceAuthorReplayKey] === true;
+      const shouldForceReplayFromSession = consumeAuthorReturnReplay();
+      const shouldForceReplay = shouldForceReplayFromWindow || shouldForceReplayFromSession;
       if (shouldForceReplay) {
         window[forceAuthorReplayKey] = false;
+        document.documentElement.classList.add(authorReturnBlankClass);
+        document.querySelectorAll('[data-home-preloader-handoff]').forEach((overlay) => overlay.remove());
+        document.documentElement.classList.remove(
+          'home-preloader-active',
+          'home-preloader-booting',
+          'home-preloader-handoff-active',
+          'home-preloader-navigation-active'
+        );
       }
 
       if (stage.dataset.authorBooted === 'true') {
@@ -959,9 +982,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       let hasStartedSequence = false;
       let layoutToken = 0;
       let pathLength = 0;
+      let returnBlankTimer = 0;
       const hasActivePreloaderSurface = () =>
         Boolean(document.querySelector('[data-home-preloader], [data-home-preloader-handoff]'));
-      let preloaderComplete = !hasActivePreloaderSurface();
+      let returnBlankComplete = !shouldForceReplay;
+      let preloaderComplete = returnBlankComplete && !hasActivePreloaderSurface();
       const portraitPhonePreset = getRandomPortraitPhonePreset();
       let sequenceComplete = false;
       let ignoreTouchResizeUntil = 0;
@@ -1336,6 +1361,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       const waitForPreloaderSurfacesToClear = () => {
         if (disposed) return;
 
+        if (!returnBlankComplete) {
+          setTimer(waitForPreloaderSurfacesToClear, 60);
+          return;
+        }
+
         if (hasActivePreloaderSurface()) {
           setTimer(waitForPreloaderSurfacesToClear, 60);
           return;
@@ -1385,6 +1415,16 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       window.addEventListener('touchend', markTouchInteraction, { passive: true });
       window.addEventListener('touchcancel', markTouchInteraction, { passive: true });
       window.visualViewport?.addEventListener('resize', onResize);
+      if (shouldForceReplay) {
+        returnBlankTimer = window.setTimeout(() => {
+          returnBlankTimer = 0;
+          if (disposed) return;
+
+          returnBlankComplete = true;
+          document.documentElement.classList.remove(authorReturnBlankClass);
+          waitForPreloaderSurfacesToClear();
+        }, AUTHOR_RETURN_BLANK_HOLD_MS);
+      }
       setTimer(clearStalePreloader, 250);
       rebuildConnector();
 
@@ -1400,6 +1440,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         window.removeEventListener('touchend', markTouchInteraction);
         window.removeEventListener('touchcancel', markTouchInteraction);
         window.visualViewport?.removeEventListener('resize', onResize);
+        if (returnBlankTimer) {
+          window.clearTimeout(returnBlankTimer);
+          returnBlankTimer = 0;
+        }
+        document.documentElement.classList.remove(authorReturnBlankClass);
         resetStage();
         delete stage.dataset.authorBooted;
         state.cleanup = null;
@@ -1545,6 +1590,12 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     position: absolute;
     width: 100%;
     z-index: 1;
+  }
+
+  :global(html.author-return-blank-active) .author-stage {
+    opacity: 0;
+    pointer-events: none;
+    visibility: hidden;
   }
 
   .author-link {

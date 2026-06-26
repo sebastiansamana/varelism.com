@@ -51,6 +51,8 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
     });
     const navigationPreloaderClass = 'home-preloader-navigation-active';
     const architectReturnReplayKey = 'varelism-architect-return-replay';
+    const architectReturnBlankClass = 'architect-return-blank-active';
+    const ARCHITECT_RETURN_BLANK_HOLD_MS = 360;
 
     const clearNavigationPreloaderClassIfIdle = () => {
       if (
@@ -267,8 +269,16 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
       const activePreloader = shouldReplayWithoutPreloader ? null : preloader;
 
       if (shouldReplayWithoutPreloader) {
+        document.documentElement.classList.add(architectReturnBlankClass);
+        document.querySelectorAll('[data-home-preloader-handoff]').forEach((overlay) => overlay.remove());
         preloader?.remove();
-        document.documentElement.classList.remove('architect-preloader-active', navigationPreloaderClass);
+        document.documentElement.classList.remove(
+          'architect-preloader-active',
+          'home-preloader-active',
+          'home-preloader-booting',
+          'home-preloader-handoff-active',
+          navigationPreloaderClass
+        );
         clearNavigationPreloaderClassIfIdle();
 
         if (window.scrollX || window.scrollY) {
@@ -287,6 +297,7 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
       let cleanup = () => {};
       let observer = null;
       let startFrameId = 0;
+      let returnBlankTimer = 0;
       let hasMetMinimumDuration = shouldReplayWithoutPreloader;
       let isModelReady = false;
       let isPreloaderHiding = false;
@@ -1333,6 +1344,7 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
 
       const startViewerSafely = () => {
         startViewer().catch((error) => {
+          document.documentElement.classList.remove(architectReturnBlankClass);
           console.error('Architect viewer failed to load.', error);
         });
       };
@@ -1350,6 +1362,10 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
           : null;
 
       if (shouldReplayWithoutPreloader) {
+        returnBlankTimer = window.setTimeout(() => {
+          returnBlankTimer = 0;
+          document.documentElement.classList.remove(architectReturnBlankClass);
+        }, ARCHITECT_RETURN_BLANK_HOLD_MS);
         startFrameId = window.requestAnimationFrame(() => {
           startFrameId = 0;
           startViewerSafely();
@@ -1371,6 +1387,11 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
           window.cancelAnimationFrame(startFrameId);
           startFrameId = 0;
         }
+        if (returnBlankTimer) {
+          window.clearTimeout(returnBlankTimer);
+          returnBlankTimer = 0;
+        }
+        document.documentElement.classList.remove(architectReturnBlankClass);
         observer?.disconnect();
         preloaderTimers.forEach((timer) => window.clearTimeout(timer));
         preloaderTimers.clear();
@@ -1535,6 +1556,13 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
     position: fixed;
     width: 100vw;
     z-index: 1;
+  }
+
+  :global(html.architect-return-blank-active) .architect-stage,
+  :global(html.architect-return-blank-active) .architect-viewer {
+    opacity: 0;
+    pointer-events: none;
+    visibility: hidden;
   }
 
   .architect-spatial-link {

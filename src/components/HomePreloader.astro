@@ -274,6 +274,12 @@ const {
       const isActivePath = activePaths.some((path) => isSamePath(path, window.location.pathname));
       const forcePreloader = isForcedByPendingNavigation(activePaths);
       const handoffState = getPendingHandoffState(activePaths);
+      const isSuppressedByReturnBlank = Boolean(
+        (document.documentElement.classList.contains('author-return-blank-active') &&
+          activePaths.some((path) => isSamePath(path, '/author/'))) ||
+          (document.documentElement.classList.contains('architect-return-blank-active') &&
+            activePaths.some((path) => isSamePath(path, '/architect/')))
+      );
       const isNavigationPreloader = Boolean(handoffState || window[pendingPreloaderKey]?.navigationPreloader);
       const imageFadeMs = isNavigationPreloader ? Math.min(requestedImageFadeMs, 90) : requestedImageFadeMs;
       const whiteHoldMs = isNavigationPreloader ? Math.min(requestedWhiteHoldMs, 24) : requestedWhiteHoldMs;
@@ -334,7 +340,11 @@ const {
         window.dispatchEvent(new CustomEvent(completeEvent));
       };
 
-      if (!isActivePath || (playOnce && storage.get() === 'true' && !forcePreloader)) {
+      if (
+        isSuppressedByReturnBlank ||
+        !isActivePath ||
+        (playOnce && storage.get() === 'true' && !forcePreloader)
+      ) {
         removeOverlay();
         return;
       }
