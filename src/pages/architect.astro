@@ -53,6 +53,7 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
     const architectReturnReplayKey = 'varelism-architect-return-replay';
     const architectReturnBlankClass = 'architect-return-blank-active';
     const ARCHITECT_RETURN_BLANK_HOLD_MS = 360;
+    const ARCHITECT_RETURN_ROCK_FADE_MS = 620;
 
     const clearNavigationPreloaderClassIfIdle = () => {
       if (
@@ -270,6 +271,8 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
 
       if (shouldReplayWithoutPreloader) {
         document.documentElement.classList.add(architectReturnBlankClass);
+        viewer.style.setProperty('--architect-return-rock-fade-ms', `${ARCHITECT_RETURN_ROCK_FADE_MS}ms`);
+        viewer.classList.add('is-return-reveal');
         document.querySelectorAll('[data-home-preloader-handoff]').forEach((overlay) => overlay.remove());
         preloader?.remove();
         document.documentElement.classList.remove(
@@ -1341,6 +1344,13 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
         isModelReady = true;
         if (shouldReplayWithoutPreloader) {
           document.documentElement.classList.remove(architectReturnBlankClass);
+          window.requestAnimationFrame(() => {
+            if (hasDisposed) return;
+            window.requestAnimationFrame(() => {
+              if (hasDisposed) return;
+              viewer.classList.add('is-return-reveal-visible');
+            });
+          });
         }
         hidePreloaderWhenReady();
       };
@@ -1348,6 +1358,7 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
       const startViewerSafely = () => {
         startViewer().catch((error) => {
           document.documentElement.classList.remove(architectReturnBlankClass);
+          viewer.classList.remove('is-return-reveal', 'is-return-reveal-visible');
           console.error('Architect viewer failed to load.', error);
         });
       };
@@ -1398,7 +1409,8 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
         preloaderTimers.forEach((timer) => window.clearTimeout(timer));
         preloaderTimers.clear();
         delete viewer.dataset.viewerBooted;
-        viewer.classList.remove('is-ready');
+        viewer.classList.remove('is-ready', 'is-return-reveal', 'is-return-reveal-visible');
+        viewer.style.removeProperty('--architect-return-rock-fade-ms');
         cleanupSpatialLinks();
         cleanupPreloaderVideo();
         cleanupHandoffCompletion();
@@ -1644,6 +1656,16 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
   .architect-viewer.is-ready :global(canvas) {
     opacity: 1;
     visibility: visible;
+  }
+
+  .architect-viewer.is-ready.is-return-reveal :global(canvas) {
+    opacity: 0;
+    transition: opacity var(--architect-return-rock-fade-ms, 620ms) ease;
+    visibility: visible;
+  }
+
+  .architect-viewer.is-ready.is-return-reveal.is-return-reveal-visible :global(canvas) {
+    opacity: 1;
   }
 
   @media (min-width: 561px) and (max-width: 900px) {
