@@ -120,7 +120,7 @@ button,
 .site-logo {
   display: block;
   height: clamp(1.25rem, 2.125vw, 1.75rem);
-  transform: translateY(clamp(-0.12rem, -0.18vw, -0.06rem));
+  transform: translateY(clamp(-0.46rem, -0.58vw, -0.18rem));
   width: clamp(5.15625rem, 11.25vw, 9.375rem);
 }
 
@@ -266,7 +266,7 @@ main {
 
   .site-logo {
     height: 1.0625rem;
-    transform: translateY(-0.05rem);
+    transform: translateY(-0.38rem);
     width: clamp(4.125rem, 21.875vw, 5.3125rem);
   }
 

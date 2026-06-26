@@ -50,6 +50,7 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
       listenersAttached: false,
     });
     const navigationPreloaderClass = 'home-preloader-navigation-active';
+    const rockControlsLockedClass = 'architect-rock-controls-locked';
     const architectReturnReplayKey = 'varelism-architect-return-replay';
     const architectReturnBlankClass = 'architect-return-blank-active';
     const ARCHITECT_RETURN_BLANK_HOLD_MS = 360;
@@ -300,6 +301,8 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
       let cleanupSpatialLinks = () => {};
       let cleanupPreloaderVideo = () => {};
       let cleanupHandoffCompletion = () => {};
+      let enableRockControls = () => {};
+      let isRockInteractionLocked = !shouldReplayWithoutPreloader;
       let isPointCoveredByModel = () => true;
       const handoffState = shouldReplayWithoutPreloader ? null : getPendingHandoffState();
       const preloaderTimers = new Set();
@@ -321,6 +324,21 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
         return timer;
       };
 
+      const lockRockControlsBehindPreloader = () => {
+        isRockInteractionLocked = true;
+        document.documentElement.classList.add(rockControlsLockedClass);
+      };
+
+      const unlockRockControlsAfterPreloader = () => {
+        isRockInteractionLocked = false;
+        document.documentElement.classList.remove(rockControlsLockedClass);
+        enableRockControls();
+      };
+
+      if (isRockInteractionLocked) {
+        lockRockControlsBehindPreloader();
+      }
+
       const unlockPageBehindPreloader = () => {
         document.documentElement.classList.remove('architect-preloader-active');
       };
@@ -339,6 +357,7 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
           delete activePreloader.dataset.navigationPreloader;
         }
         activePreloader?.remove();
+        unlockRockControlsAfterPreloader();
         clearNavigationPreloaderClassIfIdle();
       };
 
@@ -641,7 +660,10 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
         let requestRender = () => {};
         let onVisibilityChange = null;
         let controls = null;
-        const preventTouchMove = (event) => event.preventDefault();
+        const preventTouchMove = (event) => {
+          if (isRockInteractionLocked) return;
+          event.preventDefault();
+        };
         const hitTestRenderTarget = new THREE.WebGLRenderTarget(1, 1, {
           depthBuffer: true,
           stencilBuffer: false,
@@ -778,6 +800,10 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
         controls.staticMoving = false;
         controls.dynamicDampingFactor = 0.055;
         controls.target.set(0, 0, 0);
+        controls.enabled = !isRockInteractionLocked;
+        enableRockControls = () => {
+          if (controls) controls.enabled = true;
+        };
 
         const terminalOrbit = {
           active: false,
@@ -847,6 +873,7 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
         };
 
         const onOrbitPointerDown = (event) => {
+          if (isRockInteractionLocked) return;
           if (event.button !== undefined && event.button !== 0) return;
 
           orbitGesture.activePointerId = event.pointerId;
@@ -860,6 +887,7 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
         };
 
         const onOrbitPointerMove = (event) => {
+          if (isRockInteractionLocked) return;
           if (orbitGesture.activePointerId !== event.pointerId) return;
 
           const deltaX = event.clientX - orbitGesture.startX;
@@ -874,6 +902,7 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
         };
 
         const onOrbitPointerEnd = (event) => {
+          if (isRockInteractionLocked) return;
           if (orbitGesture.activePointerId !== event.pointerId) return;
 
           const didDrag = orbitGesture.hasDragged;
@@ -891,6 +920,7 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
         };
 
         const onOrbitPointerCancel = (event) => {
+          if (isRockInteractionLocked) return;
           if (orbitGesture.activePointerId !== event.pointerId) return;
 
           orbitGesture.activePointerId = null;
@@ -1380,6 +1410,7 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
         preloaderTimers.forEach((timer) => window.clearTimeout(timer));
         preloaderTimers.clear();
         delete viewer.dataset.viewerBooted;
+        document.documentElement.classList.remove(rockControlsLockedClass);
         viewer.classList.remove('is-ready', 'is-return-reveal', 'is-return-reveal-visible');
         viewer.style.removeProperty('--architect-return-rock-fade-ms');
         if (stage instanceof HTMLElement) {
@@ -1548,6 +1579,12 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
     cursor: grabbing;
   }
 
+  :global(html.architect-rock-controls-locked) .architect-stage,
+  :global(html.architect-rock-controls-locked) .architect-stage:active {
+    cursor: default;
+    touch-action: pan-y;
+  }
+
   .architect-spatial-nav {
     height: 100vh;
     height: 100svh;
@@ -1586,6 +1623,11 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
     transform: translate(-50%, -50%);
     transition: color 180ms ease;
     white-space: nowrap;
+  }
+
+  :global(html.architect-rock-controls-locked) .architect-spatial-link {
+    pointer-events: none;
+    touch-action: pan-y;
   }
 
   .architect-spatial-link.is-visible-hit {
