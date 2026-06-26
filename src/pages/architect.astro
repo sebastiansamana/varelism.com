@@ -1339,6 +1339,9 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
         if (hasDisposed) return;
         viewer.classList.add('is-ready');
         isModelReady = true;
+        if (shouldReplayWithoutPreloader) {
+          document.documentElement.classList.remove(architectReturnBlankClass);
+        }
         hidePreloaderWhenReady();
       };
 
@@ -1364,12 +1367,11 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
       if (shouldReplayWithoutPreloader) {
         returnBlankTimer = window.setTimeout(() => {
           returnBlankTimer = 0;
-          document.documentElement.classList.remove(architectReturnBlankClass);
+          startFrameId = window.requestAnimationFrame(() => {
+            startFrameId = 0;
+            startViewerSafely();
+          });
         }, ARCHITECT_RETURN_BLANK_HOLD_MS);
-        startFrameId = window.requestAnimationFrame(() => {
-          startFrameId = 0;
-          startViewerSafely();
-        });
       } else if (observer) {
         observer.observe(viewer);
       } else {
