@@ -301,7 +301,9 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
       let cleanupSpatialLinks = () => {};
       let cleanupPreloaderVideo = () => {};
       let cleanupHandoffCompletion = () => {};
+      let cleanupLockedTouchScroll = () => {};
       let enableRockControls = () => {};
+      let isLockedTouchScrollInstalled = false;
       let isRockInteractionLocked = !shouldReplayWithoutPreloader;
       let isPointCoveredByModel = () => true;
       const handoffState = shouldReplayWithoutPreloader ? null : getPendingHandoffState();
@@ -324,14 +326,86 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
         return timer;
       };
 
+      const isTouchScreen = () =>
+        navigator.maxTouchPoints > 0 ||
+        Boolean(window.matchMedia?.('(any-pointer: coarse), (pointer: coarse)').matches);
+
+      const shouldHandleLockedTouchScroll = () =>
+        isRockInteractionLocked &&
+        isTouchScreen() &&
+        document.documentElement.classList.contains(navigationPreloaderClass);
+
+      const installLockedTouchScroll = () => {
+        if (isLockedTouchScrollInstalled) return;
+        isLockedTouchScrollInstalled = true;
+
+        let activeTouchId = null;
+        let lastTouchY = 0;
+
+        const findTouch = (touches) =>
+          Array.from(touches).find((touch) => touch.identifier === activeTouchId) || null;
+
+        const clearTouch = () => {
+          activeTouchId = null;
+          lastTouchY = 0;
+        };
+
+        const onTouchStart = (event) => {
+          if (!shouldHandleLockedTouchScroll() || !event.touches.length) return;
+          const touch = event.touches[0];
+          activeTouchId = touch.identifier;
+          lastTouchY = touch.clientY;
+          event.stopPropagation();
+        };
+
+        const onTouchMove = (event) => {
+          if (!shouldHandleLockedTouchScroll() || activeTouchId === null) return;
+          const touch = findTouch(event.touches);
+          if (!touch) return;
+
+          const deltaY = lastTouchY - touch.clientY;
+          lastTouchY = touch.clientY;
+          const maxScrollY = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+          const nextScrollY = Math.min(maxScrollY, Math.max(0, window.scrollY + deltaY));
+
+          event.stopPropagation();
+          if (event.cancelable) event.preventDefault();
+          if (Math.abs(nextScrollY - window.scrollY) > 0.5) {
+            window.scrollTo({ left: window.scrollX, top: nextScrollY, behavior: 'auto' });
+          }
+        };
+
+        const onTouchEnd = (event) => {
+          if (activeTouchId === null || findTouch(event.touches)) return;
+          clearTouch();
+        };
+
+        window.addEventListener('touchstart', onTouchStart, { capture: true, passive: true });
+        window.addEventListener('touchmove', onTouchMove, { capture: true, passive: false });
+        window.addEventListener('touchend', onTouchEnd, { capture: true, passive: true });
+        window.addEventListener('touchcancel', onTouchEnd, { capture: true, passive: true });
+
+        cleanupLockedTouchScroll = () => {
+          window.removeEventListener('touchstart', onTouchStart, { capture: true });
+          window.removeEventListener('touchmove', onTouchMove, { capture: true });
+          window.removeEventListener('touchend', onTouchEnd, { capture: true });
+          window.removeEventListener('touchcancel', onTouchEnd, { capture: true });
+          clearTouch();
+          isLockedTouchScrollInstalled = false;
+          cleanupLockedTouchScroll = () => {};
+        };
+      };
+
       const lockRockControlsBehindPreloader = () => {
         isRockInteractionLocked = true;
         document.documentElement.classList.add(rockControlsLockedClass);
+        installLockedTouchScroll();
       };
 
       const unlockRockControlsAfterPreloader = () => {
         isRockInteractionLocked = false;
         document.documentElement.classList.remove(rockControlsLockedClass);
+        cleanupLockedTouchScroll();
         enableRockControls();
       };
 
@@ -1411,6 +1485,7 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
         preloaderTimers.clear();
         delete viewer.dataset.viewerBooted;
         document.documentElement.classList.remove(rockControlsLockedClass);
+        cleanupLockedTouchScroll();
         viewer.classList.remove('is-ready', 'is-return-reveal', 'is-return-reveal-visible');
         viewer.style.removeProperty('--architect-return-rock-fade-ms');
         if (stage instanceof HTMLElement) {
