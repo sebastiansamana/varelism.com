@@ -1354,7 +1354,7 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
           const maxLabelHeight = Math.max(...labelRects.map((rect) => rect.height));
           const maxLabelWidth = Math.max(...labelRects.map((rect) => rect.width));
           const modelBottomY =
-            canvasRect.top + ((modelBottomFromTop + 1) / drawingHeight) * canvasRect.height;
+            window.scrollY + canvasRect.top + ((modelBottomFromTop + 1) / drawingHeight) * canvasRect.height;
           const minCenterDistance = labelRects[0].width / 2 + labelRects[1].width / 2 + labelGap;
           const minimumOffset = minCenterDistance / 2;
           const maxOffset = Math.max(0, viewportWidth / 2 - edgeInset - maxLabelWidth / 2);
@@ -1603,6 +1603,7 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
     min-height: calc(100dvh + var(--architect-footer-offset)) !important;
     padding: 0 !important;
     place-items: center !important;
+    position: relative !important;
     width: 100% !important;
   }
 
@@ -1650,7 +1651,7 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
     height: 100dvh;
     inset: 0 auto auto 0;
     pointer-events: none;
-    position: fixed;
+    position: absolute;
     width: 100vw;
     z-index: 1;
   }
@@ -1741,7 +1742,7 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
     min-height: 0;
     overflow: hidden;
     pointer-events: none;
-    position: fixed;
+    position: absolute;
     right: auto;
     touch-action: none;
     top: 0;
