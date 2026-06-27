@@ -54,9 +54,10 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
     const architectReturnReplayKey = 'varelism-architect-return-replay';
     const architectReturnBlankClass = 'architect-return-blank-active';
     const ARCHITECT_RETURN_BLANK_HOLD_MS = 360;
-    const ARCHITECT_RETURN_ROCK_FADE_MS = 620;
-    const ARCHITECT_RETURN_LINK_DELAY_MS = ARCHITECT_RETURN_ROCK_FADE_MS + 120;
-    const ARCHITECT_RETURN_LINK_FADE_MS = 380;
+    const ARCHITECT_ROCK_FADE_MS = 620;
+    const ARCHITECT_LINK_FADE_MS = 900;
+    const ARCHITECT_PROJECTS_REVEAL_DELAY_MS = ARCHITECT_ROCK_FADE_MS + 240;
+    const ARCHITECT_PORTFOLIOS_REVEAL_DELAY_MS = ARCHITECT_PROJECTS_REVEAL_DELAY_MS + 1500;
 
     const clearNavigationPreloaderClassIfIdle = () => {
       if (
@@ -262,12 +263,8 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
 
       if (shouldReplayWithoutPreloader) {
         document.documentElement.classList.add(architectReturnBlankClass);
-        viewer.style.setProperty('--architect-return-rock-fade-ms', `${ARCHITECT_RETURN_ROCK_FADE_MS}ms`);
+        viewer.style.setProperty('--architect-return-rock-fade-ms', `${ARCHITECT_ROCK_FADE_MS}ms`);
         viewer.classList.add('is-return-reveal');
-        if (stage instanceof HTMLElement) {
-          stage.style.setProperty('--architect-return-link-fade-ms', `${ARCHITECT_RETURN_LINK_FADE_MS}ms`);
-          stage.classList.add('is-return-links-held');
-        }
         document.querySelectorAll('[data-home-preloader-handoff]').forEach((overlay) => overlay.remove());
         preloader?.remove();
         document.documentElement.classList.remove(
@@ -306,6 +303,7 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
       let enableRockControls = () => {};
       let isRockInteractionLocked = !shouldReplayWithoutPreloader;
       let isPointCoveredByModel = () => true;
+      let hasStartedRevealSequence = false;
       const handoffState = shouldReplayWithoutPreloader ? null : getPendingHandoffState();
       const preloaderTimers = new Set();
       const getSpatialLinks = () =>
@@ -345,6 +343,29 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
         document.documentElement.classList.remove('architect-preloader-active');
       };
 
+      viewer.style.setProperty('--architect-rock-fade-ms', `${ARCHITECT_ROCK_FADE_MS}ms`);
+      if (stage instanceof HTMLElement) {
+        stage.style.setProperty('--architect-link-fade-ms', `${ARCHITECT_LINK_FADE_MS}ms`);
+        stage.classList.add('is-reveal-sequence');
+      }
+
+      const startArchitectRevealSequence = ({ returnReveal = false } = {}) => {
+        if (hasDisposed || hasStartedRevealSequence) return;
+        hasStartedRevealSequence = true;
+
+        viewer.classList.add(returnReveal ? 'is-return-reveal-visible' : 'is-rock-visible');
+
+        if (!(stage instanceof HTMLElement)) return;
+
+        setPreloaderTimer(() => {
+          stage.classList.add('is-projects-visible');
+        }, ARCHITECT_PROJECTS_REVEAL_DELAY_MS);
+
+        setPreloaderTimer(() => {
+          stage.classList.add('is-portfolios-visible');
+        }, ARCHITECT_PORTFOLIOS_REVEAL_DELAY_MS);
+      };
+
       const clearPendingArchitectPreloader = () => {
         const pendingNavigation = window.__varelismPendingPreloaderNavigation;
 
@@ -357,6 +378,9 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
         clearPendingArchitectPreloader();
         if (activePreloader instanceof HTMLElement) {
           delete activePreloader.dataset.navigationPreloader;
+        }
+        if (isModelReady) {
+          startArchitectRevealSequence();
         }
         activePreloader?.remove();
         unlockRockControlsAfterPreloader();
@@ -1373,16 +1397,7 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
             if (hasDisposed) return;
             window.requestAnimationFrame(() => {
               if (hasDisposed) return;
-              viewer.classList.add('is-return-reveal-visible');
-              if (stage instanceof HTMLElement) {
-                setPreloaderTimer(() => {
-                  stage.classList.add('is-return-links-visible');
-                }, ARCHITECT_RETURN_LINK_DELAY_MS);
-                setPreloaderTimer(() => {
-                  stage.classList.remove('is-return-links-held', 'is-return-links-visible');
-                  stage.style.removeProperty('--architect-return-link-fade-ms');
-                }, ARCHITECT_RETURN_LINK_DELAY_MS + ARCHITECT_RETURN_LINK_FADE_MS);
-              }
+              startArchitectRevealSequence({ returnReveal: true });
             });
           });
         }
@@ -1392,10 +1407,9 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
       const startViewerSafely = () => {
         startViewer().catch((error) => {
           document.documentElement.classList.remove(architectReturnBlankClass);
-          viewer.classList.remove('is-return-reveal', 'is-return-reveal-visible');
+          viewer.classList.remove('is-return-reveal', 'is-return-reveal-visible', 'is-rock-visible');
           if (stage instanceof HTMLElement) {
-            stage.classList.remove('is-return-links-held', 'is-return-links-visible');
-            stage.style.removeProperty('--architect-return-link-fade-ms');
+            stage.classList.remove('is-projects-visible', 'is-portfolios-visible');
           }
           console.error('Architect viewer failed to load.', error);
         });
@@ -1447,11 +1461,16 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
         preloaderTimers.clear();
         delete viewer.dataset.viewerBooted;
         document.documentElement.classList.remove(rockControlsLockedClass);
-        viewer.classList.remove('is-ready', 'is-return-reveal', 'is-return-reveal-visible');
+        viewer.classList.remove('is-ready', 'is-return-reveal', 'is-return-reveal-visible', 'is-rock-visible');
+        viewer.style.removeProperty('--architect-rock-fade-ms');
         viewer.style.removeProperty('--architect-return-rock-fade-ms');
         if (stage instanceof HTMLElement) {
-          stage.classList.remove('is-return-links-held', 'is-return-links-visible');
-          stage.style.removeProperty('--architect-return-link-fade-ms');
+          stage.classList.remove(
+            'is-reveal-sequence',
+            'is-projects-visible',
+            'is-portfolios-visible'
+          );
+          stage.style.removeProperty('--architect-link-fade-ms');
         }
         cleanupSpatialLinks();
         cleanupPreloaderVideo();
@@ -1661,7 +1680,9 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
     top: var(--architect-link-y);
     touch-action: none;
     transform: translate(-50%, -50%);
-    transition: color 180ms ease;
+    transition:
+      color 180ms ease,
+      opacity var(--architect-link-fade-ms, 900ms) ease;
     white-space: nowrap;
   }
 
@@ -1675,21 +1696,22 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
     cursor: pointer;
   }
 
-  .architect-stage.is-return-links-held .architect-spatial-link {
+  .architect-stage.is-reveal-sequence .architect-spatial-link {
     opacity: 0;
     pointer-events: none;
     transition:
-      opacity var(--architect-return-link-fade-ms, 380ms) ease,
-      visibility 0ms linear var(--architect-return-link-fade-ms, 380ms),
-      color 180ms ease;
+      color 180ms ease,
+      opacity var(--architect-link-fade-ms, 900ms) ease,
+      visibility 0ms linear var(--architect-link-fade-ms, 900ms);
     visibility: hidden;
   }
 
-  .architect-stage.is-return-links-held.is-return-links-visible .architect-spatial-link {
+  .architect-stage.is-reveal-sequence.is-projects-visible .architect-spatial-link--projects,
+  .architect-stage.is-reveal-sequence.is-portfolios-visible .architect-spatial-link--portfolios {
     opacity: 1;
     pointer-events: auto;
     transition:
-      opacity var(--architect-return-link-fade-ms, 380ms) ease,
+      opacity var(--architect-link-fade-ms, 900ms) ease,
       color 180ms ease;
     visibility: visible;
   }
@@ -1743,7 +1765,8 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
   }
 
   .architect-viewer.is-ready :global(canvas) {
-    opacity: 1;
+    opacity: 0;
+    transition: opacity var(--architect-rock-fade-ms, 620ms) ease;
     visibility: visible;
   }
 
@@ -1754,6 +1777,10 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
   }
 
   .architect-viewer.is-ready.is-return-reveal.is-return-reveal-visible :global(canvas) {
+    opacity: 1;
+  }
+
+  .architect-viewer.is-ready.is-rock-visible :global(canvas) {
     opacity: 1;
   }
 
