@@ -64,18 +64,11 @@ textarea {
 html.home-preloader-booting:not(.home-preloader-navigation-active),
 html.home-preloader-booting:not(.home-preloader-navigation-active) body {
   background: #ffffff;
-  overflow: hidden;
-}
-
-html.home-preloader-booting:not(.home-preloader-navigation-active) .site-header,
-html.home-preloader-booting:not(.home-preloader-navigation-active) main > :not(.home-preloader),
-html.home-preloader-booting:not(.home-preloader-navigation-active) .site-footer {
-  opacity: 0;
 }
 
 html.home-preloader-booting .home-preloader {
   opacity: 1;
-  pointer-events: auto;
+  pointer-events: none;
   visibility: visible;
 }
 
@@ -85,10 +78,7 @@ html.home-preloader-navigation-active .home-preloader {
 
 .home-preloader__media::-webkit-media-controls,
 .home-preloader__media::-webkit-media-controls-panel,
-.home-preloader__media::-webkit-media-controls-start-playback-button,
-.architect-preloader__media::-webkit-media-controls,
-.architect-preloader__media::-webkit-media-controls-panel,
-.architect-preloader__media::-webkit-media-controls-start-playback-button {
+.home-preloader__media::-webkit-media-controls-start-playback-button {
   -webkit-appearance: none;
   display: none !important;
 }

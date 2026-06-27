@@ -1,5 +1,6 @@
 ﻿---
 import { ViewTransitions } from 'astro:transitions';
+import HomePreloader from '../components/HomePreloader.astro';
 import '../styles/global.css';
 
 interface Props {
@@ -8,6 +9,16 @@ interface Props {
 }
 
 const { title, description = 'Website under construction.' } = Astro.props;
+const globalPreloaderPaths = [
+  '/',
+  '/index.html',
+  '/architect/',
+  '/architect',
+  '/artist/',
+  '/artist',
+  '/author/',
+  '/author',
+];
 ---
 
 <!doctype html>
@@ -58,6 +69,7 @@ const { title, description = 'Website under construction.' } = Astro.props;
         const navigationPreloaderClass = 'home-preloader-navigation-active';
         const navigationScrollLockClass = 'home-preloader-scroll-locked';
         const navigationScrollLockKey = '__varelismNavigationPreloaderScrollLock';
+        const architectSceneReadyFlag = '__varelismReady_varelism_architect_scene_ready';
         const homeReturnClass = 'home-return-active';
         const preloaderCycleDurationMs = 3067;
         const handoffCycleFallbackMs = preloaderCycleDurationMs + 350;
@@ -67,34 +79,13 @@ const { title, description = 'Website under construction.' } = Astro.props;
         const homeReturnRevealMs = 320;
         const preloaderRoutes = [
           {
-            paths: ['/', '/index.html'],
-            playOnce: true,
-            sessionKey: 'varelism-home-preloader-seen',
-          },
-          {
-            paths: ['/artist/', '/artist'],
-            playOnce: true,
-            sessionKey: 'varelism-artist-preloader-seen',
-          },
-          {
-            paths: ['/author/', '/author'],
+            paths: ['/', '/index.html', '/architect/', '/architect', '/artist/', '/artist', '/author/', '/author'],
             playOnce: false,
-            sessionKey: 'varelism-author-preloader-seen',
+            sessionKey: 'varelism-global-preloader-seen',
           },
         ];
-        const standaloneHandoffRoutes = [
-          {
-            paths: ['/architect/', '/architect'],
-          },
-        ];
-        const triptychHandoffPaths = [
-          '/architect/',
-          '/architect',
-          '/artist/',
-          '/artist',
-          '/author/',
-          '/author',
-        ];
+        const standaloneHandoffRoutes = [];
+        const triptychHandoffPaths = [];
         const authorReplayReturnPaths = ['/books/', '/books', '/memories/', '/memories'];
         const architectReplayReturnPaths = ['/projects/', '/projects', '/portfolios/', '/portfolios'];
         const getPreloaderRoute = (pathname) =>
@@ -121,12 +112,29 @@ const { title, description = 'Website under construction.' } = Astro.props;
         const shouldPlayPreloader = (route, { force = false } = {}) =>
           Boolean(route && (force || !route.playOnce || !hasRoutePlayed(route)));
         const route = getPreloaderRoute(window.location.pathname);
+        const isArchitectScenePath = (pathname) => pathname === '/architect/' || pathname === '/architect';
+        const clearArchitectSceneReadyFlag = (pathname = window.location.pathname) => {
+          if (!isArchitectScenePath(pathname)) return;
+
+          window.__varelismArchitectSceneReady = false;
+          window[architectSceneReadyFlag] = false;
+        };
         let skipNextHomePreloader = false;
         let activeTriptychNavigation = null;
         let activeHomeReturnNavigation = null;
         let lastPathname = window.location.pathname;
 
         window.__varelismPreloaderCycleDurationMs = preloaderCycleDurationMs;
+        clearArchitectSceneReadyFlag();
+
+        const getDocumentScrollY = () =>
+          Math.max(
+            0,
+            window.scrollY ||
+              document.documentElement.scrollTop ||
+              document.body?.scrollTop ||
+              0,
+          );
 
         const scrollLock = (window[navigationScrollLockKey] ||= {
           cleanup: null,
@@ -163,7 +171,7 @@ const { title, description = 'Website under construction.' } = Astro.props;
         const clearNavigationPreloaderClassIfIdle = () => {
           if (
             document.querySelector(
-              '[data-home-preloader-handoff], [data-home-preloader][data-navigation-preloader="true"], [data-architect-preloader][data-navigation-preloader="true"]',
+              '[data-home-preloader-handoff], [data-home-preloader][data-navigation-preloader="true"]',
             )
           ) {
             return;
@@ -230,6 +238,7 @@ const { title, description = 'Website under construction.' } = Astro.props;
           Object.assign(element.style, {
             background: 'transparent',
             display: 'block',
+            gridArea: '1 / 1',
             height: 'auto',
             maxHeight: isCompact ? 'min(28vh, 13rem)' : 'min(34vh, 18rem)',
             maxWidth: isCompact ? 'min(62vw, 16rem)' : 'min(48vw, 22rem)',
@@ -245,13 +254,21 @@ const { title, description = 'Website under construction.' } = Astro.props;
           });
         };
 
+        const getPreloaderAnchorY = (element, fallbackY = getDocumentScrollY()) => {
+          const stored = Number.parseFloat(element.dataset.preloaderAnchorY || '');
+          const anchorY = Number.isFinite(stored) ? stored : Math.max(0, fallbackY);
+          element.dataset.preloaderAnchorY = `${anchorY}`;
+          return anchorY;
+        };
+
         const styleHandoffOverlay = (overlay) => {
+          const anchorY = getPreloaderAnchorY(overlay);
           Object.assign(overlay.style, {
             alignItems: 'center',
             background: '#ffffff',
             bottom: 'auto',
             contain: 'layout paint style',
-            display: 'flex',
+            display: 'grid',
             height: '100vh',
             inset: '0 auto auto 0',
             isolation: 'isolate',
@@ -261,14 +278,15 @@ const { title, description = 'Website under construction.' } = Astro.props;
             overscrollBehavior: 'auto',
             pointerEvents: 'none',
             position: 'absolute',
-            right: '0',
-            top: '0',
+            right: 'auto',
+            top: `${anchorY}px`,
             touchAction: 'pan-y pinch-zoom',
             transform: 'none',
             visibility: 'visible',
             willChange: 'opacity',
-            width: '100%',
+            width: '100vw',
             zIndex: '10',
+            placeItems: 'center',
           });
         };
 
@@ -568,6 +586,8 @@ const { title, description = 'Website under construction.' } = Astro.props;
         };
 
         const preparePreloaderNavigation = (url, { force = false, restartHandoff = true } = {}) => {
+          clearArchitectSceneReadyFlag(url.pathname);
+
           const nextRoute = getPreloaderRoute(url.pathname);
           const forceTriptychPreloader = force && shouldForceTriptychPreloader(url.pathname);
           const shouldUseRoutePreloader = shouldPlayPreloader(nextRoute, {
@@ -591,6 +611,7 @@ const { title, description = 'Website under construction.' } = Astro.props;
               : shouldReuseHandoff && currentPendingNavigation?.handoffStartedAt
                 ? currentPendingNavigation.handoffStartedAt
                 : window.performance.now();
+          const preloaderAnchorY = getDocumentScrollY();
 
           if (!shouldUseRoutePreloader && !standaloneHandoffRoute && !forceTriptychPreloader) {
             window[pendingPreloaderKey] = null;
@@ -603,6 +624,7 @@ const { title, description = 'Website under construction.' } = Astro.props;
               cycleDurationMs: currentActiveHandoff?.cycleDurationMs || preloaderCycleDurationMs,
               pathname: url.pathname,
               startedAt: nextHandoffStartedAt,
+              anchorY: currentActiveHandoff?.anchorY ?? currentPendingNavigation?.anchorY ?? preloaderAnchorY,
             };
           }
 
@@ -616,6 +638,7 @@ const { title, description = 'Website under construction.' } = Astro.props;
             keepBootingAfterSwap: shouldUseRoutePreloader,
             navigationPreloader: true,
             pathname: url.pathname,
+            anchorY: currentPendingNavigation?.anchorY ?? currentActiveHandoff?.anchorY ?? preloaderAnchorY,
             suppressRoutePreloaderVideo:
               shouldUseHandoffSurface ||
               (shouldReuseHandoff && Boolean(currentPendingNavigation?.suppressRoutePreloaderVideo)),
@@ -959,11 +982,6 @@ const { title, description = 'Website under construction.' } = Astro.props;
 
           if (link.closest('.site-logo') && (url.pathname === '/' || url.pathname === '/index.html')) {
             if (isSamePath(window.location.pathname, '/')) return;
-
-            event.preventDefault();
-            event.stopImmediatePropagation();
-            startHomeReturnNavigation(url);
-            return;
           }
 
           if (isTriptychLink && shouldForceTriptychPreloader(url.pathname)) {
@@ -1121,6 +1139,12 @@ const { title, description = 'Website under construction.' } = Astro.props;
         </nav>
       </header>
       <main>
+        <HomePreloader
+          activePaths={globalPreloaderPaths}
+          playOnce={false}
+          sessionKey="varelism-global-preloader-seen"
+          readyEvents="/architect/=varelism:architect-scene-ready|/architect=varelism:architect-scene-ready"
+        />
         <slot />
       </main>
       <footer class="site-footer">

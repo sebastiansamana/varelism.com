@@ -5,6 +5,7 @@ interface Props {
   imageFadeMs?: number;
   overlayFadeMs?: number;
   playOnce?: boolean;
+  readyEvents?: string;
   sessionKey?: string;
   timingScale?: number;
   whiteHoldMs?: number;
@@ -13,11 +14,12 @@ interface Props {
 const videoSrc = '/images/Logo_Animation_Preloader.mp4';
 const fallbackSrc = '/images/Logo_Animation_Preloader.webp';
 const {
-  activePaths = ['/', '/index.html'],
+  activePaths = ['/', '/index.html', '/architect/', '/architect', '/artist/', '/artist', '/author/', '/author'],
   completeEvent = 'varelism:preloader-complete',
   imageFadeMs,
   overlayFadeMs,
   playOnce = true,
+  readyEvents = '',
   sessionKey = 'varelism-home-preloader-seen',
   timingScale = 1,
   whiteHoldMs,
@@ -32,6 +34,7 @@ const {
   data-image-fade-ms={imageFadeMs}
   data-overlay-fade-ms={overlayFadeMs}
   data-play-once={playOnce ? 'true' : 'false'}
+  data-ready-events={readyEvents}
   data-session-key={sessionKey}
   data-timing-scale={timingScale}
   data-white-hold-ms={whiteHoldMs}
@@ -93,7 +96,7 @@ const {
     const clearNavigationPreloaderClassIfIdle = () => {
       if (
         document.querySelector(
-          '[data-home-preloader-handoff], [data-home-preloader][data-navigation-preloader="true"], [data-architect-preloader][data-navigation-preloader="true"]'
+          '[data-home-preloader-handoff], [data-home-preloader][data-navigation-preloader="true"]'
         )
       ) {
         return;
@@ -106,6 +109,94 @@ const {
     const isSamePath = (pathA, pathB) =>
       pathA === pathB ||
       `${pathA.replace(/\/$/, '')}/` === `${pathB.replace(/\/$/, '')}/`;
+
+    const getRouteCompleteEvents = (pathname) => {
+      if (isSamePath(pathname, '/author/')) return ['varelism:author-preloader-complete'];
+      if (isSamePath(pathname, '/artist/')) return ['varelism:artist-preloader-complete'];
+      if (isSamePath(pathname, '/architect/')) return ['varelism:architect-preloader-complete'];
+      return [];
+    };
+
+    const getDocumentScrollY = () =>
+      Math.max(
+        0,
+        window.scrollY ||
+          document.documentElement.scrollTop ||
+          document.body?.scrollTop ||
+          0
+      );
+
+    const getReadyFlagKey = (eventName) =>
+      `__varelismReady_${eventName.replace(/[^a-zA-Z0-9_$]/g, '_')}`;
+
+    const getRouteReadyEvent = (readyEvents, pathname) => {
+      if (!readyEvents) return '';
+
+      return readyEvents
+        .split('|')
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+        .map((entry) => {
+          const separatorIndex = entry.indexOf('=');
+          if (separatorIndex < 0) return null;
+
+          return {
+            path: entry.slice(0, separatorIndex),
+            eventName: entry.slice(separatorIndex + 1),
+          };
+        })
+        .find((entry) => entry?.path && entry.eventName && isSamePath(entry.path, pathname))
+        ?.eventName || '';
+    };
+
+    const waitForRouteReadyEvent = (eventName) => {
+      if (!eventName) return Promise.resolve();
+
+      const readyFlagKey = getReadyFlagKey(eventName);
+      if (window[readyFlagKey]) return Promise.resolve();
+
+      return new Promise((resolve) => {
+        window.addEventListener(
+          eventName,
+          () => {
+            window[readyFlagKey] = true;
+            resolve();
+          },
+          { once: true }
+        );
+      });
+    };
+
+    const getPendingAnchorY = (activePaths) => {
+      const pathname = window.location.pathname;
+      const pendingNavigation = window[pendingPreloaderKey];
+      const activeHandoff = window[activeHandoffKey];
+      const candidates = [pendingNavigation, activeHandoff];
+
+      for (const candidate of candidates) {
+        if (
+          candidate?.pathname &&
+          activePaths.some((path) => isSamePath(path, candidate.pathname)) &&
+          isSamePath(candidate.pathname, pathname)
+        ) {
+          const anchorY = Number.parseFloat(candidate.anchorY);
+          if (Number.isFinite(anchorY)) return Math.max(0, anchorY);
+        }
+      }
+
+      return null;
+    };
+
+    const anchorPreloaderToViewport = (overlay, activePaths) => {
+      const storedAnchorY = Number.parseFloat(overlay.dataset.preloaderAnchorY || '');
+      const pendingAnchorY = getPendingAnchorY(activePaths);
+      const anchorY = Number.isFinite(storedAnchorY)
+        ? storedAnchorY
+        : pendingAnchorY ?? getDocumentScrollY();
+
+      overlay.dataset.preloaderAnchorY = `${anchorY}`;
+      overlay.style.setProperty('--home-preloader-anchor-y', `${anchorY}px`);
+    };
 
     const preparePassivePreloaderVideo = (video) => {
       video.autoplay = true;
@@ -354,6 +445,7 @@ const {
       const sessionKey = overlay.dataset.sessionKey || 'varelism-home-preloader-seen';
       const completeEvent = overlay.dataset.completeEvent || 'varelism:preloader-complete';
       const activePaths = (overlay.dataset.activePaths || '/|/index.html').split('|').filter(Boolean);
+      const routeReadyEvent = getRouteReadyEvent(overlay.dataset.readyEvents || '', window.location.pathname);
       const playOnce = overlay.dataset.playOnce !== 'false';
       const timingScale = Math.max(0.1, Number.parseFloat(overlay.dataset.timingScale || '1') || 1);
       const getDuration = (name, fallback) => {
@@ -431,7 +523,9 @@ const {
         delete overlay.dataset.navigationPreloader;
         clearNavigationPreloaderClassIfIdle();
         clearPendingPreloaderNavigation();
-        window.dispatchEvent(new CustomEvent(completeEvent));
+        new Set([completeEvent, ...getRouteCompleteEvents(window.location.pathname)]).forEach((eventName) => {
+          window.dispatchEvent(new CustomEvent(eventName));
+        });
       };
 
       if (
@@ -459,6 +553,7 @@ const {
       }
 
       if (playOnce) storage.set();
+      anchorPreloaderToViewport(overlay, activePaths);
       document.documentElement.classList.add('home-preloader-active');
       if (isNavigationPreloader) {
         overlay.dataset.navigationPreloader = 'true';
@@ -614,7 +709,7 @@ const {
         };
       }
 
-      waitForStablePageFrame(overlay).then(() => {
+      Promise.all([waitForStablePageFrame(overlay), waitForRouteReadyEvent(routeReadyEvent)]).then(() => {
         if (hasRemoved) return;
         isPageReady = true;
         hideOverlay();
@@ -659,41 +754,38 @@ const {
   .home-preloader {
     align-items: center;
     background: #ffffff;
+    bottom: auto;
     contain: layout paint style;
-    display: flex;
-    inset: 0;
-    justify-content: center;
+    display: grid;
+    height: 100vh;
+    height: 100svh;
+    height: 100dvh;
+    left: 0;
     opacity: 0;
     pointer-events: none;
-    position: fixed;
+    position: absolute;
+    right: auto;
+    top: var(--home-preloader-anchor-y, 0px);
+    touch-action: pan-y pinch-zoom;
     transition:
       opacity var(--home-preloader-overlay-fade-ms, 300ms) ease,
       visibility var(--home-preloader-overlay-fade-ms, 300ms) ease;
     visibility: hidden;
     will-change: opacity;
-    z-index: 9999;
+    width: 100vw;
+    z-index: 30;
+    place-items: center;
   }
 
   :global(html.home-preloader-navigation-active) .home-preloader {
     backface-visibility: hidden;
-    bottom: auto;
-    height: 100vh;
-    height: 100svh;
-    height: 100dvh;
     isolation: isolate;
-    left: 0;
     overscroll-behavior: auto;
-    pointer-events: none;
-    position: absolute;
-    right: 0;
-    touch-action: pan-y pinch-zoom;
-    top: 0;
-    z-index: 10;
   }
 
   .home-preloader.is-visible {
     opacity: 1;
-    pointer-events: auto;
+    pointer-events: none;
     visibility: visible;
   }
 
@@ -711,6 +803,7 @@ const {
   .home-preloader__fallback {
     background: transparent;
     display: block;
+    grid-area: 1 / 1;
     height: auto;
     max-height: min(34vh, 18rem);
     max-width: min(48vw, 22rem);
@@ -735,12 +828,6 @@ const {
   .home-preloader.is-image-fading .home-preloader__fallback {
     opacity: 0;
   }
-
-  :global(html.home-preloader-active:not(.home-preloader-navigation-active)),
-  :global(html.home-preloader-active:not(.home-preloader-navigation-active) body) {
-    overflow: hidden;
-  }
-
   @media (max-width: 720px) {
     .home-preloader__media,
     .home-preloader__fallback {

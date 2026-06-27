@@ -1,19 +1,8 @@
 ---
-import HomePreloader from '../components/HomePreloader.astro';
 import BaseLayout from '../layouts/BaseLayout.astro';
 ---
 
 <BaseLayout title="Author | Varelism" description="Author.">
-  <HomePreloader
-    activePaths={['/author/', '/author']}
-    completeEvent="varelism:author-preloader-complete"
-    imageFadeMs={180}
-    overlayFadeMs={180}
-    playOnce={false}
-    sessionKey="varelism-author-preloader-seen"
-    whiteHoldMs={60}
-  />
-
   <section class="author-stage" data-author-stage aria-label="Author">
     <svg class="author-connector" data-author-connector aria-hidden="true" focusable="false">
       <path

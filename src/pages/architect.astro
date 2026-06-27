@@ -3,38 +3,9 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
 const basePath = import.meta.env.BASE_URL === '/' ? '' : import.meta.env.BASE_URL.replace(/\/$/, '');
 const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
-const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
-const preloaderFallbackUrl = `${basePath}/images/Logo_Animation_Preloader.webp`;
 ---
 
 <BaseLayout title="Architect | Varelism" description="Interactive architectural object.">
-  <div class="architect-preloader" data-architect-preloader aria-hidden="true">
-    <video
-      class="architect-preloader__media"
-      src={preloaderVideoUrl}
-      autoplay
-      defaultMuted
-      loop
-      muted
-      playsinline
-      webkit-playsinline
-      preload="auto"
-      disablePictureInPicture
-      controlsList="nodownload noplaybackrate noremoteplayback"
-      aria-hidden="true"
-      tabindex="-1"
-    ></video>
-    <img
-      class="architect-preloader__fallback"
-      src={preloaderFallbackUrl}
-      alt=""
-      width="960"
-      height="666"
-      decoding="async"
-      loading="eager"
-      aria-hidden="true"
-    />
-  </div>
   <div class="architect-viewer" data-architect-viewer data-model-url={modelUrl}></div>
   <section class="architect-stage" data-architect-stage aria-label="Architect">
     <nav class="architect-spatial-nav" aria-label="Architect sections">
@@ -74,11 +45,13 @@ const preloaderFallbackUrl = `${basePath}/images/Logo_Animation_Preloader.webp`;
     const ARCHITECT_PORTFOLIOS_REVEAL_DELAY_MS = ARCHITECT_PROJECTS_REVEAL_DELAY_MS + 1500;
     const ARCHITECT_INTRO_ORBIT_RAMP_MS =
       ARCHITECT_PORTFOLIOS_REVEAL_DELAY_MS - ARCHITECT_PROJECTS_REVEAL_DELAY_MS + ARCHITECT_LINK_FADE_MS;
+    const ARCHITECT_SCENE_READY_EVENT = 'varelism:architect-scene-ready';
+    const ARCHITECT_SCENE_READY_FLAG = '__varelismReady_varelism_architect_scene_ready';
 
     const clearNavigationPreloaderClassIfIdle = () => {
       if (
         document.querySelector(
-          '[data-home-preloader-handoff], [data-home-preloader][data-navigation-preloader="true"], [data-architect-preloader][data-navigation-preloader="true"]'
+          '[data-home-preloader-handoff], [data-home-preloader][data-navigation-preloader="true"]'
         )
       ) {
         return;
@@ -93,216 +66,6 @@ const preloaderFallbackUrl = `${basePath}/images/Logo_Animation_Preloader.webp`;
         state.dispose();
         state.dispose = null;
       }
-    };
-
-    const preparePassivePreloaderVideo = (video) => {
-      video.autoplay = true;
-      video.controls = false;
-      video.loop = true;
-      video.muted = true;
-      video.defaultMuted = true;
-      video.playsInline = true;
-      video.preload = 'auto';
-      video.removeAttribute('controls');
-      video.setAttribute('autoplay', '');
-      video.setAttribute('muted', '');
-      video.setAttribute('defaultMuted', '');
-      video.setAttribute('loop', '');
-      video.setAttribute('playsinline', '');
-      video.setAttribute('webkit-playsinline', '');
-      video.setAttribute('preload', 'auto');
-      try {
-        video.disablePictureInPicture = true;
-      } catch {
-        // Some embedded browsers expose the attribute but reject assignment.
-      }
-      try {
-        video.disableRemotePlayback = true;
-      } catch {
-        // Remote playback controls are best-effort only.
-      }
-      video.setAttribute('controlsList', 'nodownload noplaybackrate noremoteplayback');
-      video.setAttribute('disablePictureInPicture', '');
-      video.setAttribute('disableremoteplayback', '');
-      video.setAttribute('x-webkit-airplay', 'deny');
-      video.setAttribute('aria-hidden', 'true');
-      video.tabIndex = -1;
-    };
-
-    const playPreloaderVideo = (video, { timeoutMs = 750 } = {}) =>
-      new Promise((resolve) => {
-        let hasResolved = false;
-        let timeout = 0;
-
-        const cleanup = () => {
-          if (timeout) window.clearTimeout(timeout);
-          video.removeEventListener('playing', onPlaying);
-          video.removeEventListener('canplay', onReady);
-          video.removeEventListener('canplaythrough', onReady);
-          video.removeEventListener('error', onError);
-        };
-
-        const done = (didPlay) => {
-          if (hasResolved) return;
-          hasResolved = true;
-          cleanup();
-          resolve(didPlay);
-        };
-
-        const confirmPlayback = () => {
-          if (!video.paused && !video.ended && video.readyState >= 2) {
-            done(true);
-          }
-        };
-
-        const tryPlay = () => {
-          if (hasResolved) return;
-
-          try {
-            const playAttempt = video.play();
-
-            if (playAttempt?.then) {
-              playAttempt.then(confirmPlayback).catch(() => done(false));
-              return;
-            }
-
-            window.requestAnimationFrame(confirmPlayback);
-          } catch {
-            done(false);
-          }
-        };
-
-        function onPlaying() {
-          confirmPlayback();
-        }
-
-        function onReady() {
-          tryPlay();
-        }
-
-        function onError() {
-          done(false);
-        }
-
-        preparePassivePreloaderVideo(video);
-        video.addEventListener('playing', onPlaying);
-        video.addEventListener('canplay', onReady);
-        video.addEventListener('canplaythrough', onReady);
-        video.addEventListener('error', onError, { once: true });
-        timeout = window.setTimeout(() => done(false), timeoutMs);
-        tryPlay();
-      });
-
-    const resetPreloaderMediaVisibility = (preloader) => {
-      preloader?.classList.remove('is-video-visible', 'is-fallback-visible');
-    };
-
-    const showPreloaderVideo = (preloader) => {
-      preloader?.classList.remove('is-fallback-visible');
-      preloader?.classList.add('is-video-visible');
-    };
-
-    const showPreloaderFallback = (preloader) => {
-      preloader?.classList.remove('is-video-visible');
-      preloader?.classList.add('is-fallback-visible');
-    };
-
-    const startPreloaderVideo = (
-      preloader,
-      { autoStart = true, onCycleStart = () => {}, onCycleEnd = () => {} } = {},
-    ) => {
-      const video = preloader?.querySelector('.architect-preloader__media');
-      const fallbackCycleDurationMs = Math.ceil(window.__varelismPreloaderCycleDurationMs || 3067) + 180;
-
-      if (!(video instanceof HTMLVideoElement)) {
-        showPreloaderFallback(preloader);
-        window.requestAnimationFrame(onCycleEnd);
-        return () => {};
-      }
-
-      let isDisposed = false;
-      let cycleTimer = 0;
-      let isAwaitingVideoStart = false;
-
-      const endCycle = () => {
-        if (isDisposed) return;
-        onCycleEnd();
-      };
-
-      const setCycleGuard = () => {
-        if (cycleTimer || isDisposed) return;
-
-        const duration =
-          Number.isFinite(video.duration) && video.duration > 0
-            ? Math.ceil(Math.max(0, video.duration - video.currentTime) * 1000) + 180
-            : fallbackCycleDurationMs;
-
-        cycleTimer = window.setTimeout(endCycle, duration);
-      };
-
-      const playVideo = () => {
-        if (isDisposed || isAwaitingVideoStart) return;
-
-        isAwaitingVideoStart = true;
-        playPreloaderVideo(video).then((didPlay) => {
-          isAwaitingVideoStart = false;
-          if (isDisposed) return;
-
-          if (didPlay) {
-            showPreloaderVideo(preloader);
-          } else {
-            showPreloaderFallback(preloader);
-          }
-
-          setCycleGuard();
-        });
-      };
-      const onEnded = endCycle;
-      const onError = () => {
-        showPreloaderFallback(preloader);
-        setCycleGuard();
-      };
-      const onReady = playVideo;
-      const onMetadata = setCycleGuard;
-
-      video.addEventListener('ended', onEnded);
-      video.addEventListener('error', onError, { once: true });
-      video.addEventListener('loadedmetadata', onMetadata, { once: true });
-      if (autoStart) {
-        video.addEventListener('loadeddata', onReady, { once: true });
-        video.addEventListener('canplaythrough', onReady, { once: true });
-      }
-      if (autoStart) {
-        resetPreloaderMediaVisibility(preloader);
-        onCycleStart();
-        playVideo();
-      } else {
-        preparePassivePreloaderVideo(video);
-        resetPreloaderMediaVisibility(preloader);
-
-        try {
-          video.pause();
-          video.currentTime = 0;
-        } catch {
-          // Astro can insert the autoplaying video before this script runs.
-        }
-      }
-
-      return () => {
-        isDisposed = true;
-        if (cycleTimer) window.clearTimeout(cycleTimer);
-        video.removeEventListener('ended', onEnded);
-        video.removeEventListener('error', onError);
-        video.removeEventListener('loadedmetadata', onMetadata);
-        video.removeEventListener('loadeddata', onReady);
-        video.removeEventListener('canplaythrough', onReady);
-
-        try {
-          video.pause();
-        } catch {
-          // Ignore media cleanup failures.
-        }
-      };
     };
 
     const isSamePath = (pathA, pathB) =>
@@ -380,10 +143,8 @@ const preloaderFallbackUrl = `${basePath}/images/Logo_Animation_Preloader.webp`;
 
     const initArchitectViewer = () => {
       const viewer = document.querySelector('[data-architect-viewer]');
-      const preloader = document.querySelector('[data-architect-preloader]');
 
       if (!(viewer instanceof HTMLElement)) {
-        document.documentElement.classList.remove('architect-preloader-active');
         return;
       }
 
@@ -397,16 +158,13 @@ const preloaderFallbackUrl = `${basePath}/images/Logo_Animation_Preloader.webp`;
 
       const stage = document.querySelector('[data-architect-stage]');
       const controlsElement = stage instanceof HTMLElement ? stage : viewer;
-      const activePreloader = shouldReplayWithoutPreloader ? null : preloader;
 
       if (shouldReplayWithoutPreloader) {
         document.documentElement.classList.add(architectReturnBlankClass);
         viewer.style.setProperty('--architect-return-rock-fade-ms', `${ARCHITECT_ROCK_FADE_MS}ms`);
         viewer.classList.add('is-return-reveal');
         document.querySelectorAll('[data-home-preloader-handoff]').forEach((overlay) => overlay.remove());
-        preloader?.remove();
         document.documentElement.classList.remove(
-          'architect-preloader-active',
           'home-preloader-active',
           'home-preloader-booting',
           'home-preloader-handoff-active',
@@ -422,9 +180,6 @@ const preloaderFallbackUrl = `${basePath}/images/Logo_Animation_Preloader.webp`;
 
       disposeCurrentViewer();
       viewer.dataset.viewerBooted = 'true';
-      if (!shouldReplayWithoutPreloader) {
-        document.documentElement.classList.add('architect-preloader-active');
-      }
 
       let didStart = false;
       let hasDisposed = false;
@@ -432,12 +187,10 @@ const preloaderFallbackUrl = `${basePath}/images/Logo_Animation_Preloader.webp`;
       let observer = null;
       let startFrameId = 0;
       let returnBlankTimer = 0;
-      let hasMetMinimumDuration = shouldReplayWithoutPreloader;
       let isModelReady = false;
       let isPreloaderHiding = false;
       let cleanupSpatialLinks = () => {};
-      let cleanupPreloaderVideo = () => {};
-      let cleanupHandoffCompletion = () => {};
+      let cleanupSharedPreloaderComplete = () => {};
       let enableRockControls = () => {};
       let startIntroOrbitRamp = () => {};
       let cancelIntroOrbitRamp = () => {};
@@ -445,16 +198,11 @@ const preloaderFallbackUrl = `${basePath}/images/Logo_Animation_Preloader.webp`;
       let isPointCoveredByModel = () => true;
       let isRockHitTestReady = false;
       let hasStartedRevealSequence = false;
-      const handoffState = shouldReplayWithoutPreloader ? null : getPendingHandoffState();
       const preloaderTimers = new Set();
       const getSpatialLinks = () =>
         Array.from(controlsElement.querySelectorAll('[data-architect-spatial-link]')).filter(
           (link) => link instanceof HTMLAnchorElement,
         );
-
-      const imageFadeMs = handoffState ? 90 : 300;
-      const whiteHoldMs = handoffState ? 24 : 300;
-      const overlayFadeMs = handoffState ? 180 : 300;
 
       const setPreloaderTimer = (callback, delay) => {
         const timer = window.setTimeout(() => {
@@ -481,7 +229,6 @@ const preloaderFallbackUrl = `${basePath}/images/Logo_Animation_Preloader.webp`;
       }
 
       const unlockPageBehindPreloader = () => {
-        document.documentElement.classList.remove('architect-preloader-active');
       };
 
       viewer.style.setProperty('--architect-rock-fade-ms', `${ARCHITECT_ROCK_FADE_MS}ms`);
@@ -516,15 +263,19 @@ const preloaderFallbackUrl = `${basePath}/images/Logo_Animation_Preloader.webp`;
         }
       };
 
+      const signalArchitectSceneReady = () => {
+        if (window[ARCHITECT_SCENE_READY_FLAG]) return;
+
+        window.__varelismArchitectSceneReady = true;
+        window[ARCHITECT_SCENE_READY_FLAG] = true;
+        window.dispatchEvent(new CustomEvent(ARCHITECT_SCENE_READY_EVENT));
+      };
+
       const removePreloader = () => {
         clearPendingArchitectPreloader();
-        if (activePreloader instanceof HTMLElement) {
-          delete activePreloader.dataset.navigationPreloader;
-        }
         if (isModelReady) {
           startArchitectRevealSequence();
         }
-        activePreloader?.remove();
         unlockRockControlsAfterPreloader();
         clearNavigationPreloaderClassIfIdle();
       };
@@ -533,88 +284,28 @@ const preloaderFallbackUrl = `${basePath}/images/Logo_Animation_Preloader.webp`;
         if (
           hasDisposed ||
           isPreloaderHiding ||
-          !isModelReady ||
-          !hasMetMinimumDuration
+          !isModelReady
         ) {
           return;
         }
 
         isPreloaderHiding = true;
-        activePreloader?.classList.add('is-image-fading');
-
-        setPreloaderTimer(() => {
-          unlockPageBehindPreloader();
-          setPreloaderTimer(() => {
-            activePreloader?.classList.add('is-overlay-fading');
-            setPreloaderTimer(removePreloader, overlayFadeMs);
-          }, whiteHoldMs);
-        }, imageFadeMs);
+        signalArchitectSceneReady();
       };
 
-      const prepareHiddenHandoffPreloaderVideo = () => {
-        const video = activePreloader?.querySelector('.architect-preloader__media');
+      if (!shouldReplayWithoutPreloader) {
+        const onSharedPreloaderComplete = () => {
+          if (!isSamePath(window.location.pathname, '/architect/')) return;
 
-        if (!(video instanceof HTMLVideoElement)) return;
+          cleanupSharedPreloaderComplete();
+          removePreloader();
+        };
 
-        preparePassivePreloaderVideo(video);
-        video.style.opacity = '0';
-
-        try {
-          video.pause();
-          video.currentTime = 0;
-        } catch {
-          // Astro can insert the autoplaying video before this script takes over.
-        }
-      };
-
-      const completeHandoffMinimum = () => {
-        hasMetMinimumDuration = true;
-        hidePreloaderWhenReady();
-      };
-
-      if (handoffState) {
-        if (activePreloader instanceof HTMLElement) {
-          activePreloader.dataset.navigationPreloader = 'true';
-        }
-        document.documentElement.classList.add(navigationPreloaderClass);
-        window.__varelismLockNavigationPreloaderScroll?.();
-        hasMetMinimumDuration = Boolean(handoffState.cycleComplete);
-        prepareHiddenHandoffPreloaderVideo();
-        cleanupPreloaderVideo = startPreloaderVideo(
-          activePreloader,
-          {
-            autoStart: false,
-          },
-        );
-
-        if (handoffState.cycleComplete) {
-          setPreloaderTimer(completeHandoffMinimum, 0);
-        } else {
-          const onHandoffComplete = (event) => {
-            const pathname = event?.detail?.pathname;
-
-            if (pathname && !isSamePath(pathname, window.location.pathname)) return;
-
-            cleanupHandoffCompletion();
-            completeHandoffMinimum();
-          };
-
-          window.addEventListener('varelism:handoff-complete', onHandoffComplete);
-          cleanupHandoffCompletion = () => {
-            window.removeEventListener('varelism:handoff-complete', onHandoffComplete);
-            cleanupHandoffCompletion = () => {};
-          };
-        }
-      } else {
-        cleanupPreloaderVideo = startPreloaderVideo(
-          activePreloader,
-          {
-            onCycleEnd: () => {
-              hasMetMinimumDuration = true;
-              hidePreloaderWhenReady();
-            },
-          },
-        );
+        window.addEventListener('varelism:preloader-complete', onSharedPreloaderComplete);
+        cleanupSharedPreloaderComplete = () => {
+          window.removeEventListener('varelism:preloader-complete', onSharedPreloaderComplete);
+          cleanupSharedPreloaderComplete = () => {};
+        };
       }
 
       const installSpatialLinkGuards = () => {
@@ -1729,10 +1420,11 @@ const preloaderFallbackUrl = `${basePath}/images/Logo_Animation_Preloader.webp`;
           stage.style.removeProperty('--architect-link-fade-ms');
         }
         cleanupSpatialLinks();
-        cleanupPreloaderVideo();
-        cleanupHandoffCompletion();
+        cleanupSharedPreloaderComplete();
         unlockPageBehindPreloader();
-        removePreloader();
+        clearPendingArchitectPreloader();
+        unlockRockControlsAfterPreloader();
+        clearNavigationPreloaderClassIfIdle();
         cleanup();
         if (state.dispose === dispose) state.dispose = null;
       };
@@ -1758,101 +1450,6 @@ const preloaderFallbackUrl = `${basePath}/images/Logo_Animation_Preloader.webp`;
 </script>
 
 <style>
-  .architect-preloader {
-    align-items: center;
-    background: #ffffff;
-    contain: layout paint style;
-    display: flex;
-    inset: 0;
-    justify-content: center;
-    opacity: 1;
-    pointer-events: auto;
-    position: fixed;
-    transition: opacity 300ms ease, visibility 0ms linear 300ms;
-    visibility: visible;
-    will-change: opacity;
-    z-index: 9999;
-  }
-
-  .architect-preloader.is-overlay-fading {
-    opacity: 0;
-    pointer-events: none;
-    visibility: hidden;
-  }
-
-  :global(html.home-preloader-navigation-active) .architect-preloader {
-    backface-visibility: hidden;
-    bottom: auto;
-    height: 100vh;
-    height: 100svh;
-    height: 100dvh;
-    isolation: isolate;
-    left: 0;
-    overscroll-behavior: auto;
-    pointer-events: none;
-    position: absolute;
-    right: 0;
-    touch-action: pan-y pinch-zoom;
-    top: 0;
-    z-index: 10;
-  }
-
-  :global(html.home-preloader-handoff-active) .architect-preloader {
-    z-index: 9;
-  }
-
-  :global(html:has([data-home-preloader-handoff])) .architect-preloader {
-    z-index: 9;
-  }
-
-  .architect-preloader__media,
-  .architect-preloader__fallback {
-    background: transparent;
-    display: block;
-    height: auto;
-    max-height: min(34vh, 18rem);
-    max-width: min(48vw, 22rem);
-    object-fit: contain;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 300ms ease;
-    transform: translateZ(0);
-    user-select: none;
-    visibility: hidden;
-    will-change: opacity;
-    width: min(48vw, 22rem);
-  }
-
-  .architect-preloader.is-video-visible .architect-preloader__media,
-  .architect-preloader.is-fallback-visible .architect-preloader__fallback {
-    opacity: 1;
-    visibility: visible;
-  }
-
-  :global(html.home-preloader-handoff-active) .architect-preloader__media,
-  :global(html.home-preloader-handoff-active) .architect-preloader__fallback {
-    opacity: 0;
-    transition: none;
-    visibility: hidden;
-  }
-
-  :global(html:has([data-home-preloader-handoff])) .architect-preloader__media,
-  :global(html:has([data-home-preloader-handoff])) .architect-preloader__fallback {
-    opacity: 0;
-    transition: none;
-    visibility: hidden;
-  }
-
-  .architect-preloader.is-image-fading .architect-preloader__media,
-  .architect-preloader.is-image-fading .architect-preloader__fallback {
-    opacity: 0;
-  }
-
-  :global(html.architect-preloader-active:not(.home-preloader-navigation-active)),
-  :global(html.architect-preloader-active:not(.home-preloader-navigation-active) body) {
-    overflow: hidden;
-  }
-
   :global(body) {
     overflow-x: hidden;
   }
@@ -2113,13 +1710,6 @@ const preloaderFallbackUrl = `${basePath}/images/Logo_Animation_Preloader.webp`;
       height: 100svh;
       height: 100dvh;
       width: 100vw;
-    }
-
-    .architect-preloader__media,
-    .architect-preloader__fallback {
-      max-height: min(28vh, 13rem);
-      max-width: min(62vw, 16rem);
-      width: min(62vw, 16rem);
     }
   }
 </style>

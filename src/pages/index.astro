@@ -1,6 +1,5 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
-import HomePreloader from '../components/HomePreloader.astro';
 
 const sections = [
   { title: 'Author', href: '/author/' },
@@ -10,7 +9,6 @@ const sections = [
 ---
 
 <BaseLayout title="Varelism" description="Author, architect, and artist.">
-  <HomePreloader />
   <section class="triptych" aria-label="Varelism sections">
     {sections.map((section) => (
       <a class="triptych-item" href={section.href}>
