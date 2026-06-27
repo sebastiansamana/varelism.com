@@ -1596,13 +1596,14 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
   }
 
   :global(.site-shell > main) {
+    align-items: start !important;
     display: grid !important;
+    justify-items: stretch !important;
     max-width: none !important;
     min-height: calc(100vh + var(--architect-footer-offset)) !important;
     min-height: calc(100svh + var(--architect-footer-offset)) !important;
     min-height: calc(100dvh + var(--architect-footer-offset)) !important;
     padding: 0 !important;
-    place-items: center !important;
     position: relative !important;
     width: 100% !important;
   }
@@ -1621,9 +1622,12 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
   }
 
   .architect-stage {
+    align-self: start;
     display: grid;
     cursor: grab;
+    grid-area: 1 / 1;
     isolation: isolate;
+    justify-self: stretch;
     min-height: calc(100vh + var(--architect-footer-offset));
     min-height: calc(100svh + var(--architect-footer-offset));
     min-height: calc(100dvh + var(--architect-footer-offset));
@@ -1734,15 +1738,18 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
   }
 
   .architect-viewer {
+    align-self: start;
     bottom: auto;
+    grid-area: 1 / 1;
     height: 100vh;
     height: 100svh;
     height: 100dvh;
+    justify-self: start;
     left: 0;
     min-height: 0;
     overflow: hidden;
     pointer-events: none;
-    position: absolute;
+    position: relative;
     right: auto;
     touch-action: none;
     top: 0;
