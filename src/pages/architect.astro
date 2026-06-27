@@ -4,6 +4,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 const basePath = import.meta.env.BASE_URL === '/' ? '' : import.meta.env.BASE_URL.replace(/\/$/, '');
 const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
 const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
+const preloaderFallbackUrl = `${basePath}/images/Logo_Animation_Preloader.webp`;
 ---
 
 <BaseLayout title="Architect | Varelism" description="Interactive architectural object.">
@@ -12,14 +13,27 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
       class="architect-preloader__media"
       src={preloaderVideoUrl}
       autoplay
+      defaultMuted
+      loop
       muted
       playsinline
+      webkit-playsinline
       preload="auto"
       disablePictureInPicture
       controlsList="nodownload noplaybackrate noremoteplayback"
       aria-hidden="true"
       tabindex="-1"
     ></video>
+    <img
+      class="architect-preloader__fallback"
+      src={preloaderFallbackUrl}
+      alt=""
+      width="960"
+      height="666"
+      decoding="async"
+      loading="eager"
+      aria-hidden="true"
+    />
   </div>
   <div class="architect-viewer" data-architect-viewer data-model-url={modelUrl}></div>
   <section class="architect-stage" data-architect-stage aria-label="Architect">
@@ -82,15 +96,115 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
     };
 
     const preparePassivePreloaderVideo = (video) => {
+      video.autoplay = true;
       video.controls = false;
+      video.loop = true;
       video.muted = true;
       video.defaultMuted = true;
       video.playsInline = true;
       video.preload = 'auto';
-      video.disablePictureInPicture = true;
+      video.removeAttribute('controls');
+      video.setAttribute('autoplay', '');
+      video.setAttribute('muted', '');
+      video.setAttribute('defaultMuted', '');
+      video.setAttribute('loop', '');
+      video.setAttribute('playsinline', '');
+      video.setAttribute('webkit-playsinline', '');
+      video.setAttribute('preload', 'auto');
+      try {
+        video.disablePictureInPicture = true;
+      } catch {
+        // Some embedded browsers expose the attribute but reject assignment.
+      }
+      try {
+        video.disableRemotePlayback = true;
+      } catch {
+        // Remote playback controls are best-effort only.
+      }
       video.setAttribute('controlsList', 'nodownload noplaybackrate noremoteplayback');
+      video.setAttribute('disablePictureInPicture', '');
+      video.setAttribute('disableremoteplayback', '');
+      video.setAttribute('x-webkit-airplay', 'deny');
       video.setAttribute('aria-hidden', 'true');
       video.tabIndex = -1;
+    };
+
+    const playPreloaderVideo = (video, { timeoutMs = 750 } = {}) =>
+      new Promise((resolve) => {
+        let hasResolved = false;
+        let timeout = 0;
+
+        const cleanup = () => {
+          if (timeout) window.clearTimeout(timeout);
+          video.removeEventListener('playing', onPlaying);
+          video.removeEventListener('canplay', onReady);
+          video.removeEventListener('canplaythrough', onReady);
+          video.removeEventListener('error', onError);
+        };
+
+        const done = (didPlay) => {
+          if (hasResolved) return;
+          hasResolved = true;
+          cleanup();
+          resolve(didPlay);
+        };
+
+        const confirmPlayback = () => {
+          if (!video.paused && !video.ended && video.readyState >= 2) {
+            done(true);
+          }
+        };
+
+        const tryPlay = () => {
+          if (hasResolved) return;
+
+          try {
+            const playAttempt = video.play();
+
+            if (playAttempt?.then) {
+              playAttempt.then(confirmPlayback).catch(() => done(false));
+              return;
+            }
+
+            window.requestAnimationFrame(confirmPlayback);
+          } catch {
+            done(false);
+          }
+        };
+
+        function onPlaying() {
+          confirmPlayback();
+        }
+
+        function onReady() {
+          tryPlay();
+        }
+
+        function onError() {
+          done(false);
+        }
+
+        preparePassivePreloaderVideo(video);
+        video.addEventListener('playing', onPlaying);
+        video.addEventListener('canplay', onReady);
+        video.addEventListener('canplaythrough', onReady);
+        video.addEventListener('error', onError, { once: true });
+        timeout = window.setTimeout(() => done(false), timeoutMs);
+        tryPlay();
+      });
+
+    const resetPreloaderMediaVisibility = (preloader) => {
+      preloader?.classList.remove('is-video-visible', 'is-fallback-visible');
+    };
+
+    const showPreloaderVideo = (preloader) => {
+      preloader?.classList.remove('is-fallback-visible');
+      preloader?.classList.add('is-video-visible');
+    };
+
+    const showPreloaderFallback = (preloader) => {
+      preloader?.classList.remove('is-video-visible');
+      preloader?.classList.add('is-fallback-visible');
     };
 
     const startPreloaderVideo = (
@@ -98,53 +212,73 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
       { autoStart = true, onCycleStart = () => {}, onCycleEnd = () => {} } = {},
     ) => {
       const video = preloader?.querySelector('.architect-preloader__media');
+      const fallbackCycleDurationMs = Math.ceil(window.__varelismPreloaderCycleDurationMs || 3067) + 180;
 
       if (!(video instanceof HTMLVideoElement)) {
+        showPreloaderFallback(preloader);
         window.requestAnimationFrame(onCycleEnd);
         return () => {};
       }
 
       let isDisposed = false;
+      let cycleTimer = 0;
+      let isAwaitingVideoStart = false;
 
-      const playVideo = () => {
+      const endCycle = () => {
         if (isDisposed) return;
-
-        preparePassivePreloaderVideo(video);
-
-        try {
-          const playAttempt = video.play();
-
-          if (playAttempt?.catch) {
-            playAttempt.catch(() => {
-              onCycleEnd();
-            });
-          }
-        } catch {
-          // A rejected autoplay attempt should never expose browser controls or block the page.
-          onCycleEnd();
-        }
-      };
-
-      const onEnded = () => {
-        if (isDisposed) return;
-
         onCycleEnd();
       };
-      const onError = onCycleEnd;
+
+      const setCycleGuard = () => {
+        if (cycleTimer || isDisposed) return;
+
+        const duration =
+          Number.isFinite(video.duration) && video.duration > 0
+            ? Math.ceil(Math.max(0, video.duration - video.currentTime) * 1000) + 180
+            : fallbackCycleDurationMs;
+
+        cycleTimer = window.setTimeout(endCycle, duration);
+      };
+
+      const playVideo = () => {
+        if (isDisposed || isAwaitingVideoStart) return;
+
+        isAwaitingVideoStart = true;
+        playPreloaderVideo(video).then((didPlay) => {
+          isAwaitingVideoStart = false;
+          if (isDisposed) return;
+
+          if (didPlay) {
+            showPreloaderVideo(preloader);
+          } else {
+            showPreloaderFallback(preloader);
+          }
+
+          setCycleGuard();
+        });
+      };
+      const onEnded = endCycle;
+      const onError = () => {
+        showPreloaderFallback(preloader);
+        setCycleGuard();
+      };
       const onReady = playVideo;
+      const onMetadata = setCycleGuard;
 
       video.addEventListener('ended', onEnded);
       video.addEventListener('error', onError, { once: true });
+      video.addEventListener('loadedmetadata', onMetadata, { once: true });
       if (autoStart) {
         video.addEventListener('loadeddata', onReady, { once: true });
         video.addEventListener('canplaythrough', onReady, { once: true });
       }
       if (autoStart) {
-        video.style.opacity = '1';
+        resetPreloaderMediaVisibility(preloader);
         onCycleStart();
         playVideo();
       } else {
         preparePassivePreloaderVideo(video);
+        resetPreloaderMediaVisibility(preloader);
 
         try {
           video.pause();
@@ -156,8 +290,10 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
 
       return () => {
         isDisposed = true;
+        if (cycleTimer) window.clearTimeout(cycleTimer);
         video.removeEventListener('ended', onEnded);
         video.removeEventListener('error', onError);
+        video.removeEventListener('loadedmetadata', onMetadata);
         video.removeEventListener('loadeddata', onReady);
         video.removeEventListener('canplaythrough', onReady);
 
@@ -307,6 +443,7 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
       let cancelIntroOrbitRamp = () => {};
       let isRockInteractionLocked = !shouldReplayWithoutPreloader;
       let isPointCoveredByModel = () => true;
+      let isRockHitTestReady = false;
       let hasStartedRevealSequence = false;
       const handoffState = shouldReplayWithoutPreloader ? null : getPendingHandoffState();
       const preloaderTimers = new Set();
@@ -695,7 +832,8 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
         let introOrbitFrameId = 0;
         const preventTouchMove = (event) => {
           if (isRockInteractionLocked) return;
-          event.preventDefault();
+          if (orbitGesture.activePointerId === null) return;
+          if (event.cancelable) event.preventDefault();
         };
         const hitTestRenderTarget = new THREE.WebGLRenderTarget(1, 1, {
           depthBuffer: true,
@@ -760,7 +898,7 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
             renderer.render(scene, camera);
             renderer.readRenderTargetPixels(hitTestRenderTarget, 0, 0, 1, 1, hitTestPixel);
           } catch {
-            return true;
+            return false;
           } finally {
             camera.clearViewOffset();
             camera.updateProjectionMatrix();
@@ -797,10 +935,11 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
             document.removeEventListener('visibilitychange', onVisibilityChange);
           }
           controlsElement.removeEventListener('touchmove', preventTouchMove);
-          controlsElement.removeEventListener('pointerdown', onOrbitPointerDown);
+          controlsElement.removeEventListener('pointerdown', onOrbitPointerDown, { capture: true });
           window.removeEventListener('pointermove', onOrbitPointerMove);
           window.removeEventListener('pointerup', onOrbitPointerEnd);
           window.removeEventListener('pointercancel', onOrbitPointerCancel);
+          controlsElement.removeEventListener('lostpointercapture', onOrbitLostPointerCapture);
           controls?.dispose();
           disposeScene();
           hitTestRenderTarget.dispose();
@@ -835,9 +974,11 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
         controls.staticMoving = false;
         controls.dynamicDampingFactor = 0.055;
         controls.target.set(0, 0, 0);
-        controls.enabled = !isRockInteractionLocked;
+        controls.enabled = false;
+        controlsElement.style.touchAction = 'pan-y pinch-zoom';
         enableRockControls = () => {
-          if (controls) controls.enabled = true;
+          if (controls) controls.enabled = false;
+          controlsElement.style.touchAction = 'pan-y pinch-zoom';
         };
 
         const terminalOrbit = {
@@ -871,6 +1012,23 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
           terminalOrbit.paused = false;
           terminalOrbit.rampAngle = null;
         };
+
+        const setOrbitGestureEnabled = (isEnabled) => {
+          if (controls) controls.enabled = isEnabled && !isRockInteractionLocked;
+          controlsElement.classList.toggle('is-rock-orbit-active', Boolean(isEnabled && !isRockInteractionLocked));
+        };
+
+        const clearOrbitGesture = () => {
+          orbitGesture.activePointerId = null;
+          orbitGesture.hasDragged = false;
+          setOrbitGestureEnabled(false);
+        };
+
+        const didPointerStartOnRock = (event) =>
+          isRockHitTestReady &&
+          typeof event.clientX === 'number' &&
+          typeof event.clientY === 'number' &&
+          isPointCoveredByModel(event.clientX, event.clientY);
 
         let hasStartedIntroOrbitRamp = false;
         let hasCancelledIntroOrbitRamp = false;
@@ -981,7 +1139,14 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
         const onOrbitPointerDown = (event) => {
           if (isRockInteractionLocked) return;
           if (event.button !== undefined && event.button !== 0) return;
+          if (orbitGesture.activePointerId !== null) return;
+          if (!didPointerStartOnRock(event)) {
+            setOrbitGestureEnabled(false);
+            return;
+          }
 
+          if (event.cancelable) event.preventDefault();
+          setOrbitGestureEnabled(true);
           cancelIntroOrbitRamp();
           orbitGesture.activePointerId = event.pointerId;
           orbitGesture.startX = event.clientX;
@@ -996,6 +1161,7 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
         const onOrbitPointerMove = (event) => {
           if (isRockInteractionLocked) return;
           if (orbitGesture.activePointerId !== event.pointerId) return;
+          if (event.cancelable) event.preventDefault();
 
           const deltaX = event.clientX - orbitGesture.startX;
           const deltaY = event.clientY - orbitGesture.startY;
@@ -1016,14 +1182,13 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
           const didDrag = orbitGesture.hasDragged;
           orbitGesture.lastX = event.clientX;
           orbitGesture.lastY = event.clientY;
-          orbitGesture.activePointerId = null;
-          orbitGesture.hasDragged = false;
 
           if (didDrag) {
             captureTerminalOrbit();
           } else {
             resumeTerminalOrbit();
           }
+          clearOrbitGesture();
           requestRender();
         };
 
@@ -1031,8 +1196,15 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
           if (isRockInteractionLocked) return;
           if (orbitGesture.activePointerId !== event.pointerId) return;
 
-          orbitGesture.activePointerId = null;
-          orbitGesture.hasDragged = false;
+          clearOrbitGesture();
+          resumeTerminalOrbit();
+          requestRender();
+        };
+
+        const onOrbitLostPointerCapture = (event) => {
+          if (orbitGesture.activePointerId !== event.pointerId) return;
+
+          clearOrbitGesture();
           resumeTerminalOrbit();
           requestRender();
         };
@@ -1049,10 +1221,11 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
         };
 
         controlsElement.addEventListener('touchmove', preventTouchMove, { passive: false });
-        controlsElement.addEventListener('pointerdown', onOrbitPointerDown);
+        controlsElement.addEventListener('pointerdown', onOrbitPointerDown, { capture: true });
         window.addEventListener('pointermove', onOrbitPointerMove);
         window.addEventListener('pointerup', onOrbitPointerEnd);
         window.addEventListener('pointercancel', onOrbitPointerCancel);
+        controlsElement.addEventListener('lostpointercapture', onOrbitLostPointerCapture);
 
         const loader = new GLTFLoader();
         loader.setMeshoptDecoder(MeshoptDecoder);
@@ -1119,6 +1292,7 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
         scene.add(sculpture);
 
         isPointCoveredByModel = isCanvasPixelCovered;
+        isRockHitTestReady = true;
 
         const displayBox = new THREE.Box3().setFromObject(sculpture);
         const displaySphere = displayBox.getBoundingSphere(new THREE.Sphere());
@@ -1608,18 +1782,18 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
 
   :global(html.home-preloader-navigation-active) .architect-preloader {
     backface-visibility: hidden;
+    bottom: auto;
     height: 100vh;
     height: 100svh;
     height: 100dvh;
     isolation: isolate;
     left: 0;
-    overscroll-behavior: none;
-    pointer-events: auto;
-    position: fixed;
+    overscroll-behavior: auto;
+    pointer-events: none;
+    position: absolute;
     right: 0;
-    touch-action: none;
+    touch-action: pan-y pinch-zoom;
     top: 0;
-    transform: translateZ(0);
     z-index: 10;
   }
 
@@ -1631,33 +1805,46 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
     z-index: 9;
   }
 
-  .architect-preloader__media {
+  .architect-preloader__media,
+  .architect-preloader__fallback {
     background: transparent;
     display: block;
     height: auto;
     max-height: min(34vh, 18rem);
     max-width: min(48vw, 22rem);
     object-fit: contain;
-    opacity: 1;
+    opacity: 0;
     pointer-events: none;
     transition: opacity 300ms ease;
     transform: translateZ(0);
     user-select: none;
+    visibility: hidden;
     will-change: opacity;
     width: min(48vw, 22rem);
   }
 
-  :global(html.home-preloader-handoff-active) .architect-preloader__media {
-    opacity: 0;
-    transition: none;
+  .architect-preloader.is-video-visible .architect-preloader__media,
+  .architect-preloader.is-fallback-visible .architect-preloader__fallback {
+    opacity: 1;
+    visibility: visible;
   }
 
-  :global(html:has([data-home-preloader-handoff])) .architect-preloader__media {
+  :global(html.home-preloader-handoff-active) .architect-preloader__media,
+  :global(html.home-preloader-handoff-active) .architect-preloader__fallback {
     opacity: 0;
     transition: none;
+    visibility: hidden;
   }
 
-  .architect-preloader.is-image-fading .architect-preloader__media {
+  :global(html:has([data-home-preloader-handoff])) .architect-preloader__media,
+  :global(html:has([data-home-preloader-handoff])) .architect-preloader__fallback {
+    opacity: 0;
+    transition: none;
+    visibility: hidden;
+  }
+
+  .architect-preloader.is-image-fading .architect-preloader__media,
+  .architect-preloader.is-image-fading .architect-preloader__fallback {
     opacity: 0;
   }
 
@@ -1706,7 +1893,7 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
   .architect-stage {
     align-self: start;
     display: grid;
-    cursor: grab;
+    cursor: default;
     grid-area: 1 / 1;
     isolation: isolate;
     justify-self: stretch;
@@ -1716,19 +1903,21 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
     overflow: visible;
     place-items: center;
     position: relative;
-    touch-action: none;
+    touch-action: pan-y pinch-zoom;
     user-select: none;
     width: 100%;
   }
 
-  .architect-stage:active {
+  .architect-stage.is-rock-orbit-active,
+  .architect-stage.is-rock-orbit-active:active {
     cursor: grabbing;
+    touch-action: none;
   }
 
   :global(html.architect-rock-controls-locked) .architect-stage,
   :global(html.architect-rock-controls-locked) .architect-stage:active {
     cursor: default;
-    touch-action: none;
+    touch-action: pan-y pinch-zoom;
   }
 
   .architect-spatial-nav {
@@ -1765,7 +1954,7 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
     text-align: center;
     text-decoration: none;
     top: var(--architect-link-y);
-    touch-action: none;
+    touch-action: pan-y pinch-zoom;
     transform: translate(-50%, -50%);
     transition:
       color 180ms ease,
@@ -1775,7 +1964,7 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
 
   :global(html.architect-rock-controls-locked) .architect-spatial-link {
     pointer-events: none;
-    touch-action: none;
+    touch-action: pan-y pinch-zoom;
   }
 
   .architect-spatial-link.is-visible-hit {
@@ -1833,7 +2022,7 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
     pointer-events: none;
     position: relative;
     right: auto;
-    touch-action: none;
+    touch-action: pan-y pinch-zoom;
     top: 0;
     user-select: none;
     width: 100vw;
@@ -1847,7 +2036,7 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
     inset: 0;
     position: absolute;
     pointer-events: none;
-    touch-action: none;
+    touch-action: pan-y pinch-zoom;
     opacity: 0;
     transition: none;
     visibility: hidden;
@@ -1926,7 +2115,8 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
       width: 100vw;
     }
 
-    .architect-preloader__media {
+    .architect-preloader__media,
+    .architect-preloader__fallback {
       max-height: min(28vh, 13rem);
       max-width: min(62vw, 16rem);
       width: min(62vw, 16rem);

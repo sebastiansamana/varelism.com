@@ -79,17 +79,18 @@ html.home-preloader-booting .home-preloader {
   visibility: visible;
 }
 
-html.home-preloader-scroll-locked,
-html.home-preloader-scroll-locked body {
-  overscroll-behavior: none;
+html.home-preloader-navigation-active .home-preloader {
+  pointer-events: none;
 }
 
-@media (hover: none), (pointer: coarse) {
-  html.home-preloader-scroll-locked,
-  html.home-preloader-scroll-locked body {
-    overflow: hidden;
-    touch-action: none;
-  }
+.home-preloader__media::-webkit-media-controls,
+.home-preloader__media::-webkit-media-controls-panel,
+.home-preloader__media::-webkit-media-controls-start-playback-button,
+.architect-preloader__media::-webkit-media-controls,
+.architect-preloader__media::-webkit-media-controls-panel,
+.architect-preloader__media::-webkit-media-controls-start-playback-button {
+  -webkit-appearance: none;
+  display: none !important;
 }
 
 html.home-return-active .site-footer {

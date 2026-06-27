@@ -39,11 +39,13 @@ const { title, description = 'Website under construction.' } = Astro.props;
       crossorigin
     />
     <link rel="preload" as="video" href="/images/Logo_Animation_Preloader.mp4" type="video/mp4" />
+    <link rel="preload" as="image" href="/images/Logo_Animation_Preloader.webp" type="image/webp" />
     <meta name="generator" content={Astro.generator} />
     <ViewTransitions />
     <script is:inline>
       (() => {
         const preloaderVideoSrc = '/images/Logo_Animation_Preloader.mp4';
+        const preloaderFallbackSrc = '/images/Logo_Animation_Preloader.webp';
         const pendingPreloaderKey = '__varelismPendingPreloaderNavigation';
         const activeHandoffKey = '__varelismActivePreloaderHandoff';
         const pendingHomeReturnKey = '__varelismPendingHomeReturn';
@@ -132,38 +134,15 @@ const { title, description = 'Website under construction.' } = Astro.props;
         });
 
         const lockNavigationPreloaderScroll = () => {
-          document.documentElement.classList.add(navigationScrollLockClass);
-          if (scrollLock.isLocked && scrollLock.cleanup) return;
-
-          scrollLock.isLocked = true;
-
-          const preventScrollInput = (event) => {
-            if (!document.documentElement.classList.contains(navigationPreloaderClass)) return;
-            if (event.cancelable) event.preventDefault();
-            event.stopImmediatePropagation?.();
-            event.stopPropagation();
-          };
-
-          window.addEventListener('touchstart', preventScrollInput, { capture: true, passive: false });
-          window.addEventListener('touchmove', preventScrollInput, { capture: true, passive: false });
-          window.addEventListener('pointerdown', preventScrollInput, { capture: true });
-          window.addEventListener('pointermove', preventScrollInput, { capture: true });
-          window.addEventListener('wheel', preventScrollInput, { capture: true, passive: false });
-
-          scrollLock.cleanup = () => {
-            window.removeEventListener('touchstart', preventScrollInput, { capture: true });
-            window.removeEventListener('touchmove', preventScrollInput, { capture: true });
-            window.removeEventListener('pointerdown', preventScrollInput, { capture: true });
-            window.removeEventListener('pointermove', preventScrollInput, { capture: true });
-            window.removeEventListener('wheel', preventScrollInput, { capture: true });
-            scrollLock.cleanup = null;
-          };
+          scrollLock.cleanup?.();
+          scrollLock.cleanup = null;
+          scrollLock.isLocked = false;
+          document.documentElement.classList.remove(navigationScrollLockClass);
         };
 
         const unlockNavigationPreloaderScroll = () => {
-          if (!scrollLock.isLocked) return;
-
           scrollLock.cleanup?.();
+          scrollLock.cleanup = null;
           scrollLock.isLocked = false;
           document.documentElement.classList.remove(navigationScrollLockClass);
         };
@@ -214,19 +193,173 @@ const { title, description = 'Website under construction.' } = Astro.props;
         };
 
         const preparePassivePreloaderVideo = (video) => {
+          video.autoplay = true;
           video.controls = false;
+          video.loop = true;
           video.muted = true;
           video.defaultMuted = true;
           video.playsInline = true;
           video.preload = 'auto';
-          video.disablePictureInPicture = true;
+          video.removeAttribute('controls');
+          video.setAttribute('autoplay', '');
+          video.setAttribute('muted', '');
+          video.setAttribute('defaultMuted', '');
+          video.setAttribute('loop', '');
+          video.setAttribute('playsinline', '');
+          video.setAttribute('webkit-playsinline', '');
+          video.setAttribute('preload', 'auto');
+          try {
+            video.disablePictureInPicture = true;
+          } catch {
+            // Some embedded browsers expose the attribute but reject assignment.
+          }
+          try {
+            video.disableRemotePlayback = true;
+          } catch {
+            // Remote playback controls are best-effort only.
+          }
           video.setAttribute('controlsList', 'nodownload noplaybackrate noremoteplayback');
+          video.setAttribute('disablePictureInPicture', '');
+          video.setAttribute('disableremoteplayback', '');
+          video.setAttribute('x-webkit-airplay', 'deny');
           video.setAttribute('aria-hidden', 'true');
           video.tabIndex = -1;
         };
 
+        const styleHandoffMedia = (element, isCompact) => {
+          Object.assign(element.style, {
+            background: 'transparent',
+            display: 'block',
+            height: 'auto',
+            maxHeight: isCompact ? 'min(28vh, 13rem)' : 'min(34vh, 18rem)',
+            maxWidth: isCompact ? 'min(62vw, 16rem)' : 'min(48vw, 22rem)',
+            objectFit: 'contain',
+            opacity: '0',
+            pointerEvents: 'none',
+            transition: `opacity ${handoffMediaFadeMs}ms ease`,
+            transform: 'translateZ(0)',
+            userSelect: 'none',
+            visibility: 'hidden',
+            willChange: 'opacity',
+            width: isCompact ? 'min(62vw, 16rem)' : 'min(48vw, 22rem)',
+          });
+        };
+
+        const styleHandoffOverlay = (overlay) => {
+          Object.assign(overlay.style, {
+            alignItems: 'center',
+            background: '#ffffff',
+            bottom: 'auto',
+            contain: 'layout paint style',
+            display: 'flex',
+            height: '100vh',
+            inset: '0 auto auto 0',
+            isolation: 'isolate',
+            justifyContent: 'center',
+            left: '0',
+            opacity: '1',
+            overscrollBehavior: 'auto',
+            pointerEvents: 'none',
+            position: 'absolute',
+            right: '0',
+            top: '0',
+            touchAction: 'pan-y pinch-zoom',
+            transform: 'none',
+            visibility: 'visible',
+            willChange: 'opacity',
+            width: '100%',
+            zIndex: '10',
+          });
+        };
+
+        const getHandoffOverlay = (video) => video.closest('[data-home-preloader-handoff]');
+
+        const getHandoffFallback = (video) => {
+          const overlay = getHandoffOverlay(video);
+          return overlay?.querySelector('.home-preloader__fallback') || null;
+        };
+
+        const setHandoffMediaVisibility = (video, mode) => {
+          const fallback = getHandoffFallback(video);
+          const showVideo = mode === 'video';
+          const showFallback = mode === 'fallback';
+
+          video.style.opacity = showVideo ? '1' : '0';
+          video.style.visibility = showVideo ? 'visible' : 'hidden';
+
+          if (fallback instanceof HTMLElement) {
+            fallback.style.opacity = showFallback ? '1' : '0';
+            fallback.style.visibility = showFallback ? 'visible' : 'hidden';
+          }
+        };
+
+        const playHandoffVideo = (video, { timeoutMs = 750 } = {}) =>
+          new Promise((resolve) => {
+            let hasResolved = false;
+            let timeout = 0;
+
+            const cleanup = () => {
+              if (timeout) window.clearTimeout(timeout);
+              video.removeEventListener('playing', onPlaying);
+              video.removeEventListener('canplay', onReady);
+              video.removeEventListener('canplaythrough', onReady);
+              video.removeEventListener('error', onError);
+            };
+
+            const done = (didPlay) => {
+              if (hasResolved) return;
+              hasResolved = true;
+              cleanup();
+              resolve(didPlay);
+            };
+
+            const confirmPlayback = () => {
+              if (!video.paused && !video.ended && video.readyState >= 2) {
+                done(true);
+              }
+            };
+
+            const tryPlay = () => {
+              if (hasResolved) return;
+
+              try {
+                const playAttempt = video.play();
+
+                if (playAttempt?.then) {
+                  playAttempt.then(confirmPlayback).catch(() => done(false));
+                  return;
+                }
+
+                window.requestAnimationFrame(confirmPlayback);
+              } catch {
+                done(false);
+              }
+            };
+
+            function onPlaying() {
+              confirmPlayback();
+            }
+
+            function onReady() {
+              tryPlay();
+            }
+
+            function onError() {
+              done(false);
+            }
+
+            preparePassivePreloaderVideo(video);
+            video.addEventListener('playing', onPlaying);
+            video.addEventListener('canplay', onReady);
+            video.addEventListener('canplaythrough', onReady);
+            video.addEventListener('error', onError, { once: true });
+            timeout = window.setTimeout(() => done(false), timeoutMs);
+            tryPlay();
+          });
+
         const restartHandoffVideo = (video) => {
           preparePassivePreloaderVideo(video);
+          setHandoffMediaVisibility(video, null);
 
           try {
             video.pause();
@@ -235,15 +368,9 @@ const { title, description = 'Website under construction.' } = Astro.props;
             // Metadata may not be ready yet; autoplay still starts from the beginning on fresh elements.
           }
 
-          try {
-            const playAttempt = video.play();
-
-            if (playAttempt?.catch) {
-              playAttempt.catch(() => {});
-            }
-          } catch {
-            // If autoplay is rejected, keep the overlay clean and let navigation continue.
-          }
+          playHandoffVideo(video).then((didPlay) => {
+            setHandoffMediaVisibility(video, didPlay ? 'video' : 'fallback');
+          });
         };
 
         const ensureHandoffPreloader = ({ restart = true } = {}) => {
@@ -254,6 +381,24 @@ const { title, description = 'Website under construction.' } = Astro.props;
 
           if (existingOverlay instanceof HTMLElement) {
             const existingVideo = existingOverlay.querySelector('video');
+            const existingFallback = existingOverlay.querySelector('.home-preloader__fallback');
+            const isCompact = window.matchMedia?.('(max-width: 720px)').matches;
+            styleHandoffOverlay(existingOverlay);
+            document.body?.prepend(existingOverlay);
+
+            if (!(existingFallback instanceof HTMLImageElement)) {
+              const fallback = document.createElement('img');
+              fallback.className = 'home-preloader__fallback';
+              fallback.src = preloaderFallbackSrc;
+              fallback.alt = '';
+              fallback.width = 960;
+              fallback.height = 666;
+              fallback.decoding = 'async';
+              fallback.loading = 'eager';
+              fallback.setAttribute('aria-hidden', 'true');
+              styleHandoffMedia(fallback, isCompact);
+              existingOverlay.append(fallback);
+            }
 
             if (restart && existingVideo instanceof HTMLVideoElement) {
               restartHandoffVideo(existingVideo);
@@ -267,53 +412,37 @@ const { title, description = 'Website under construction.' } = Astro.props;
 
           const overlay = document.createElement('div');
           const video = document.createElement('video');
+          const fallback = document.createElement('img');
           const isCompact = window.matchMedia?.('(max-width: 720px)').matches;
 
           overlay.dataset.homePreloaderHandoff = 'true';
           overlay.setAttribute('data-astro-transition-persist', 'varelism-home-preloader-handoff');
           overlay.setAttribute('aria-hidden', 'true');
-          Object.assign(overlay.style, {
-            alignItems: 'center',
-            background: '#ffffff',
-            contain: 'layout paint style',
-            display: 'flex',
-            inset: '0',
-            height: '100dvh',
-            isolation: 'isolate',
-            justifyContent: 'center',
-            opacity: '1',
-            overscrollBehavior: 'none',
-            pointerEvents: 'auto',
-            position: 'fixed',
-            touchAction: 'none',
-            transform: 'translateZ(0)',
-            visibility: 'visible',
-            willChange: 'opacity',
-            width: '100%',
-            zIndex: '10',
-          });
+          styleHandoffOverlay(overlay);
 
           video.className = 'home-preloader__media';
           video.src = preloaderVideoSrc;
           video.autoplay = true;
+          video.defaultMuted = true;
+          video.loop = true;
+          video.muted = true;
+          video.playsInline = true;
+          video.setAttribute('webkit-playsinline', '');
           preparePassivePreloaderVideo(video);
-          Object.assign(video.style, {
-            background: 'transparent',
-            display: 'block',
-            height: 'auto',
-            maxHeight: isCompact ? 'min(28vh, 13rem)' : 'min(34vh, 18rem)',
-            maxWidth: isCompact ? 'min(62vw, 16rem)' : 'min(48vw, 22rem)',
-            objectFit: 'contain',
-            pointerEvents: 'none',
-            transition: `opacity ${handoffMediaFadeMs}ms ease`,
-            transform: 'translateZ(0)',
-            userSelect: 'none',
-            willChange: 'opacity',
-            width: isCompact ? 'min(62vw, 16rem)' : 'min(48vw, 22rem)',
-          });
+          styleHandoffMedia(video, isCompact);
 
-          overlay.append(video);
-          document.documentElement.append(overlay);
+          fallback.className = 'home-preloader__fallback';
+          fallback.src = preloaderFallbackSrc;
+          fallback.alt = '';
+          fallback.width = 960;
+          fallback.height = 666;
+          fallback.decoding = 'async';
+          fallback.loading = 'eager';
+          fallback.setAttribute('aria-hidden', 'true');
+          styleHandoffMedia(fallback, isCompact);
+
+          overlay.append(video, fallback);
+          document.body?.prepend(overlay);
 
           if (restart) restartHandoffVideo(video);
 
@@ -532,7 +661,7 @@ const { title, description = 'Website under construction.' } = Astro.props;
           const targetTime = Math.min(elapsedSeconds, maxSeekTime);
 
           preparePassivePreloaderVideo(video);
-          video.style.opacity = '1';
+          setHandoffMediaVisibility(video, null);
 
           const seekAndPlay = () => {
             try {
@@ -541,15 +670,9 @@ const { title, description = 'Website under construction.' } = Astro.props;
               // If the browser rejects the seek, playback still stays passive and control-free.
             }
 
-            try {
-              const playAttempt = video.play();
-
-              if (playAttempt?.catch) {
-                playAttempt.catch(() => {});
-              }
-            } catch {
-              // Autoplay failures should not expose native controls.
-            }
+            playHandoffVideo(video).then((didPlay) => {
+              setHandoffMediaVisibility(video, didPlay ? 'video' : 'fallback');
+            });
           };
 
           if (video.readyState === 0) {
@@ -587,10 +710,10 @@ const { title, description = 'Website under construction.' } = Astro.props;
           if (
             existingOverlay instanceof HTMLElement &&
             existingVideo instanceof HTMLVideoElement &&
-            !existingVideo.paused &&
-            !existingVideo.ended &&
-            existingVideo.currentTime > 0 &&
-            existingVideo.style.opacity !== '0'
+            (existingOverlay.querySelector('.home-preloader__fallback') instanceof HTMLElement ||
+              !existingVideo.paused) &&
+            (existingVideo.style.visibility === 'visible' ||
+              existingOverlay.querySelector('.home-preloader__fallback')?.style.visibility === 'visible')
           ) {
             return;
           }
@@ -625,9 +748,10 @@ const { title, description = 'Website under construction.' } = Astro.props;
 
             const refreshFallback = () => {
               if (timer) window.clearTimeout(timer);
-              const duration = Number.isFinite(video.duration) && video.duration > 0
-                ? Math.ceil(video.duration * 1000) + 180
-                : handoffCycleFallbackMs;
+              const duration =
+                Number.isFinite(video.duration) && video.duration > 0
+                  ? Math.ceil(Math.max(0, video.duration - video.currentTime) * 1000) + 180
+                  : handoffCycleFallbackMs;
               timer = window.setTimeout(done, duration);
             };
 
@@ -647,7 +771,7 @@ const { title, description = 'Website under construction.' } = Astro.props;
         const fadeHandoffToBlank = ({ video } = {}) =>
           new Promise((resolve) => {
             if (video instanceof HTMLVideoElement) {
-              video.style.opacity = '0';
+              setHandoffMediaVisibility(video, null);
             }
 
             window.setTimeout(resolve, handoffMediaFadeMs + handoffBlankHoldMs);

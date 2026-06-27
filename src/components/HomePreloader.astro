@@ -11,6 +11,7 @@ interface Props {
 }
 
 const videoSrc = '/images/Logo_Animation_Preloader.mp4';
+const fallbackSrc = '/images/Logo_Animation_Preloader.webp';
 const {
   activePaths = ['/', '/index.html'],
   completeEvent = 'varelism:preloader-complete',
@@ -40,14 +41,27 @@ const {
     class="home-preloader__media"
     src={videoSrc}
     autoplay
+    defaultMuted
+    loop
     muted
     playsinline
+    webkit-playsinline
     preload="auto"
     disablePictureInPicture
     controlsList="nodownload noplaybackrate noremoteplayback"
     aria-hidden="true"
     tabindex="-1"
   ></video>
+  <img
+    class="home-preloader__fallback"
+    src={fallbackSrc}
+    alt=""
+    width="960"
+    height="666"
+    decoding="async"
+    loading="eager"
+    aria-hidden="true"
+  />
 </div>
 
 <script is:inline>
@@ -94,31 +108,125 @@ const {
       `${pathA.replace(/\/$/, '')}/` === `${pathB.replace(/\/$/, '')}/`;
 
     const preparePassivePreloaderVideo = (video) => {
+      video.autoplay = true;
       video.controls = false;
+      video.loop = true;
       video.muted = true;
       video.defaultMuted = true;
       video.playsInline = true;
       video.preload = 'auto';
-      video.disablePictureInPicture = true;
+      video.removeAttribute('controls');
+      video.setAttribute('autoplay', '');
+      video.setAttribute('muted', '');
+      video.setAttribute('defaultMuted', '');
+      video.setAttribute('loop', '');
+      video.setAttribute('playsinline', '');
+      video.setAttribute('webkit-playsinline', '');
+      video.setAttribute('preload', 'auto');
+      try {
+        video.disablePictureInPicture = true;
+      } catch {
+        // Some embedded browsers expose the attribute but reject assignment.
+      }
+      try {
+        video.disableRemotePlayback = true;
+      } catch {
+        // Remote playback controls are best-effort only.
+      }
       video.setAttribute('controlsList', 'nodownload noplaybackrate noremoteplayback');
+      video.setAttribute('disablePictureInPicture', '');
+      video.setAttribute('disableremoteplayback', '');
+      video.setAttribute('x-webkit-airplay', 'deny');
       video.setAttribute('aria-hidden', 'true');
       video.tabIndex = -1;
     };
 
-    const playPreloaderVideo = (video) => {
+    const playPreloaderVideo = (video, { timeoutMs = 750 } = {}) =>
+      new Promise((resolve) => {
+        let hasResolved = false;
+        let timeout = 0;
+
+        const cleanup = () => {
+          if (timeout) window.clearTimeout(timeout);
+          video.removeEventListener('playing', onPlaying);
+          video.removeEventListener('canplay', onReady);
+          video.removeEventListener('canplaythrough', onReady);
+          video.removeEventListener('error', onError);
+        };
+
+        const done = (didPlay) => {
+          if (hasResolved) return;
+          hasResolved = true;
+          cleanup();
+          resolve(didPlay);
+        };
+
+        const confirmPlayback = () => {
+          if (!video.paused && !video.ended && video.readyState >= 2) {
+            done(true);
+          }
+        };
+
+        const tryPlay = () => {
+          if (hasResolved) return;
+
+          try {
+            const playAttempt = video.play();
+
+            if (playAttempt?.then) {
+              playAttempt.then(confirmPlayback).catch(() => done(false));
+              return;
+            }
+
+            window.requestAnimationFrame(confirmPlayback);
+          } catch {
+            done(false);
+          }
+        };
+
+        function onPlaying() {
+          confirmPlayback();
+        }
+
+        function onReady() {
+          tryPlay();
+        }
+
+        function onError() {
+          done(false);
+        }
+
+        preparePassivePreloaderVideo(video);
+        video.addEventListener('playing', onPlaying);
+        video.addEventListener('canplay', onReady);
+        video.addEventListener('canplaythrough', onReady);
+        video.addEventListener('error', onError, { once: true });
+        timeout = window.setTimeout(() => done(false), timeoutMs);
+        tryPlay();
+      });
+
+    const resetPreloaderMediaVisibility = (overlay) => {
+      overlay.classList.remove('is-video-visible', 'is-fallback-visible');
+    };
+
+    const showPreloaderVideo = (overlay) => {
+      overlay.classList.remove('is-fallback-visible');
+      overlay.classList.add('is-video-visible');
+    };
+
+    const showPreloaderFallback = (overlay) => {
+      overlay.classList.remove('is-video-visible');
+      overlay.classList.add('is-fallback-visible');
+    };
+
+    const pausePreloaderVideo = (video) => {
       preparePassivePreloaderVideo(video);
 
       try {
-        const playAttempt = video.play();
-
-        if (playAttempt?.catch) {
-          return playAttempt.catch(() => false);
-        }
+        video.pause();
       } catch {
-        return Promise.resolve(false);
+        // Ignore media cleanup failures.
       }
-
-      return Promise.resolve(true);
     };
 
     const waitForWindowLoad = () => {
@@ -273,6 +381,7 @@ const {
       let cleanupVideo = () => {};
       let cleanupHandoffCompletion = () => {};
       const timers = new Set();
+      const fallbackCycleDurationMs = Math.ceil(window.__varelismPreloaderCycleDurationMs || 3067) + 180;
       overlay.style.setProperty('--home-preloader-image-fade-ms', `${imageFadeMs}ms`);
       overlay.style.setProperty('--home-preloader-overlay-fade-ms', `${overlayFadeMs}ms`);
       const storage = {
@@ -336,10 +445,10 @@ const {
 
       const video = overlay.querySelector('.home-preloader__media');
       const preloaderVideo = video instanceof HTMLVideoElement ? video : null;
+      resetPreloaderMediaVisibility(overlay);
 
       if (handoffState && preloaderVideo) {
         preparePassivePreloaderVideo(preloaderVideo);
-        preloaderVideo.style.opacity = '0';
 
         try {
           preloaderVideo.pause();
@@ -363,6 +472,8 @@ const {
       let hasMetMediaMoment = Boolean(handoffState?.cycleComplete);
       let isHiding = false;
       let hasMediaDurationGuard = false;
+      let hasFallbackDurationGuard = false;
+      let isAwaitingVideoStart = false;
 
       const hideOverlay = () => {
         if (isHiding || !isPageReady || !hasMetMediaMoment) return;
@@ -397,15 +508,46 @@ const {
         setTimer(markMediaMomentReached, Math.ceil(remainingMs) + 180);
       };
 
+      const setFallbackDurationGuard = () => {
+        if (hasFallbackDurationGuard || hasMetMediaMoment) return;
+
+        hasFallbackDurationGuard = true;
+        setTimer(markMediaMomentReached, fallbackCycleDurationMs);
+      };
+
+      const revealVideoOrFallback = () => {
+        if (
+          !preloaderVideo ||
+          hasRemoved ||
+          isHiding ||
+          isAwaitingVideoStart ||
+          overlay.classList.contains('is-video-visible') ||
+          overlay.classList.contains('is-fallback-visible')
+        ) {
+          return;
+        }
+
+        isAwaitingVideoStart = true;
+        playPreloaderVideo(preloaderVideo).then((didPlay) => {
+          isAwaitingVideoStart = false;
+          if (hasRemoved || isHiding) return;
+
+          if (didPlay) {
+            showPreloaderVideo(overlay);
+            setMediaDurationGuard();
+            return;
+          }
+
+          showPreloaderFallback(overlay);
+          setFallbackDurationGuard();
+        });
+      };
+
       const startVideoCycle = () => {
         if (!preloaderVideo || hasRemoved || isHiding) return;
 
-        preloaderVideo.style.opacity = '1';
-        playPreloaderVideo(preloaderVideo).then((didPlay) => {
-          if (didPlay === false && !hasRemoved) {
-            markMediaMomentReached();
-          }
-        });
+        resetPreloaderMediaVisibility(overlay);
+        revealVideoOrFallback();
         setMediaDurationGuard();
       };
 
@@ -419,9 +561,10 @@ const {
         };
         const onError = () => {
           if (handoffState && !hasMetMediaMoment) return;
-          markMediaMomentReached();
+          showPreloaderFallback(overlay);
+          setFallbackDurationGuard();
         };
-        const onReady = () => playPreloaderVideo(preloaderVideo);
+        const onReady = () => revealVideoOrFallback();
         const onMetadata = () => setMediaDurationGuard();
 
         preloaderVideo.addEventListener('ended', onEnded);
@@ -440,7 +583,7 @@ const {
           preloaderVideo.removeEventListener('canplaythrough', onReady);
 
           try {
-            preloaderVideo.pause();
+            pausePreloaderVideo(preloaderVideo);
           } catch {
             // Ignore media cleanup failures.
           }
@@ -450,7 +593,8 @@ const {
           startVideoCycle();
         }
       } else {
-        markMediaMomentReached();
+        showPreloaderFallback(overlay);
+        setFallbackDurationGuard();
       }
 
       if (handoffState && !handoffState.cycleComplete) {
@@ -532,18 +676,18 @@ const {
 
   :global(html.home-preloader-navigation-active) .home-preloader {
     backface-visibility: hidden;
+    bottom: auto;
     height: 100vh;
     height: 100svh;
     height: 100dvh;
     isolation: isolate;
     left: 0;
-    overscroll-behavior: none;
-    pointer-events: auto;
-    position: fixed;
+    overscroll-behavior: auto;
+    pointer-events: none;
+    position: absolute;
     right: 0;
-    touch-action: none;
+    touch-action: pan-y pinch-zoom;
     top: 0;
-    transform: translateZ(0);
     z-index: 10;
   }
 
@@ -553,29 +697,42 @@ const {
     visibility: visible;
   }
 
+  :global(html.home-preloader-navigation-active) .home-preloader.is-visible {
+    pointer-events: none;
+  }
+
   .home-preloader.is-overlay-fading {
     opacity: 0;
     pointer-events: none;
     visibility: hidden;
   }
 
-  .home-preloader__media {
+  .home-preloader__media,
+  .home-preloader__fallback {
+    background: transparent;
     display: block;
     height: auto;
     max-height: min(34vh, 18rem);
     max-width: min(48vw, 22rem);
     object-fit: contain;
-    opacity: 1;
+    opacity: 0;
     pointer-events: none;
     transition: opacity var(--home-preloader-image-fade-ms, 300ms) ease;
     transform: translateZ(0);
     user-select: none;
+    visibility: hidden;
     will-change: opacity;
     width: min(48vw, 22rem);
-    background: transparent;
   }
 
-  .home-preloader.is-image-fading .home-preloader__media {
+  .home-preloader.is-video-visible .home-preloader__media,
+  .home-preloader.is-fallback-visible .home-preloader__fallback {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  .home-preloader.is-image-fading .home-preloader__media,
+  .home-preloader.is-image-fading .home-preloader__fallback {
     opacity: 0;
   }
 
@@ -585,7 +742,8 @@ const {
   }
 
   @media (max-width: 720px) {
-    .home-preloader__media {
+    .home-preloader__media,
+    .home-preloader__fallback {
       max-height: min(28vh, 13rem);
       max-width: min(62vw, 16rem);
       width: min(62vw, 16rem);
