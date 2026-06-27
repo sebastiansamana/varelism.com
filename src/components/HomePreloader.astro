@@ -86,6 +86,7 @@ const {
       }
 
       document.documentElement.classList.remove(navigationPreloaderClass);
+      window.__varelismUnlockNavigationPreloaderScroll?.();
     };
 
     const isSamePath = (pathA, pathB) =>
@@ -353,6 +354,7 @@ const {
       if (isNavigationPreloader) {
         overlay.dataset.navigationPreloader = 'true';
         document.documentElement.classList.add(navigationPreloaderClass);
+        window.__varelismLockNavigationPreloaderScroll?.();
       }
       overlay.classList.add('is-visible');
       document.documentElement.classList.remove('home-preloader-booting');
@@ -529,15 +531,19 @@ const {
   }
 
   :global(html.home-preloader-navigation-active) .home-preloader {
-    bottom: auto;
+    backface-visibility: hidden;
     height: 100vh;
     height: 100svh;
     height: 100dvh;
+    isolation: isolate;
     left: 0;
-    pointer-events: none;
-    position: absolute;
+    overscroll-behavior: none;
+    pointer-events: auto;
+    position: fixed;
     right: 0;
+    touch-action: none;
     top: 0;
+    transform: translateZ(0);
     z-index: 10;
   }
 

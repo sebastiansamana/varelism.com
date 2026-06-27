@@ -68,6 +68,7 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
       }
 
       document.documentElement.classList.remove(navigationPreloaderClass);
+      window.__varelismUnlockNavigationPreloaderScroll?.();
     };
 
     const disposeCurrentViewer = () => {
@@ -274,8 +275,9 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
           'home-preloader-active',
           'home-preloader-booting',
           'home-preloader-handoff-active',
-          navigationPreloaderClass
         );
+        document.documentElement.classList.remove(navigationPreloaderClass);
+        window.__varelismUnlockNavigationPreloaderScroll?.();
         clearNavigationPreloaderClassIfIdle();
 
         if (window.scrollX || window.scrollY) {
@@ -301,9 +303,7 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
       let cleanupSpatialLinks = () => {};
       let cleanupPreloaderVideo = () => {};
       let cleanupHandoffCompletion = () => {};
-      let cleanupLockedTouchScroll = () => {};
       let enableRockControls = () => {};
-      let isLockedTouchScrollInstalled = false;
       let isRockInteractionLocked = !shouldReplayWithoutPreloader;
       let isPointCoveredByModel = () => true;
       const handoffState = shouldReplayWithoutPreloader ? null : getPendingHandoffState();
@@ -326,86 +326,14 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
         return timer;
       };
 
-      const isTouchScreen = () =>
-        navigator.maxTouchPoints > 0 ||
-        Boolean(window.matchMedia?.('(any-pointer: coarse), (pointer: coarse)').matches);
-
-      const shouldHandleLockedTouchScroll = () =>
-        isRockInteractionLocked &&
-        isTouchScreen() &&
-        document.documentElement.classList.contains(navigationPreloaderClass);
-
-      const installLockedTouchScroll = () => {
-        if (isLockedTouchScrollInstalled) return;
-        isLockedTouchScrollInstalled = true;
-
-        let activeTouchId = null;
-        let lastTouchY = 0;
-
-        const findTouch = (touches) =>
-          Array.from(touches).find((touch) => touch.identifier === activeTouchId) || null;
-
-        const clearTouch = () => {
-          activeTouchId = null;
-          lastTouchY = 0;
-        };
-
-        const onTouchStart = (event) => {
-          if (!shouldHandleLockedTouchScroll() || !event.touches.length) return;
-          const touch = event.touches[0];
-          activeTouchId = touch.identifier;
-          lastTouchY = touch.clientY;
-          event.stopPropagation();
-        };
-
-        const onTouchMove = (event) => {
-          if (!shouldHandleLockedTouchScroll() || activeTouchId === null) return;
-          const touch = findTouch(event.touches);
-          if (!touch) return;
-
-          const deltaY = lastTouchY - touch.clientY;
-          lastTouchY = touch.clientY;
-          const maxScrollY = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
-          const nextScrollY = Math.min(maxScrollY, Math.max(0, window.scrollY + deltaY));
-
-          event.stopPropagation();
-          if (event.cancelable) event.preventDefault();
-          if (Math.abs(nextScrollY - window.scrollY) > 0.5) {
-            window.scrollTo({ left: window.scrollX, top: nextScrollY, behavior: 'auto' });
-          }
-        };
-
-        const onTouchEnd = (event) => {
-          if (activeTouchId === null || findTouch(event.touches)) return;
-          clearTouch();
-        };
-
-        window.addEventListener('touchstart', onTouchStart, { capture: true, passive: true });
-        window.addEventListener('touchmove', onTouchMove, { capture: true, passive: false });
-        window.addEventListener('touchend', onTouchEnd, { capture: true, passive: true });
-        window.addEventListener('touchcancel', onTouchEnd, { capture: true, passive: true });
-
-        cleanupLockedTouchScroll = () => {
-          window.removeEventListener('touchstart', onTouchStart, { capture: true });
-          window.removeEventListener('touchmove', onTouchMove, { capture: true });
-          window.removeEventListener('touchend', onTouchEnd, { capture: true });
-          window.removeEventListener('touchcancel', onTouchEnd, { capture: true });
-          clearTouch();
-          isLockedTouchScrollInstalled = false;
-          cleanupLockedTouchScroll = () => {};
-        };
-      };
-
       const lockRockControlsBehindPreloader = () => {
         isRockInteractionLocked = true;
         document.documentElement.classList.add(rockControlsLockedClass);
-        installLockedTouchScroll();
       };
 
       const unlockRockControlsAfterPreloader = () => {
         isRockInteractionLocked = false;
         document.documentElement.classList.remove(rockControlsLockedClass);
-        cleanupLockedTouchScroll();
         enableRockControls();
       };
 
@@ -483,6 +411,7 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
           activePreloader.dataset.navigationPreloader = 'true';
         }
         document.documentElement.classList.add(navigationPreloaderClass);
+        window.__varelismLockNavigationPreloaderScroll?.();
         hasMetMinimumDuration = Boolean(handoffState.cycleComplete);
         prepareHiddenHandoffPreloaderVideo();
         cleanupPreloaderVideo = startPreloaderVideo(
@@ -1185,7 +1114,170 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
         };
         document.addEventListener('visibilitychange', onVisibilityChange);
 
-        const positionSpatialLinksFromSilhouette = () => {
+        const materialTextureKeys = [
+          'alphaMap',
+          'aoMap',
+          'bumpMap',
+          'clearcoatMap',
+          'clearcoatNormalMap',
+          'clearcoatRoughnessMap',
+          'displacementMap',
+          'emissiveMap',
+          'envMap',
+          'iridescenceMap',
+          'iridescenceThicknessMap',
+          'lightMap',
+          'map',
+          'metalnessMap',
+          'normalMap',
+          'roughnessMap',
+          'sheenColorMap',
+          'sheenRoughnessMap',
+          'specularColorMap',
+          'specularIntensityMap',
+          'thicknessMap',
+          'transmissionMap',
+        ];
+
+        const collectMaterialTextures = (object) => {
+          const textures = new Set();
+
+          object.traverse((child) => {
+            if (!child.isMesh) return;
+
+            const materials = Array.isArray(child.material) ? child.material : [child.material];
+            materials.forEach((material) => {
+              if (!material) return;
+
+              materialTextureKeys.forEach((key) => {
+                const texture = material[key];
+                if (texture?.isTexture) textures.add(texture);
+              });
+            });
+          });
+
+          return [...textures];
+        };
+
+        const isTextureSourceReady = (texture) => {
+          const source = texture?.source?.data || texture?.image;
+
+          if (!source) return true;
+
+          if (typeof source.complete === 'boolean' && !source.complete) return false;
+          if (typeof source.naturalWidth === 'number') return source.naturalWidth > 0;
+          if (
+            typeof HTMLMediaElement !== 'undefined' &&
+            source instanceof HTMLMediaElement
+          ) {
+            return source.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA;
+          }
+          if (
+            typeof source.width === 'number' &&
+            typeof source.height === 'number'
+          ) {
+            return source.width > 0 && source.height > 0;
+          }
+
+          return true;
+        };
+
+        const waitForMaterialTextures = (textures) =>
+          new Promise((resolve) => {
+            const checkTextures = () => {
+              if (hasDisposed || textures.every(isTextureSourceReady)) {
+                resolve();
+                return;
+              }
+
+              window.requestAnimationFrame(checkTextures);
+            };
+
+            checkTextures();
+          });
+
+        const compileSceneMaterials = async () => {
+          if (hasDisposed) return;
+
+          try {
+            if (typeof renderer.compileAsync === 'function') {
+              await renderer.compileAsync(scene, camera);
+              return;
+            }
+
+            renderer.compile(scene, camera);
+          } catch {
+            renderer.compile?.(scene, camera);
+          }
+        };
+
+        const hasVisibleTexturedFrame = () => {
+          const gl = renderer.getContext();
+          const drawingWidth = gl.drawingBufferWidth;
+          const drawingHeight = gl.drawingBufferHeight;
+
+          if (!drawingWidth || !drawingHeight) return false;
+
+          const pixelCount = drawingWidth * drawingHeight;
+          const pixels = new Uint8Array(pixelCount * 4);
+
+          try {
+            gl.readPixels(0, 0, drawingWidth, drawingHeight, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+          } catch {
+            return true;
+          }
+
+          const sampleStride = Math.max(1, Math.floor(pixelCount / 150000));
+          const sampledPixelCount = Math.ceil(pixelCount / sampleStride);
+          const minVisiblePixels = Math.max(24, Math.floor(sampledPixelCount * 0.0015));
+          let visiblePixels = 0;
+          let nonWhitePixels = 0;
+
+          for (let pixelIndex = 0; pixelIndex < pixelCount; pixelIndex += sampleStride) {
+            const offset = pixelIndex * 4;
+            const alpha = pixels[offset + 3];
+
+            if (alpha < 96) continue;
+
+            visiblePixels += 1;
+
+            if (
+              pixels[offset] < 244 ||
+              pixels[offset + 1] < 244 ||
+              pixels[offset + 2] < 244
+            ) {
+              nonWhitePixels += 1;
+            }
+          }
+
+          return (
+            visiblePixels >= minVisiblePixels &&
+            nonWhitePixels >= Math.max(8, Math.floor(visiblePixels * 0.025))
+          );
+        };
+
+        const waitForFirstVisibleTexturedFrame = () =>
+          new Promise((resolve) => {
+            const checkFrame = () => {
+              if (hasDisposed) {
+                resolve();
+                return;
+              }
+
+              renderScene();
+
+              if (hasVisibleTexturedFrame()) {
+                window.requestAnimationFrame(resolve);
+                return;
+              }
+
+              window.requestAnimationFrame(checkFrame);
+            };
+
+            window.requestAnimationFrame(checkFrame);
+          });
+
+        const positionSpatialLinksBelowModel = () => {
           const spatialLinks = getSpatialLinks();
           if (spatialLinks.length < 2) return;
 
@@ -1211,192 +1303,62 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
 
           const pixels = new Uint8Array(drawingWidth * drawingHeight * 4);
           gl.readPixels(0, 0, drawingWidth, drawingHeight, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-
-          const scaleX = drawingWidth / canvasRect.width;
-          const scaleY = drawingHeight / canvasRect.height;
           const alphaThreshold = 96;
-          const gridStep = Math.max(2, Math.min(5, Math.round(Math.min(viewportWidth, viewportHeight) / 220)));
-          const columns = Math.max(1, Math.ceil(canvasRect.width / gridStep) + 1);
-          const rows = Math.max(1, Math.ceil(canvasRect.height / gridStep) + 1);
-          const covered = new Uint8Array(columns * rows);
-
-          const getAlphaAt = (clientX, clientY) => {
-            const bufferX = Math.floor((clientX - canvasRect.left) * scaleX);
-            const bufferYFromTop = Math.floor((clientY - canvasRect.top) * scaleY);
-            const bufferY = drawingHeight - 1 - bufferYFromTop;
-
-            if (bufferX < 0 || bufferX >= drawingWidth || bufferY < 0 || bufferY >= drawingHeight) {
-              return 0;
-            }
-
-            return pixels[(bufferY * drawingWidth + bufferX) * 4 + 3];
-          };
-
-          for (let row = 0; row < rows; row += 1) {
-            const y = canvasRect.top + row * gridStep;
-            for (let column = 0; column < columns; column += 1) {
-              const x = canvasRect.left + column * gridStep;
-              covered[row * columns + column] = getAlphaAt(x, y) >= alphaThreshold ? 1 : 0;
-            }
-          }
-
-          const integralWidth = columns + 1;
-          const integral = new Uint32Array((rows + 1) * integralWidth);
-
-          for (let row = 1; row <= rows; row += 1) {
-            let rowSum = 0;
-            for (let column = 1; column <= columns; column += 1) {
-              rowSum += covered[(row - 1) * columns + (column - 1)];
-              integral[row * integralWidth + column] =
-                integral[(row - 1) * integralWidth + column] + rowSum;
-            }
-          }
-
           const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
-          const getCoveredCount = (left, top, right, bottom) => {
-            const x1 = clamp(Math.floor((left - canvasRect.left) / gridStep), 0, columns - 1);
-            const y1 = clamp(Math.floor((top - canvasRect.top) / gridStep), 0, rows - 1);
-            const x2 = clamp(Math.ceil((right - canvasRect.left) / gridStep), 0, columns - 1);
-            const y2 = clamp(Math.ceil((bottom - canvasRect.top) / gridStep), 0, rows - 1);
-            const area = (x2 - x1 + 1) * (y2 - y1 + 1);
-            const coveredArea =
-              integral[(y2 + 1) * integralWidth + (x2 + 1)] -
-              integral[y1 * integralWidth + (x2 + 1)] -
-              integral[(y2 + 1) * integralWidth + x1] +
-              integral[y1 * integralWidth + x1];
+          const pixelCount = drawingWidth * drawingHeight;
+          const sampleStride = Math.max(1, Math.floor(pixelCount / 180000));
+          let modelBottomFromTop = -Infinity;
+          let visiblePixelCount = 0;
 
-            return { area, coveredArea };
-          };
+          for (let pixelIndex = 0; pixelIndex < pixelCount; pixelIndex += sampleStride) {
+            const alpha = pixels[pixelIndex * 4 + 3];
+            if (alpha < alphaThreshold) continue;
 
-          const isRectInsideSilhouette = (rect, safetyInset) => {
-            const left = rect.left - safetyInset;
-            const top = rect.top - safetyInset;
-            const right = rect.right + safetyInset;
-            const bottom = rect.bottom + safetyInset;
-
-            if (
-              left < canvasRect.left ||
-              top < canvasRect.top ||
-              right > canvasRect.right ||
-              bottom > canvasRect.bottom
-            ) {
-              return false;
-            }
-
-            const corners = [
-              [left, top],
-              [right, top],
-              [left, bottom],
-              [right, bottom],
-            ];
-
-            if (corners.some(([x, y]) => getAlphaAt(x, y) < alphaThreshold)) {
-              return false;
-            }
-
-            const { area, coveredArea } = getCoveredCount(left, top, right, bottom);
-            return area > 0 && area === coveredArea;
-          };
-
-          const getValidCenters = (labelRect, centerY, safetyInset) => {
-            const halfWidth = labelRect.width / 2;
-            const halfHeight = labelRect.height / 2;
-            const minCenterX = canvasRect.left + halfWidth + safetyInset;
-            const maxCenterX = canvasRect.right - halfWidth - safetyInset;
-            const centers = [];
-
-            for (let centerX = minCenterX; centerX <= maxCenterX; centerX += gridStep) {
-              const candidateRect = {
-                left: centerX - halfWidth,
-                right: centerX + halfWidth,
-                top: centerY - halfHeight,
-                bottom: centerY + halfHeight,
-              };
-
-              if (isRectInsideSilhouette(candidateRect, safetyInset)) {
-                centers.push(centerX);
-              }
-            }
-
-            return centers;
-          };
-
-          const labelRects = spatialLinks.map((link) => link.getBoundingClientRect());
-          const baseSafetyInset = clamp(Math.round(Math.min(viewportWidth, viewportHeight) * 0.045), 20, 40);
-          const safetyAttempts = [
-            baseSafetyInset,
-            Math.round(baseSafetyInset * 0.8),
-            Math.round(baseSafetyInset * 0.65),
-            Math.round(baseSafetyInset * 0.5),
-          ];
-          const preferredY = viewportHeight * 0.55;
-          const minCenterGap = Math.max(
-            24,
-            labelRects[0].width / 2 + labelRects[1].width / 2 + baseSafetyInset,
-          );
-          let bestPlacement = null;
-
-          for (const safetyInset of safetyAttempts) {
-            const minY =
-              canvasRect.top +
-              Math.max(
-                labelRects[0].height / 2 + safetyInset,
-                labelRects[1].height / 2 + safetyInset,
-                viewportHeight * 0.24,
-              );
-            const maxY =
-              canvasRect.top +
-              Math.min(
-                canvasRect.height - Math.max(labelRects[0].height, labelRects[1].height) / 2 - safetyInset,
-                viewportHeight * 0.78,
-              );
-
-            for (let centerY = minY; centerY <= maxY; centerY += gridStep) {
-              const leftCenters = getValidCenters(labelRects[0], centerY, safetyInset);
-              const rightCenters = getValidCenters(labelRects[1], centerY, safetyInset);
-              if (!leftCenters.length || !rightCenters.length) continue;
-
-              const leftCenter = leftCenters[0];
-              const rightCenter = [...rightCenters].reverse().find((centerX) => {
-                return centerX - leftCenter >= minCenterGap;
-              });
-
-              if (typeof rightCenter !== 'number') continue;
-
-              const separation = rightCenter - leftCenter;
-              const score = separation - Math.abs(centerY - preferredY) * 0.12 + safetyInset * 0.4;
-
-              if (!bestPlacement || score > bestPlacement.score) {
-                bestPlacement = {
-                  centers: [leftCenter, rightCenter],
-                  score,
-                  y: centerY,
-                };
-              }
-            }
-
-            if (bestPlacement) break;
+            const bufferY = Math.floor(pixelIndex / drawingWidth);
+            const yFromTop = drawingHeight - 1 - bufferY;
+            modelBottomFromTop = Math.max(modelBottomFromTop, yFromTop);
+            visiblePixelCount += 1;
           }
 
-          if (!bestPlacement) return;
+          if (!Number.isFinite(modelBottomFromTop) || visiblePixelCount < 24) return;
+
+          const labelRects = spatialLinks.slice(0, 2).map((link) => link.getBoundingClientRect());
+          const viewportMin = Math.min(viewportWidth, viewportHeight);
+          const edgeInset = clamp(viewportMin * 0.04, 16, 42);
+          const modelGap = clamp(viewportMin * 0.035, 18, 44);
+          const labelGap = clamp(viewportWidth * 0.055, 24, 64);
+          const maxLabelHeight = Math.max(...labelRects.map((rect) => rect.height));
+          const maxLabelWidth = Math.max(...labelRects.map((rect) => rect.width));
+          const modelBottomY =
+            canvasRect.top + ((modelBottomFromTop + 1) / drawingHeight) * canvasRect.height;
+          const minCenterDistance = labelRects[0].width / 2 + labelRects[1].width / 2 + labelGap;
+          const minimumOffset = minCenterDistance / 2;
+          const maxOffset = Math.max(0, viewportWidth / 2 - edgeInset - maxLabelWidth / 2);
+          const preferredOffset = clamp(viewportWidth * 0.16, minimumOffset, 230);
+          const centerOffset = Math.min(preferredOffset, maxOffset);
+          const pageCenterX = viewportWidth / 2;
+          const maxCenterY = viewportHeight - edgeInset - maxLabelHeight / 2;
+          const preferredCenterY = modelBottomY + modelGap + maxLabelHeight / 2;
+          const centerY = Math.max(edgeInset + maxLabelHeight / 2, Math.min(preferredCenterY, maxCenterY));
+          const centers = [pageCenterX - centerOffset, pageCenterX + centerOffset];
 
           spatialLinks.slice(0, 2).forEach((link, index) => {
-            link.style.setProperty('--architect-link-x', `${bestPlacement.centers[index]}px`);
-            link.style.setProperty('--architect-link-y', `${bestPlacement.y}px`);
+            link.style.setProperty('--architect-link-x', `${centers[index]}px`);
+            link.style.setProperty('--architect-link-y', `${centerY}px`);
           });
         };
-        const renderStableFirstFrame = () =>
-          new Promise((resolve) => {
-            window.requestAnimationFrame(() => {
-              if (!hasDisposed) renderScene();
-              window.requestAnimationFrame(resolve);
-            });
-          });
+        const waitForArchitectSceneReady = async () => {
+          await waitForMaterialTextures(collectMaterialTextures(model));
+          if (hasDisposed) return;
+          await compileSceneMaterials();
+          if (hasDisposed) return;
+          await waitForFirstVisibleTexturedFrame();
+        };
 
-        await renderStableFirstFrame();
+        await waitForArchitectSceneReady();
         if (hasDisposed) return;
         renderer.shadowMap.autoUpdate = false;
-        positionSpatialLinksFromSilhouette();
+        positionSpatialLinksBelowModel();
         if (hasDisposed) return;
         renderScene();
         await new Promise((resolve) => {
@@ -1485,7 +1447,6 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
         preloaderTimers.clear();
         delete viewer.dataset.viewerBooted;
         document.documentElement.classList.remove(rockControlsLockedClass);
-        cleanupLockedTouchScroll();
         viewer.classList.remove('is-ready', 'is-return-reveal', 'is-return-reveal-visible');
         viewer.style.removeProperty('--architect-return-rock-fade-ms');
         if (stage instanceof HTMLElement) {
@@ -1545,15 +1506,19 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
   }
 
   :global(html.home-preloader-navigation-active) .architect-preloader {
-    bottom: auto;
+    backface-visibility: hidden;
     height: 100vh;
     height: 100svh;
     height: 100dvh;
+    isolation: isolate;
     left: 0;
-    pointer-events: none;
-    position: absolute;
+    overscroll-behavior: none;
+    pointer-events: auto;
+    position: fixed;
     right: 0;
+    touch-action: none;
     top: 0;
+    transform: translateZ(0);
     z-index: 10;
   }
 
@@ -1657,7 +1622,7 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
   :global(html.architect-rock-controls-locked) .architect-stage,
   :global(html.architect-rock-controls-locked) .architect-stage:active {
     cursor: default;
-    touch-action: pan-y;
+    touch-action: none;
   }
 
   .architect-spatial-nav {
@@ -1702,7 +1667,7 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
 
   :global(html.architect-rock-controls-locked) .architect-spatial-link {
     pointer-events: none;
-    touch-action: pan-y;
+    touch-action: none;
   }
 
   .architect-spatial-link.is-visible-hit {
@@ -1736,13 +1701,13 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
   }
 
   .architect-spatial-link--projects {
-    --architect-link-x: 25%;
-    --architect-link-y: 52%;
+    --architect-link-x: 34%;
+    --architect-link-y: 72%;
   }
 
   .architect-spatial-link--portfolios {
-    --architect-link-x: 60%;
-    --architect-link-y: 52%;
+    --architect-link-x: 66%;
+    --architect-link-y: 72%;
   }
 
   .architect-viewer {
@@ -1794,25 +1759,25 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
 
   @media (min-width: 561px) and (max-width: 900px) {
     .architect-spatial-link--projects {
-      --architect-link-x: 25%;
-      --architect-link-y: 54%;
+      --architect-link-x: 34%;
+      --architect-link-y: 72%;
     }
 
     .architect-spatial-link--portfolios {
-      --architect-link-x: 70%;
-      --architect-link-y: 54%;
+      --architect-link-x: 66%;
+      --architect-link-y: 72%;
     }
   }
 
   @media (min-width: 561px) and (max-width: 900px) and (max-height: 560px) {
     .architect-spatial-link--projects {
-      --architect-link-x: 35%;
-      --architect-link-y: 60%;
+      --architect-link-x: 34%;
+      --architect-link-y: 76%;
     }
 
     .architect-spatial-link--portfolios {
-      --architect-link-x: 62%;
-      --architect-link-y: 60%;
+      --architect-link-x: 66%;
+      --architect-link-y: 76%;
     }
   }
 
@@ -1828,13 +1793,13 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
     }
 
     .architect-spatial-link--projects {
-      --architect-link-x: 22%;
-      --architect-link-y: 51%;
+      --architect-link-x: 32%;
+      --architect-link-y: 70%;
     }
 
     .architect-spatial-link--portfolios {
-      --architect-link-x: 66%;
-      --architect-link-y: 51%;
+      --architect-link-x: 68%;
+      --architect-link-y: 70%;
     }
 
     .architect-viewer {

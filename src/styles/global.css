@@ -79,6 +79,19 @@ html.home-preloader-booting .home-preloader {
   visibility: visible;
 }
 
+html.home-preloader-scroll-locked,
+html.home-preloader-scroll-locked body {
+  overscroll-behavior: none;
+}
+
+@media (hover: none), (pointer: coarse) {
+  html.home-preloader-scroll-locked,
+  html.home-preloader-scroll-locked body {
+    overflow: hidden;
+    touch-action: none;
+  }
+}
+
 html.home-return-active .site-footer {
   position: relative;
   z-index: 20;
@@ -103,12 +116,15 @@ button,
 
 .site-header {
   align-items: flex-end;
+  backface-visibility: hidden;
   display: flex;
   inset: 0 0 auto;
+  isolation: isolate;
   justify-content: space-between;
   padding: clamp(1.1rem, 2.4vw, 2.1rem) clamp(1rem, 4vw, 3rem);
   pointer-events: none;
   position: absolute;
+  transform: translateZ(0);
   width: 100%;
   z-index: 20;
 }

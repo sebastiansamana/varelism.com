@@ -54,6 +54,8 @@ const { title, description = 'Website under construction.' } = Astro.props;
         const architectReturnBlankClass = 'architect-return-blank-active';
         const astroNavigateKey = '__varelismAstroNavigate';
         const navigationPreloaderClass = 'home-preloader-navigation-active';
+        const navigationScrollLockClass = 'home-preloader-scroll-locked';
+        const navigationScrollLockKey = '__varelismNavigationPreloaderScrollLock';
         const homeReturnClass = 'home-return-active';
         const preloaderCycleDurationMs = 3067;
         const handoffCycleFallbackMs = preloaderCycleDurationMs + 350;
@@ -124,6 +126,61 @@ const { title, description = 'Website under construction.' } = Astro.props;
 
         window.__varelismPreloaderCycleDurationMs = preloaderCycleDurationMs;
 
+        const scrollLock = (window[navigationScrollLockKey] ||= {
+          cleanup: null,
+          isLocked: false,
+        });
+
+        const lockNavigationPreloaderScroll = () => {
+          document.documentElement.classList.add(navigationScrollLockClass);
+          if (scrollLock.isLocked && scrollLock.cleanup) return;
+
+          scrollLock.isLocked = true;
+
+          const preventScrollInput = (event) => {
+            if (!document.documentElement.classList.contains(navigationPreloaderClass)) return;
+            if (event.cancelable) event.preventDefault();
+            event.stopImmediatePropagation?.();
+            event.stopPropagation();
+          };
+
+          window.addEventListener('touchstart', preventScrollInput, { capture: true, passive: false });
+          window.addEventListener('touchmove', preventScrollInput, { capture: true, passive: false });
+          window.addEventListener('pointerdown', preventScrollInput, { capture: true });
+          window.addEventListener('pointermove', preventScrollInput, { capture: true });
+          window.addEventListener('wheel', preventScrollInput, { capture: true, passive: false });
+
+          scrollLock.cleanup = () => {
+            window.removeEventListener('touchstart', preventScrollInput, { capture: true });
+            window.removeEventListener('touchmove', preventScrollInput, { capture: true });
+            window.removeEventListener('pointerdown', preventScrollInput, { capture: true });
+            window.removeEventListener('pointermove', preventScrollInput, { capture: true });
+            window.removeEventListener('wheel', preventScrollInput, { capture: true });
+            scrollLock.cleanup = null;
+          };
+        };
+
+        const unlockNavigationPreloaderScroll = () => {
+          if (!scrollLock.isLocked) return;
+
+          scrollLock.cleanup?.();
+          scrollLock.isLocked = false;
+          document.documentElement.classList.remove(navigationScrollLockClass);
+        };
+
+        window.__varelismLockNavigationPreloaderScroll = lockNavigationPreloaderScroll;
+        window.__varelismUnlockNavigationPreloaderScroll = unlockNavigationPreloaderScroll;
+
+        const activateNavigationPreloader = () => {
+          document.documentElement.classList.add(navigationPreloaderClass);
+          lockNavigationPreloaderScroll();
+        };
+
+        const deactivateNavigationPreloader = () => {
+          document.documentElement.classList.remove(navigationPreloaderClass);
+          unlockNavigationPreloaderScroll();
+        };
+
         const clearNavigationPreloaderClassIfIdle = () => {
           if (
             document.querySelector(
@@ -133,13 +190,13 @@ const { title, description = 'Website under construction.' } = Astro.props;
             return;
           }
 
-          document.documentElement.classList.remove(navigationPreloaderClass);
+          deactivateNavigationPreloader();
         };
 
         const showPreloaderShell = ({ navigation = false } = {}) => {
           document.documentElement.classList.add('home-preloader-active', 'home-preloader-booting');
           if (navigation) {
-            document.documentElement.classList.add(navigationPreloaderClass);
+            activateNavigationPreloader();
           }
         };
 
@@ -190,7 +247,8 @@ const { title, description = 'Website under construction.' } = Astro.props;
         };
 
         const ensureHandoffPreloader = ({ restart = true } = {}) => {
-          document.documentElement.classList.add('home-preloader-handoff-active', navigationPreloaderClass);
+          document.documentElement.classList.add('home-preloader-handoff-active');
+          activateNavigationPreloader();
 
           const existingOverlay = document.querySelector('[data-home-preloader-handoff]');
 
@@ -219,13 +277,16 @@ const { title, description = 'Website under construction.' } = Astro.props;
             background: '#ffffff',
             contain: 'layout paint style',
             display: 'flex',
-            height: '100vh',
             inset: '0',
-            bottom: 'auto',
+            height: '100dvh',
+            isolation: 'isolate',
             justifyContent: 'center',
             opacity: '1',
-            pointerEvents: 'none',
-            position: 'absolute',
+            overscrollBehavior: 'none',
+            pointerEvents: 'auto',
+            position: 'fixed',
+            touchAction: 'none',
+            transform: 'translateZ(0)',
             visibility: 'visible',
             willChange: 'opacity',
             width: '100%',
@@ -356,8 +417,8 @@ const { title, description = 'Website under construction.' } = Astro.props;
           document.documentElement.classList.remove(
             'home-preloader-active',
             'home-preloader-booting',
-            navigationPreloaderClass
           );
+          deactivateNavigationPreloader();
           removeHandoffPreloader();
         };
 
@@ -689,7 +750,7 @@ const { title, description = 'Website under construction.' } = Astro.props;
           skipNextHomePreloader = true;
           markRoutePlayed(getPreloaderRoute('/'));
           window[pendingPreloaderKey] = null;
-          document.documentElement.classList.remove(navigationPreloaderClass);
+          deactivateNavigationPreloader();
           window[pendingHomeReturnKey] = {
             pathname: url.pathname,
           };
@@ -857,6 +918,7 @@ const { title, description = 'Website under construction.' } = Astro.props;
             !document.querySelector('[data-home-preloader]')
           ) {
             document.documentElement.classList.remove('home-preloader-active', 'home-preloader-booting');
+            deactivateNavigationPreloader();
             window[pendingPreloaderKey] = null;
             removeHandoffPreloader();
             clearNavigationPreloaderClassIfIdle();
@@ -885,7 +947,11 @@ const { title, description = 'Website under construction.' } = Astro.props;
   </head>
   <body>
     <div class="site-shell">
-      <header class="site-header" aria-label="Site navigation">
+      <header
+        class="site-header"
+        aria-label="Site navigation"
+        data-astro-transition-persist="varelism-site-header"
+      >
         <a class="site-logo" href="/" aria-label="Varelism home">
           <span class="image-swap">
             <img
