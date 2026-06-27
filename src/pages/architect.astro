@@ -58,6 +58,8 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
     const ARCHITECT_LINK_FADE_MS = 900;
     const ARCHITECT_PROJECTS_REVEAL_DELAY_MS = ARCHITECT_ROCK_FADE_MS + 240;
     const ARCHITECT_PORTFOLIOS_REVEAL_DELAY_MS = ARCHITECT_PROJECTS_REVEAL_DELAY_MS + 1500;
+    const ARCHITECT_INTRO_ORBIT_RAMP_MS =
+      ARCHITECT_PORTFOLIOS_REVEAL_DELAY_MS - ARCHITECT_PROJECTS_REVEAL_DELAY_MS + ARCHITECT_LINK_FADE_MS;
 
     const clearNavigationPreloaderClassIfIdle = () => {
       if (
@@ -301,6 +303,8 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
       let cleanupPreloaderVideo = () => {};
       let cleanupHandoffCompletion = () => {};
       let enableRockControls = () => {};
+      let startIntroOrbitRamp = () => {};
+      let cancelIntroOrbitRamp = () => {};
       let isRockInteractionLocked = !shouldReplayWithoutPreloader;
       let isPointCoveredByModel = () => true;
       let hasStartedRevealSequence = false;
@@ -359,6 +363,7 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
 
         setPreloaderTimer(() => {
           stage.classList.add('is-projects-visible');
+          startIntroOrbitRamp();
         }, ARCHITECT_PROJECTS_REVEAL_DELAY_MS);
 
         setPreloaderTimer(() => {
@@ -687,6 +692,7 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
         let requestRender = () => {};
         let onVisibilityChange = null;
         let controls = null;
+        let introOrbitFrameId = 0;
         const preventTouchMove = (event) => {
           if (isRockInteractionLocked) return;
           event.preventDefault();
@@ -782,6 +788,8 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
         cleanup = () => {
           window.cancelAnimationFrame(frameId);
           window.cancelAnimationFrame(resizeFrameId);
+          window.cancelAnimationFrame(introOrbitFrameId);
+          introOrbitFrameId = 0;
           isRenderLoopRunning = false;
           modelFetchController.abort();
           resizeObserver?.disconnect();
@@ -836,6 +844,7 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
           active: false,
           paused: false,
           axis: new THREE.Vector3(),
+          rampAngle: null,
         };
         const orbitGesture = {
           activePointerId: null,
@@ -860,13 +869,15 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
         const stopTerminalOrbit = () => {
           terminalOrbit.active = false;
           terminalOrbit.paused = false;
+          terminalOrbit.rampAngle = null;
         };
 
-        const getFallbackOrbitAxis = () => {
-          const deltaX = orbitGesture.lastX - orbitGesture.startX;
-          const deltaY = orbitGesture.lastY - orbitGesture.startY;
-          if (Math.hypot(deltaX, deltaY) <= orbitDragThreshold) return null;
+        let hasStartedIntroOrbitRamp = false;
+        let hasCancelledIntroOrbitRamp = false;
+        let hasCompletedIntroOrbitRamp = false;
 
+        const getOrbitAxisFromScreenDelta = (deltaX, deltaY, threshold = orbitDragThreshold) => {
+          if (Math.hypot(deltaX, deltaY) <= threshold) return null;
           const eye = new THREE.Vector3().subVectors(camera.position, controls.target);
           const eyeDirection = eye.clone().normalize();
           const upDirection = camera.up.clone().normalize().setLength(deltaY);
@@ -875,6 +886,73 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
           const axis = new THREE.Vector3().crossVectors(moveDirection, eye).normalize();
 
           return axis.lengthSq() > 0.000001 ? axis : null;
+        };
+
+        const getFallbackOrbitAxis = () => {
+          const deltaX = orbitGesture.lastX - orbitGesture.startX;
+          const deltaY = orbitGesture.lastY - orbitGesture.startY;
+          return getOrbitAxisFromScreenDelta(deltaX, deltaY);
+        };
+
+        const getIntroOrbitAxis = () => getOrbitAxisFromScreenDelta(-1, 0, 0);
+
+        cancelIntroOrbitRamp = () => {
+          if (hasCompletedIntroOrbitRamp) return;
+          hasCancelledIntroOrbitRamp = true;
+          if (introOrbitFrameId) {
+            window.cancelAnimationFrame(introOrbitFrameId);
+            introOrbitFrameId = 0;
+          }
+          terminalOrbit.active = false;
+          terminalOrbit.paused = false;
+          terminalOrbit.rampAngle = null;
+          if (typeof controls?._lastAngle === 'number') controls._lastAngle = 0;
+        };
+
+        startIntroOrbitRamp = () => {
+          if (hasDisposed || hasStartedIntroOrbitRamp || hasCancelledIntroOrbitRamp || !controls) return;
+          const introAxis = getIntroOrbitAxis();
+          if (!introAxis) return;
+
+          hasStartedIntroOrbitRamp = true;
+          terminalOrbit.axis.copy(introAxis).normalize();
+          terminalOrbit.active = true;
+          terminalOrbit.paused = false;
+          terminalOrbit.rampAngle = 0;
+          if (controls._lastAxis) controls._lastAxis.copy(terminalOrbit.axis);
+          if (typeof controls._lastAngle === 'number') controls._lastAngle = 0;
+
+          const startedAt = window.performance.now();
+          const updateIntroOrbitRamp = (timestamp) => {
+            introOrbitFrameId = 0;
+            if (hasDisposed || hasCancelledIntroOrbitRamp || orbitGesture.activePointerId !== null) {
+              terminalOrbit.active = false;
+              terminalOrbit.rampAngle = null;
+              return;
+            }
+
+            const progress = Math.min(1, Math.max(0, (timestamp - startedAt) / ARCHITECT_INTRO_ORBIT_RAMP_MS));
+            terminalOrbit.rampAngle = terminalOrbitAngle * progress * progress;
+            requestRender();
+
+            if (progress < 1) {
+              introOrbitFrameId = window.requestAnimationFrame(updateIntroOrbitRamp);
+              return;
+            }
+
+            hasCompletedIntroOrbitRamp = true;
+            terminalOrbit.rampAngle = null;
+            terminalOrbit.active = true;
+            terminalOrbit.paused = false;
+            if (controls._lastAxis) controls._lastAxis.copy(terminalOrbit.axis);
+            if (typeof controls._lastAngle === 'number' && Math.abs(controls._lastAngle) < terminalOrbitAngle) {
+              controls._lastAngle = terminalOrbitAngle;
+            }
+            requestRender();
+          };
+
+          introOrbitFrameId = window.requestAnimationFrame(updateIntroOrbitRamp);
+          requestRender();
         };
 
         const captureTerminalOrbit = () => {
@@ -891,6 +969,7 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
           }
 
           terminalOrbit.axis.copy(capturedAxis).normalize();
+          terminalOrbit.rampAngle = null;
           if (angle < Math.max(minimumCapturedOrbitAngle, terminalOrbitAngle)) {
             controls._lastAngle = terminalOrbitAngle;
           }
@@ -903,6 +982,7 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
           if (isRockInteractionLocked) return;
           if (event.button !== undefined && event.button !== 0) return;
 
+          cancelIntroOrbitRamp();
           orbitGesture.activePointerId = event.pointerId;
           orbitGesture.startX = event.clientX;
           orbitGesture.startY = event.clientY;
@@ -924,6 +1004,7 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
           if (Math.hypot(deltaX, deltaY) <= orbitDragThreshold) return;
 
           orbitGesture.hasDragged = true;
+          cancelIntroOrbitRamp();
           stopTerminalOrbit();
           requestRender();
         };
@@ -960,9 +1041,10 @@ const preloaderVideoUrl = `${basePath}/images/Logo_Animation_Preloader.mp4`;
           if (!terminalOrbit.active || terminalOrbit.paused || orbitGesture.activePointerId !== null) return;
           if (!controls?._lastAxis || typeof controls._lastAngle !== 'number') return;
 
+          const targetAngle = terminalOrbit.rampAngle ?? terminalOrbitAngle;
           controls._lastAxis.copy(terminalOrbit.axis);
-          if (Math.abs(controls._lastAngle) < terminalOrbitAngle) {
-            controls._lastAngle = terminalOrbitAngle;
+          if (Math.abs(controls._lastAngle) < targetAngle) {
+            controls._lastAngle = targetAngle;
           }
         };
 
