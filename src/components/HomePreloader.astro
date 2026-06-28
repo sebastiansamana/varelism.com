@@ -45,7 +45,6 @@ const {
     src={videoSrc}
     autoplay
     defaultMuted
-    loop
     muted
     playsinline
     webkit-playsinline
@@ -201,16 +200,16 @@ const {
     const preparePassivePreloaderVideo = (video) => {
       video.autoplay = true;
       video.controls = false;
-      video.loop = true;
+      video.loop = false;
       video.muted = true;
       video.defaultMuted = true;
       video.playsInline = true;
       video.preload = 'auto';
       video.removeAttribute('controls');
+      video.removeAttribute('loop');
       video.setAttribute('autoplay', '');
       video.setAttribute('muted', '');
       video.setAttribute('defaultMuted', '');
-      video.setAttribute('loop', '');
       video.setAttribute('playsinline', '');
       video.setAttribute('webkit-playsinline', '');
       video.setAttribute('preload', 'auto');
@@ -288,6 +287,13 @@ const {
         }
 
         preparePassivePreloaderVideo(video);
+        try {
+          const isAtEnd =
+            Number.isFinite(video.duration) && video.duration > 0 && video.currentTime >= video.duration - 0.05;
+          if (video.ended || isAtEnd) video.currentTime = 0;
+        } catch {
+          // If seeking is unavailable, play() or the fallback path will resolve the state.
+        }
         video.addEventListener('playing', onPlaying);
         video.addEventListener('canplay', onReady);
         video.addEventListener('canplaythrough', onReady);
@@ -297,7 +303,12 @@ const {
       });
 
     const resetPreloaderMediaVisibility = (overlay) => {
-      overlay.classList.remove('is-video-visible', 'is-fallback-visible');
+      overlay.classList.remove(
+        'is-video-visible',
+        'is-fallback-visible',
+        'is-image-fading',
+        'is-overlay-fading'
+      );
     };
 
     const showPreloaderVideo = (overlay) => {
@@ -318,6 +329,31 @@ const {
       } catch {
         // Ignore media cleanup failures.
       }
+    };
+
+    const reviveEndedPreloaderVideo = (video) => {
+      preparePassivePreloaderVideo(video);
+
+      const isAtEnd =
+        Number.isFinite(video.duration) && video.duration > 0 && video.currentTime >= video.duration - 0.05;
+
+      if (!video.ended && !isAtEnd) return video;
+
+      const freshVideo = video.cloneNode(true);
+
+      if (!(freshVideo instanceof HTMLVideoElement)) return video;
+
+      preparePassivePreloaderVideo(freshVideo);
+      video.replaceWith(freshVideo);
+
+      try {
+        freshVideo.currentTime = 0;
+        freshVideo.load();
+      } catch {
+        // Playback setup will fall back cleanly if the cloned media is not seekable yet.
+      }
+
+      return freshVideo;
     };
 
     const waitForWindowLoad = () => {
@@ -463,7 +499,9 @@ const {
         (document.documentElement.classList.contains('author-return-blank-active') &&
           activePaths.some((path) => isSamePath(path, '/author/'))) ||
           (document.documentElement.classList.contains('architect-return-blank-active') &&
-            activePaths.some((path) => isSamePath(path, '/architect/')))
+            activePaths.some((path) => isSamePath(path, '/architect/'))) ||
+          (document.documentElement.classList.contains('home-return-active') &&
+            activePaths.some((path) => isSamePath(path, '/')))
       );
       const isNavigationPreloader = Boolean(handoffState || window[pendingPreloaderKey]?.navigationPreloader);
       const imageFadeMs = isNavigationPreloader ? Math.min(requestedImageFadeMs, 90) : requestedImageFadeMs;
@@ -519,7 +557,11 @@ const {
         hasRemoved = true;
         cleanupOverlay();
         overlay.remove();
-        document.documentElement.classList.remove('home-preloader-active', 'home-preloader-booting');
+        document.documentElement.classList.remove(
+          'home-preloader-active',
+          'home-preloader-booting',
+          'home-preloader-initial-home-active'
+        );
         delete overlay.dataset.navigationPreloader;
         clearNavigationPreloaderClassIfIdle();
         clearPendingPreloaderNavigation();
@@ -538,7 +580,7 @@ const {
       }
 
       const video = overlay.querySelector('.home-preloader__media');
-      const preloaderVideo = video instanceof HTMLVideoElement ? video : null;
+      const preloaderVideo = video instanceof HTMLVideoElement ? reviveEndedPreloaderVideo(video) : null;
       resetPreloaderMediaVisibility(overlay);
 
       if (handoffState && preloaderVideo) {
@@ -566,9 +608,18 @@ const {
       let isPageReady = false;
       let hasMetMediaMoment = Boolean(handoffState?.cycleComplete);
       let isHiding = false;
-      let hasMediaDurationGuard = false;
-      let hasFallbackDurationGuard = false;
       let isAwaitingVideoStart = false;
+      let isFallbackActive = false;
+      let hasStartedMediaCycle = false;
+      let mediaCycleTimer = 0;
+
+      const clearMediaCycleTimer = () => {
+        if (!mediaCycleTimer) return;
+
+        window.clearTimeout(mediaCycleTimer);
+        timers.delete(mediaCycleTimer);
+        mediaCycleTimer = 0;
+      };
 
       const hideOverlay = () => {
         if (isHiding || !isPageReady || !hasMetMediaMoment) return;
@@ -583,31 +634,52 @@ const {
 
       const markMediaMomentReached = () => {
         if (hasMetMediaMoment) return;
+        clearMediaCycleTimer();
         hasMetMediaMoment = true;
         hideOverlay();
       };
 
-      const setMediaDurationGuard = () => {
-        if (
-          hasMediaDurationGuard ||
-          !preloaderVideo ||
-          hasMetMediaMoment ||
-          !Number.isFinite(preloaderVideo.duration) ||
-          preloaderVideo.duration <= 0
-        ) {
+      const getVideoCycleDurationMs = () => {
+        if (!preloaderVideo || !Number.isFinite(preloaderVideo.duration) || preloaderVideo.duration <= 0) {
+          return fallbackCycleDurationMs;
+        }
+
+        const remainingMs = Math.max(0, (preloaderVideo.duration - preloaderVideo.currentTime) * 1000);
+        return Math.ceil(remainingMs) + 180;
+      };
+
+      const scheduleMediaCycleCompletion = (delay) => {
+        clearMediaCycleTimer();
+        mediaCycleTimer = setTimer(() => {
+          mediaCycleTimer = 0;
+          completeMediaCycleOrReplay();
+        }, delay);
+      };
+
+      const startFallbackCycle = () => {
+        if (hasRemoved || isHiding || hasMetMediaMoment) return;
+
+        isFallbackActive = true;
+        isAwaitingVideoStart = false;
+        hasStartedMediaCycle = true;
+        showPreloaderFallback(overlay);
+        scheduleMediaCycleCompletion(fallbackCycleDurationMs);
+      };
+
+      const completeMediaCycleOrReplay = () => {
+        if (hasRemoved || isHiding || hasMetMediaMoment) return;
+
+        if (isPageReady) {
+          markMediaMomentReached();
           return;
         }
 
-        hasMediaDurationGuard = true;
-        const remainingMs = Math.max(0, (preloaderVideo.duration - preloaderVideo.currentTime) * 1000);
-        setTimer(markMediaMomentReached, Math.ceil(remainingMs) + 180);
-      };
+        if (isFallbackActive || !preloaderVideo) {
+          startFallbackCycle();
+          return;
+        }
 
-      const setFallbackDurationGuard = () => {
-        if (hasFallbackDurationGuard || hasMetMediaMoment) return;
-
-        hasFallbackDurationGuard = true;
-        setTimer(markMediaMomentReached, fallbackCycleDurationMs);
+        startVideoCycle({ restart: true });
       };
 
       const revealVideoOrFallback = () => {
@@ -615,9 +687,8 @@ const {
           !preloaderVideo ||
           hasRemoved ||
           isHiding ||
-          isAwaitingVideoStart ||
-          overlay.classList.contains('is-video-visible') ||
-          overlay.classList.contains('is-fallback-visible')
+          hasMetMediaMoment ||
+          isAwaitingVideoStart
         ) {
           return;
         }
@@ -628,23 +699,40 @@ const {
           if (hasRemoved || isHiding) return;
 
           if (didPlay) {
+            isFallbackActive = false;
+            hasStartedMediaCycle = true;
             showPreloaderVideo(overlay);
-            setMediaDurationGuard();
+            scheduleMediaCycleCompletion(getVideoCycleDurationMs());
             return;
           }
 
-          showPreloaderFallback(overlay);
-          setFallbackDurationGuard();
+          startFallbackCycle();
         });
       };
 
-      const startVideoCycle = () => {
-        if (!preloaderVideo || hasRemoved || isHiding) return;
+      function startVideoCycle({ restart = false } = {}) {
+        if (hasRemoved || isHiding || hasMetMediaMoment) return;
 
-        resetPreloaderMediaVisibility(overlay);
+        clearMediaCycleTimer();
+
+        if (!preloaderVideo) {
+          startFallbackCycle();
+          return;
+        }
+
+        if (!restart) {
+          resetPreloaderMediaVisibility(overlay);
+        }
+
+        try {
+          preloaderVideo.pause();
+          preloaderVideo.currentTime = 0;
+        } catch {
+          // If seeking is blocked, play() still keeps the media passive and control-free.
+        }
+
         revealVideoOrFallback();
-        setMediaDurationGuard();
-      };
+      }
 
       if (preloaderVideo) {
         preparePassivePreloaderVideo(preloaderVideo);
@@ -652,15 +740,20 @@ const {
         const onEnded = () => {
           if (hasRemoved || isHiding) return;
 
-          markMediaMomentReached();
+          completeMediaCycleOrReplay();
         };
         const onError = () => {
           if (handoffState && !hasMetMediaMoment) return;
-          showPreloaderFallback(overlay);
-          setFallbackDurationGuard();
+          startFallbackCycle();
         };
-        const onReady = () => revealVideoOrFallback();
-        const onMetadata = () => setMediaDurationGuard();
+        const onReady = () => {
+          if (!hasStartedMediaCycle) revealVideoOrFallback();
+        };
+        const onMetadata = () => {
+          if (hasStartedMediaCycle && !isFallbackActive && !hasMetMediaMoment) {
+            scheduleMediaCycleCompletion(getVideoCycleDurationMs());
+          }
+        };
 
         preloaderVideo.addEventListener('ended', onEnded);
         preloaderVideo.addEventListener('error', onError, { once: true });
@@ -688,8 +781,7 @@ const {
           startVideoCycle();
         }
       } else {
-        showPreloaderFallback(overlay);
-        setFallbackDurationGuard();
+        startFallbackCycle();
       }
 
       if (handoffState && !handoffState.cycleComplete) {
@@ -712,6 +804,9 @@ const {
       Promise.all([waitForStablePageFrame(overlay), waitForRouteReadyEvent(routeReadyEvent)]).then(() => {
         if (hasRemoved) return;
         isPageReady = true;
+        if (hasStartedMediaCycle && preloaderVideo?.ended && !hasMetMediaMoment) {
+          completeMediaCycleOrReplay();
+        }
         hideOverlay();
       });
     };
@@ -733,6 +828,7 @@ const {
         state.cleanups.clear();
         if (!shouldKeepBootingAfterSwap()) {
           document.documentElement.classList.remove('home-preloader-active', 'home-preloader-booting');
+          document.documentElement.classList.remove('home-preloader-initial-home-active');
           clearNavigationPreloaderClassIfIdle();
           if (!shouldPreservePendingHandoffAfterSwap()) {
             clearPendingPreloaderNavigation();

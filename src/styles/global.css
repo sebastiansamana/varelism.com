@@ -76,6 +76,13 @@ html.home-preloader-navigation-active .home-preloader {
   pointer-events: none;
 }
 
+html.home-preloader-initial-home-active .site-header,
+html.home-preloader-initial-home-active main > :not(.home-preloader),
+html.home-preloader-initial-home-active .site-footer {
+  opacity: 0;
+  pointer-events: none;
+}
+
 .home-preloader__media::-webkit-media-controls,
 .home-preloader__media::-webkit-media-controls-panel,
 .home-preloader__media::-webkit-media-controls-start-playback-button {

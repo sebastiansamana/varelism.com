@@ -121,9 +121,14 @@ const sections = [
 </script>
 
 <style>
-  :global(main) {
+  :global(.site-shell > main) {
+    display: grid;
     max-width: none;
+    min-height: 100vh;
+    min-height: 100svh;
+    min-height: 100dvh;
     padding: 0;
+    place-items: center;
   }
 
   .triptych {
@@ -134,6 +139,8 @@ const sections = [
     justify-items: center;
     margin: 0 auto;
     min-height: 100vh;
+    min-height: 100svh;
+    min-height: 100dvh;
     padding: clamp(1.5rem, 4vh, 3rem) clamp(1.25rem, 6vw, 6rem);
     width: min(100%, 1280px);
   }
