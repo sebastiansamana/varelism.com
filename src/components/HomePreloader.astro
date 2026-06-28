@@ -72,6 +72,8 @@ const {
     const pendingPreloaderKey = '__varelismPendingPreloaderNavigation';
     const activeHandoffKey = '__varelismActivePreloaderHandoff';
     const navigationPreloaderClass = 'home-preloader-navigation-active';
+    const initialHomePreloaderClass = 'home-preloader-initial-home-active';
+    const initialHomeRevealClass = 'home-preloader-initial-home-revealing';
     const state = (window[stateKey] ||= {
       cleanups: new Set(),
       listenersAttached: false,
@@ -552,6 +554,18 @@ const {
 
       state.cleanups.add(cleanupOverlay);
 
+      const revealInitialHomeShell = () => {
+        if (!document.documentElement.classList.contains(initialHomePreloaderClass)) return;
+
+        document.documentElement.classList.add(initialHomeRevealClass);
+        window.requestAnimationFrame(() => {
+          document.documentElement.classList.remove(initialHomePreloaderClass);
+          window.setTimeout(() => {
+            document.documentElement.classList.remove(initialHomeRevealClass);
+          }, 520);
+        });
+      };
+
       const removeOverlay = () => {
         if (hasRemoved) return;
         hasRemoved = true;
@@ -559,9 +573,9 @@ const {
         overlay.remove();
         document.documentElement.classList.remove(
           'home-preloader-active',
-          'home-preloader-booting',
-          'home-preloader-initial-home-active'
+          'home-preloader-booting'
         );
+        revealInitialHomeShell();
         delete overlay.dataset.navigationPreloader;
         clearNavigationPreloaderClassIfIdle();
         clearPendingPreloaderNavigation();
@@ -828,7 +842,7 @@ const {
         state.cleanups.clear();
         if (!shouldKeepBootingAfterSwap()) {
           document.documentElement.classList.remove('home-preloader-active', 'home-preloader-booting');
-          document.documentElement.classList.remove('home-preloader-initial-home-active');
+          document.documentElement.classList.remove(initialHomePreloaderClass, initialHomeRevealClass);
           clearNavigationPreloaderClassIfIdle();
           if (!shouldPreservePendingHandoffAfterSwap()) {
             clearPendingPreloaderNavigation();

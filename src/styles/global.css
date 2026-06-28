@@ -78,6 +78,16 @@ html.home-preloader-navigation-active .home-preloader {
 
 html.home-preloader-initial-home-active .site-header,
 html.home-preloader-initial-home-active main > :not(.home-preloader),
+html.home-preloader-initial-home-active .site-footer,
+html.home-preloader-initial-home-revealing .site-header,
+html.home-preloader-initial-home-revealing main > :not(.home-preloader),
+html.home-preloader-initial-home-revealing .site-footer {
+  transition: opacity 420ms ease;
+  will-change: opacity;
+}
+
+html.home-preloader-initial-home-active .site-header,
+html.home-preloader-initial-home-active main > :not(.home-preloader),
 html.home-preloader-initial-home-active .site-footer {
   opacity: 0;
   pointer-events: none;

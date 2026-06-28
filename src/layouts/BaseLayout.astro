@@ -68,6 +68,7 @@ const globalPreloaderPaths = [
         const astroNavigateKey = '__varelismAstroNavigate';
         const navigationPreloaderClass = 'home-preloader-navigation-active';
         const initialHomePreloaderClass = 'home-preloader-initial-home-active';
+        const initialHomeRevealClass = 'home-preloader-initial-home-revealing';
         const navigationScrollLockClass = 'home-preloader-scroll-locked';
         const navigationScrollLockKey = '__varelismNavigationPreloaderScrollLock';
         const architectSceneReadyFlag = '__varelismReady_varelism_architect_scene_ready';
@@ -185,6 +186,7 @@ const globalPreloaderPaths = [
         const showPreloaderShell = ({ navigation = false, initialHome = false } = {}) => {
           resetRoutePreloaderElement();
           document.documentElement.classList.add('home-preloader-active', 'home-preloader-booting');
+          document.documentElement.classList.remove(initialHomeRevealClass);
           document.documentElement.classList.toggle(initialHomePreloaderClass, Boolean(initialHome));
           if (navigation) {
             activateNavigationPreloader();
@@ -608,6 +610,7 @@ const globalPreloaderPaths = [
             'home-preloader-active',
             'home-preloader-booting',
             initialHomePreloaderClass,
+            initialHomeRevealClass,
           );
           deactivateNavigationPreloader();
           removeHandoffPreloader();
@@ -1124,6 +1127,7 @@ const globalPreloaderPaths = [
               'home-preloader-active',
               'home-preloader-booting',
               initialHomePreloaderClass,
+              initialHomeRevealClass,
             );
             deactivateNavigationPreloader();
             window[pendingPreloaderKey] = null;
