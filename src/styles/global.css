@@ -105,6 +105,11 @@ html.home-return-active .site-footer {
   z-index: 20;
 }
 
+html.varelism-route-entering main > :not(.home-preloader) {
+  opacity: 0;
+  pointer-events: none;
+}
+
 a {
   color: inherit;
   text-decoration: none;

@@ -38,11 +38,12 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
     const rockControlsLockedClass = 'architect-rock-controls-locked';
     const architectReturnReplayKey = 'varelism-architect-return-replay';
     const architectReturnBlankClass = 'architect-return-blank-active';
+    const routeEnteringClass = 'varelism-route-entering';
     const ARCHITECT_RETURN_BLANK_HOLD_MS = 360;
     const ARCHITECT_ROCK_FADE_MS = 620;
-    const ARCHITECT_LINK_FADE_MS = 900;
+    const ARCHITECT_LINK_FADE_MS = 450;
     const ARCHITECT_PROJECTS_REVEAL_DELAY_MS = ARCHITECT_ROCK_FADE_MS + 240;
-    const ARCHITECT_PORTFOLIOS_REVEAL_DELAY_MS = ARCHITECT_PROJECTS_REVEAL_DELAY_MS + 1500;
+    const ARCHITECT_PORTFOLIOS_REVEAL_DELAY_MS = ARCHITECT_PROJECTS_REVEAL_DELAY_MS + 750;
     const ARCHITECT_INTRO_ORBIT_RAMP_MS =
       ARCHITECT_PORTFOLIOS_REVEAL_DELAY_MS - ARCHITECT_PROJECTS_REVEAL_DELAY_MS + ARCHITECT_LINK_FADE_MS;
     const ARCHITECT_SCENE_READY_EVENT = 'varelism:architect-scene-ready';
@@ -201,6 +202,7 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
       const preloaderTimers = new Set();
       const hasActivePreloaderSurface = () =>
         Boolean(document.querySelector('[data-home-preloader].is-visible, [data-home-preloader-handoff]'));
+      const isRouteEntering = () => document.documentElement.classList.contains(routeEnteringClass);
       const getSpatialLinks = () =>
         Array.from(controlsElement.querySelectorAll('[data-architect-spatial-link]')).filter(
           (link) => link instanceof HTMLAnchorElement,
@@ -276,7 +278,11 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
       const removePreloader = () => {
         clearPendingArchitectPreloader();
         if (isModelReady) {
-          startArchitectRevealSequence();
+          if (isRouteEntering()) {
+            setPreloaderTimer(removePreloader, 30);
+          } else {
+            startArchitectRevealSequence();
+          }
         }
         unlockRockControlsAfterPreloader();
         clearNavigationPreloaderClassIfIdle();
@@ -1551,7 +1557,8 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
     letter-spacing: 0;
     left: var(--architect-link-x);
     line-height: 1;
-    pointer-events: auto;
+    opacity: 0;
+    pointer-events: none;
     position: absolute;
     text-align: center;
     text-decoration: none;
@@ -1560,7 +1567,8 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
     transform: translate(-50%, -50%);
     transition:
       color 180ms ease,
-      opacity var(--architect-link-fade-ms, 900ms) ease;
+      opacity var(--architect-link-fade-ms, 450ms) ease;
+    visibility: hidden;
     white-space: nowrap;
   }
 
@@ -1579,8 +1587,8 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
     pointer-events: none;
     transition:
       color 180ms ease,
-      opacity var(--architect-link-fade-ms, 900ms) ease,
-      visibility 0ms linear var(--architect-link-fade-ms, 900ms);
+      opacity var(--architect-link-fade-ms, 450ms) ease,
+      visibility 0ms linear var(--architect-link-fade-ms, 450ms);
     visibility: hidden;
   }
 
@@ -1589,7 +1597,7 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
     opacity: 1;
     pointer-events: auto;
     transition:
-      opacity var(--architect-link-fade-ms, 900ms) ease,
+      opacity var(--architect-link-fade-ms, 450ms) ease,
       color 180ms ease;
     visibility: visible;
   }

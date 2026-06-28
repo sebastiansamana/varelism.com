@@ -62,6 +62,8 @@ const globalPreloaderPaths = [
         const navigationScrollLockKey = '__varelismNavigationPreloaderScrollLock';
         const architectSceneReadyFlag = '__varelismReady_varelism_architect_scene_ready';
         const homeReturnClass = 'home-return-active';
+        const routeEnteringClass = 'varelism-route-entering';
+        const routeEnterEvent = 'varelism:route-enter';
         const homeReturnFadeMs = 260;
         const homeReturnRevealMs = 320;
         const authorReplayReturnPaths = ['/books/', '/books', '/memories/', '/memories'];
@@ -328,6 +330,14 @@ const globalPreloaderPaths = [
             window[pendingHomeReturnKey] = null;
             window.requestAnimationFrame(() => {
               window.requestAnimationFrame(() => {
+                document.documentElement.classList.remove(routeEnteringClass);
+                window.dispatchEvent(
+                  new CustomEvent(routeEnterEvent, {
+                    detail: {
+                      pathname: window.location.pathname,
+                    },
+                  }),
+                );
                 overlay.style.transition = `opacity ${homeReturnRevealMs}ms ease`;
                 overlay.style.opacity = '0';
                 window.setTimeout(() => {
@@ -410,6 +420,15 @@ const globalPreloaderPaths = [
           }
         });
 
+        document.addEventListener('astro:before-swap', (event) => {
+          const pendingHomeReturn = getPendingHomeReturn();
+          const nextDocument = event?.newDocument;
+
+          if (pendingHomeReturn && nextDocument?.documentElement) {
+            nextDocument.documentElement.classList.add(routeEnteringClass, homeReturnClass);
+          }
+        });
+
         document.addEventListener('astro:after-swap', () => {
           const isReturnReplayNavigation =
             markAuthorReplayIfNeeded(window.location.pathname) ||
@@ -417,7 +436,10 @@ const globalPreloaderPaths = [
           if (isReturnReplayNavigation) {
             clearPreloaderForReturnReplay();
           }
-          if (getPendingHomeReturn()) showHomeReturnOverlay();
+          if (getPendingHomeReturn()) {
+            document.documentElement.classList.add(routeEnteringClass, homeReturnClass);
+            showHomeReturnOverlay();
+          }
         });
 
         document.addEventListener('astro:page-load', () => {

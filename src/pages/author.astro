@@ -34,6 +34,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     const forceAuthorReplayKey = '__varelismForceAuthorReplay';
     const authorReturnReplayKey = 'varelism-author-return-replay';
     const authorReturnBlankClass = 'author-return-blank-active';
+    const routeEnteringClass = 'varelism-route-entering';
+    const routeEnterEvent = 'varelism:route-enter';
     const preloaderCompleteEvent = 'varelism:author-preloader-complete';
     const TEXT_TO_LINE_GAP = 10;
     const DEFAULT_HORIZONTAL_LEAD_LENGTH = 64;
@@ -42,8 +44,8 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     const VIEWPORT_RESIZE_EPSILON = 1;
     const DEBUG_AUTHOR_CONNECTOR = false;
     const BOOKS_REVEAL_DELAY_MS = 0;
-    const MEMORIES_REVEAL_DELAY_MS = BOOKS_REVEAL_DELAY_MS + 1500;
-    const CONNECTOR_DRAW_DELAY_MS = MEMORIES_REVEAL_DELAY_MS + 900;
+    const MEMORIES_REVEAL_DELAY_MS = BOOKS_REVEAL_DELAY_MS + 750;
+    const CONNECTOR_DRAW_DELAY_MS = MEMORIES_REVEAL_DELAY_MS + 450;
     const AUTHOR_RETURN_BLANK_HOLD_MS = 360;
     const PORTRAIT_PHONE_PRESETS = [
       {
@@ -974,8 +976,9 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       let returnBlankTimer = 0;
       const hasActivePreloaderSurface = () =>
         Boolean(document.querySelector('[data-home-preloader], [data-home-preloader-handoff]'));
+      const isRouteEntering = () => document.documentElement.classList.contains(routeEnteringClass);
       let returnBlankComplete = !shouldForceReplay;
-      let preloaderComplete = returnBlankComplete && !hasActivePreloaderSurface();
+      let preloaderComplete = returnBlankComplete && !isRouteEntering() && !hasActivePreloaderSurface();
       const portraitPhonePreset = getRandomPortraitPhonePreset();
       let sequenceComplete = false;
       let ignoreTouchResizeUntil = 0;
@@ -1340,10 +1343,18 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
         if (continueRevealAfterRebuild(revealSnapshot)) return;
 
+        if (!preloaderComplete) {
+          waitForPreloaderSurfacesToClear();
+        }
+
         tryStartSequence();
       };
 
       const onPreloaderComplete = () => {
+        waitForPreloaderSurfacesToClear();
+      };
+
+      const onRouteEnter = () => {
         waitForPreloaderSurfacesToClear();
       };
 
@@ -1352,6 +1363,11 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
         if (!returnBlankComplete) {
           setTimer(waitForPreloaderSurfacesToClear, 60);
+          return;
+        }
+
+        if (isRouteEntering()) {
+          setTimer(waitForPreloaderSurfacesToClear, 30);
           return;
         }
 
@@ -1397,6 +1413,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
 
       window.addEventListener(preloaderCompleteEvent, onPreloaderComplete);
       window.addEventListener('varelism:handoff-complete', onPreloaderComplete);
+      window.addEventListener(routeEnterEvent, onRouteEnter);
       window.addEventListener('resize', onResize);
       window.addEventListener('orientationchange', onResize);
       window.addEventListener('touchstart', markTouchInteraction, { passive: true });
@@ -1422,6 +1439,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
         ++layoutToken;
         window.removeEventListener(preloaderCompleteEvent, onPreloaderComplete);
         window.removeEventListener('varelism:handoff-complete', onPreloaderComplete);
+        window.removeEventListener(routeEnterEvent, onRouteEnter);
         window.removeEventListener('resize', onResize);
         window.removeEventListener('orientationchange', onResize);
         window.removeEventListener('touchstart', markTouchInteraction);
@@ -1599,7 +1617,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     transform: translate(-50%, -50%);
     transition:
       color 180ms ease,
-      opacity 900ms ease;
+      opacity 450ms ease;
     visibility: hidden;
     white-space: nowrap;
   }
@@ -1610,7 +1628,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     pointer-events: auto;
     transition:
       color 180ms ease,
-      opacity 900ms ease;
+      opacity 450ms ease;
     visibility: visible;
   }
 
