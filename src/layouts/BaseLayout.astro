@@ -193,7 +193,11 @@ const globalPreloaderPaths = [
           }
         };
 
-        if (shouldPlayPreloader(route)) {
+        const isInternalHomeReturn =
+          isHomePath(window.location.pathname) &&
+          Boolean(window[pendingHomeReturnKey] || document.documentElement.classList.contains(homeReturnClass));
+
+        if (shouldPlayPreloader(route) && !isInternalHomeReturn) {
           showPreloaderShell({ initialHome: isHomePath(window.location.pathname) });
         }
 
@@ -518,6 +522,10 @@ const globalPreloaderPaths = [
 
         const isAuthorPath = (pathname) => isSamePath(pathname, '/author/');
         const isArchitectPath = (pathname) => isSamePath(pathname, '/architect/');
+        const isArtistPath = (pathname) => isSamePath(pathname, '/artist/');
+        const isPrimaryHomeReturn = (toPathname, fromPathname) =>
+          isHomePath(toPathname) &&
+          (isAuthorPath(fromPathname) || isArchitectPath(fromPathname) || isArtistPath(fromPathname));
 
         const markArchitectReturnReplay = () => {
           try {
@@ -1027,7 +1035,10 @@ const globalPreloaderPaths = [
           markArchitectReplayOnExit(window.location.pathname, url.pathname);
           markAuthorReplayOnExit(window.location.pathname, url.pathname);
 
-          if (link.closest('.site-logo') && isHomePath(url.pathname)) {
+          if (
+            (link.closest('.site-logo') && isHomePath(url.pathname)) ||
+            isPrimaryHomeReturn(url.pathname, window.location.pathname)
+          ) {
             if (isSamePath(window.location.pathname, '/')) return;
             event.preventDefault();
             event.stopImmediatePropagation();
@@ -1140,6 +1151,18 @@ const globalPreloaderPaths = [
         });
 
         window.addEventListener('popstate', () => {
+          if (isPrimaryHomeReturn(window.location.pathname, lastPathname)) {
+            skipNextHomePreloader = true;
+            markRoutePlayed(getPreloaderRoute('/'));
+            window[pendingPreloaderKey] = null;
+            deactivateNavigationPreloader();
+            window[pendingHomeReturnKey] = {
+              pathname: window.location.pathname,
+            };
+            removeHandoffPreloader();
+            showHomeReturnOverlay();
+          }
+
           const isReturnReplayNavigation =
             markAuthorReplayIfNeeded(window.location.pathname) ||
             markArchitectReplayIfNeeded(window.location.pathname);
