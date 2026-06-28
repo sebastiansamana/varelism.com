@@ -14,7 +14,7 @@ interface Props {
 const videoSrc = '/images/Logo_Animation_Preloader.mp4';
 const fallbackSrc = '/images/Logo_Animation_Preloader.webp';
 const {
-  activePaths = ['/', '/index.html', '/architect/', '/architect', '/artist/', '/artist', '/author/', '/author'],
+  activePaths = ['/', '/index.html'],
   completeEvent = 'varelism:preloader-complete',
   imageFadeMs,
   overlayFadeMs,
@@ -37,18 +37,18 @@ const {
   data-ready-events={readyEvents}
   data-session-key={sessionKey}
   data-timing-scale={timingScale}
+  data-video-src={videoSrc}
+  data-fallback-src={fallbackSrc}
   data-white-hold-ms={whiteHoldMs}
   aria-hidden="true"
 >
   <video
     class="home-preloader__media"
-    src={videoSrc}
-    autoplay
     defaultMuted
     muted
     playsinline
     webkit-playsinline
-    preload="auto"
+    preload="none"
     disablePictureInPicture
     controlsList="nodownload noplaybackrate noremoteplayback"
     aria-hidden="true"
@@ -56,7 +56,6 @@ const {
   ></video>
   <img
     class="home-preloader__fallback"
-    src={fallbackSrc}
     alt=""
     width="960"
     height="666"
@@ -497,6 +496,8 @@ const {
       const isActivePath = activePaths.some((path) => isSamePath(path, window.location.pathname));
       const forcePreloader = isForcedByPendingNavigation(activePaths);
       const handoffState = getPendingHandoffState(activePaths);
+      const overlayVideoSrc = overlay.dataset.videoSrc || '';
+      const overlayFallbackSrc = overlay.dataset.fallbackSrc || '';
       const isSuppressedByReturnBlank = Boolean(
         (document.documentElement.classList.contains('author-return-blank-active') &&
           activePaths.some((path) => isSamePath(path, '/author/'))) ||
@@ -554,6 +555,20 @@ const {
 
       state.cleanups.add(cleanupOverlay);
 
+      const ensureMediaSources = () => {
+        const activeVideo = overlay.querySelector('.home-preloader__media');
+        const activeFallback = overlay.querySelector('.home-preloader__fallback');
+
+        if (activeVideo instanceof HTMLVideoElement && overlayVideoSrc && !activeVideo.getAttribute('src')) {
+          activeVideo.src = overlayVideoSrc;
+          activeVideo.setAttribute('preload', 'auto');
+        }
+
+        if (activeFallback instanceof HTMLImageElement && overlayFallbackSrc && !activeFallback.getAttribute('src')) {
+          activeFallback.src = overlayFallbackSrc;
+        }
+      };
+
       const revealInitialHomeShell = () => {
         if (!document.documentElement.classList.contains(initialHomePreloaderClass)) return;
 
@@ -592,6 +607,8 @@ const {
         removeOverlay();
         return;
       }
+
+      ensureMediaSources();
 
       const video = overlay.querySelector('.home-preloader__media');
       const preloaderVideo = video instanceof HTMLVideoElement ? reviveEndedPreloaderVideo(video) : null;

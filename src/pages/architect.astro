@@ -199,6 +199,8 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
       let isRockHitTestReady = false;
       let hasStartedRevealSequence = false;
       const preloaderTimers = new Set();
+      const hasActivePreloaderSurface = () =>
+        Boolean(document.querySelector('[data-home-preloader].is-visible, [data-home-preloader-handoff]'));
       const getSpatialLinks = () =>
         Array.from(controlsElement.querySelectorAll('[data-architect-spatial-link]')).filter(
           (link) => link instanceof HTMLAnchorElement,
@@ -291,6 +293,9 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
 
         isPreloaderHiding = true;
         signalArchitectSceneReady();
+        if (!hasActivePreloaderSurface()) {
+          removePreloader();
+        }
       };
 
       if (!shouldReplayWithoutPreloader) {

@@ -9,15 +9,10 @@ interface Props {
 }
 
 const { title, description = 'Website under construction.' } = Astro.props;
+const isHomeRoute = Astro.url.pathname === '/' || Astro.url.pathname === '/index.html';
 const globalPreloaderPaths = [
   '/',
   '/index.html',
-  '/architect/',
-  '/architect',
-  '/artist/',
-  '/artist',
-  '/author/',
-  '/author',
 ];
 ---
 
@@ -49,23 +44,17 @@ const globalPreloaderPaths = [
       type="font/woff2"
       crossorigin
     />
-    <link rel="preload" as="video" href="/images/Logo_Animation_Preloader.mp4" type="video/mp4" />
-    <link rel="preload" as="image" href="/images/Logo_Animation_Preloader.webp" type="image/webp" />
     <meta name="generator" content={Astro.generator} />
     <ViewTransitions />
     <script is:inline>
       (() => {
-        const preloaderVideoSrc = '/images/Logo_Animation_Preloader.mp4';
-        const preloaderFallbackSrc = '/images/Logo_Animation_Preloader.webp';
         const pendingPreloaderKey = '__varelismPendingPreloaderNavigation';
-        const activeHandoffKey = '__varelismActivePreloaderHandoff';
         const pendingHomeReturnKey = '__varelismPendingHomeReturn';
         const forceAuthorReplayKey = '__varelismForceAuthorReplay';
         const authorReturnReplayKey = 'varelism-author-return-replay';
         const architectReturnReplayKey = 'varelism-architect-return-replay';
         const authorReturnBlankClass = 'author-return-blank-active';
         const architectReturnBlankClass = 'architect-return-blank-active';
-        const astroNavigateKey = '__varelismAstroNavigate';
         const navigationPreloaderClass = 'home-preloader-navigation-active';
         const initialHomePreloaderClass = 'home-preloader-initial-home-active';
         const initialHomeRevealClass = 'home-preloader-initial-home-revealing';
@@ -73,48 +62,11 @@ const globalPreloaderPaths = [
         const navigationScrollLockKey = '__varelismNavigationPreloaderScrollLock';
         const architectSceneReadyFlag = '__varelismReady_varelism_architect_scene_ready';
         const homeReturnClass = 'home-return-active';
-        const preloaderCycleDurationMs = 3067;
-        const handoffCycleFallbackMs = preloaderCycleDurationMs + 350;
-        const handoffMediaFadeMs = 220;
-        const handoffBlankHoldMs = 45;
         const homeReturnFadeMs = 260;
         const homeReturnRevealMs = 320;
-        const preloaderRoutes = [
-          {
-            paths: ['/', '/index.html', '/architect/', '/architect', '/artist/', '/artist', '/author/', '/author'],
-            playOnce: false,
-            sessionKey: 'varelism-global-preloader-seen',
-          },
-        ];
-        const standaloneHandoffRoutes = [];
-        const triptychHandoffPaths = [];
         const authorReplayReturnPaths = ['/books/', '/books', '/memories/', '/memories'];
         const architectReplayReturnPaths = ['/projects/', '/projects', '/portfolios/', '/portfolios'];
-        const getPreloaderRoute = (pathname) =>
-          preloaderRoutes.find(({ paths }) => paths.includes(pathname));
         const isHomePath = (pathname) => pathname === '/' || pathname === '/index.html';
-        const getStandaloneHandoffRoute = (pathname) =>
-          standaloneHandoffRoutes.find(({ paths }) => paths.includes(pathname));
-        const shouldForceTriptychPreloader = (pathname) => triptychHandoffPaths.includes(pathname);
-        const hasRoutePlayed = (route) => {
-          try {
-            return sessionStorage.getItem(route.sessionKey) === 'true';
-          } catch {
-            return false;
-          }
-        };
-        const markRoutePlayed = (route) => {
-          if (!route?.sessionKey) return;
-
-          try {
-            sessionStorage.setItem(route.sessionKey, 'true');
-          } catch {
-            // Storage can be unavailable in strict privacy contexts.
-          }
-        };
-        const shouldPlayPreloader = (route, { force = false } = {}) =>
-          Boolean(route && (force || !route.playOnce || !hasRoutePlayed(route)));
-        const route = getPreloaderRoute(window.location.pathname);
         const isArchitectScenePath = (pathname) => pathname === '/architect/' || pathname === '/architect';
         const clearArchitectSceneReadyFlag = (pathname = window.location.pathname) => {
           if (!isArchitectScenePath(pathname)) return;
@@ -122,22 +74,9 @@ const globalPreloaderPaths = [
           window.__varelismArchitectSceneReady = false;
           window[architectSceneReadyFlag] = false;
         };
-        let skipNextHomePreloader = false;
-        let activeTriptychNavigation = null;
-        let activeHomeReturnNavigation = null;
         let lastPathname = window.location.pathname;
 
-        window.__varelismPreloaderCycleDurationMs = preloaderCycleDurationMs;
         clearArchitectSceneReadyFlag();
-
-        const getDocumentScrollY = () =>
-          Math.max(
-            0,
-            window.scrollY ||
-              document.documentElement.scrollTop ||
-              document.body?.scrollTop ||
-              0,
-          );
 
         const scrollLock = (window[navigationScrollLockKey] ||= {
           cleanup: null,
@@ -184,7 +123,6 @@ const globalPreloaderPaths = [
         };
 
         const showPreloaderShell = ({ navigation = false, initialHome = false } = {}) => {
-          resetRoutePreloaderElement();
           document.documentElement.classList.add('home-preloader-active', 'home-preloader-booting');
           document.documentElement.classList.remove(initialHomeRevealClass);
           document.documentElement.classList.toggle(initialHomePreloaderClass, Boolean(initialHome));
@@ -197,7 +135,7 @@ const globalPreloaderPaths = [
           isHomePath(window.location.pathname) &&
           Boolean(window[pendingHomeReturnKey] || document.documentElement.classList.contains(homeReturnClass));
 
-        if (shouldPlayPreloader(route) && !isInternalHomeReturn) {
+        if (isHomePath(window.location.pathname) && !isInternalHomeReturn) {
           showPreloaderShell({ initialHome: isHomePath(window.location.pathname) });
         }
 
@@ -206,314 +144,7 @@ const globalPreloaderPaths = [
             overlay.remove();
           });
           document.documentElement.classList.remove('home-preloader-handoff-active');
-          window[activeHandoffKey] = null;
           clearNavigationPreloaderClassIfIdle();
-        };
-
-        const preparePassivePreloaderVideo = (video) => {
-          video.autoplay = true;
-          video.controls = false;
-          video.loop = false;
-          video.muted = true;
-          video.defaultMuted = true;
-          video.playsInline = true;
-          video.preload = 'auto';
-          video.removeAttribute('controls');
-          video.removeAttribute('loop');
-          video.setAttribute('autoplay', '');
-          video.setAttribute('muted', '');
-          video.setAttribute('defaultMuted', '');
-          video.setAttribute('playsinline', '');
-          video.setAttribute('webkit-playsinline', '');
-          video.setAttribute('preload', 'auto');
-          try {
-            video.disablePictureInPicture = true;
-          } catch {
-            // Some embedded browsers expose the attribute but reject assignment.
-          }
-          try {
-            video.disableRemotePlayback = true;
-          } catch {
-            // Remote playback controls are best-effort only.
-          }
-          video.setAttribute('controlsList', 'nodownload noplaybackrate noremoteplayback');
-          video.setAttribute('disablePictureInPicture', '');
-          video.setAttribute('disableremoteplayback', '');
-          video.setAttribute('x-webkit-airplay', 'deny');
-          video.setAttribute('aria-hidden', 'true');
-          video.tabIndex = -1;
-        };
-
-        function resetRoutePreloaderElement() {
-          document.querySelectorAll('[data-home-preloader]').forEach((overlay) => {
-            if (!(overlay instanceof HTMLElement)) return;
-
-            delete overlay.dataset.homePreloaderBooted;
-            overlay.classList.remove(
-              'is-video-visible',
-              'is-fallback-visible',
-              'is-image-fading',
-              'is-overlay-fading',
-            );
-
-            const video = overlay.querySelector('.home-preloader__media');
-
-            if (!(video instanceof HTMLVideoElement)) return;
-
-            const isAtEnd =
-              Number.isFinite(video.duration) && video.duration > 0 && video.currentTime >= video.duration - 0.05;
-            const activeVideo =
-              video.ended || isAtEnd ? video.cloneNode(true) : video;
-
-            if (!(activeVideo instanceof HTMLVideoElement)) return;
-
-            if (activeVideo !== video) {
-              video.replaceWith(activeVideo);
-            }
-
-            preparePassivePreloaderVideo(activeVideo);
-
-            try {
-              activeVideo.pause();
-              activeVideo.currentTime = 0;
-              if (video.ended || isAtEnd) activeVideo.load();
-            } catch {
-              // If the media element is not seekable yet, the component fallback will handle it.
-            }
-          });
-        }
-
-        const styleHandoffMedia = (element, isCompact) => {
-          Object.assign(element.style, {
-            background: 'transparent',
-            display: 'block',
-            gridArea: '1 / 1',
-            height: 'auto',
-            maxHeight: isCompact ? 'min(28vh, 13rem)' : 'min(34vh, 18rem)',
-            maxWidth: isCompact ? 'min(62vw, 16rem)' : 'min(48vw, 22rem)',
-            objectFit: 'contain',
-            opacity: '0',
-            pointerEvents: 'none',
-            transition: `opacity ${handoffMediaFadeMs}ms ease`,
-            transform: 'translateZ(0)',
-            userSelect: 'none',
-            visibility: 'hidden',
-            willChange: 'opacity',
-            width: isCompact ? 'min(62vw, 16rem)' : 'min(48vw, 22rem)',
-          });
-        };
-
-        const getPreloaderAnchorY = (element, fallbackY = getDocumentScrollY()) => {
-          const stored = Number.parseFloat(element.dataset.preloaderAnchorY || '');
-          const anchorY = Number.isFinite(stored) ? stored : Math.max(0, fallbackY);
-          element.dataset.preloaderAnchorY = `${anchorY}`;
-          return anchorY;
-        };
-
-        const styleHandoffOverlay = (overlay) => {
-          const anchorY = getPreloaderAnchorY(overlay);
-          Object.assign(overlay.style, {
-            alignItems: 'center',
-            background: '#ffffff',
-            bottom: 'auto',
-            contain: 'layout paint style',
-            display: 'grid',
-            height: '100vh',
-            inset: '0 auto auto 0',
-            isolation: 'isolate',
-            justifyContent: 'center',
-            left: '0',
-            opacity: '1',
-            overscrollBehavior: 'auto',
-            pointerEvents: 'none',
-            position: 'absolute',
-            right: 'auto',
-            top: `${anchorY}px`,
-            touchAction: 'pan-y pinch-zoom',
-            transform: 'none',
-            visibility: 'visible',
-            willChange: 'opacity',
-            width: '100vw',
-            zIndex: '10',
-            placeItems: 'center',
-          });
-        };
-
-        const getHandoffOverlay = (video) => video.closest('[data-home-preloader-handoff]');
-
-        const getHandoffFallback = (video) => {
-          const overlay = getHandoffOverlay(video);
-          return overlay?.querySelector('.home-preloader__fallback') || null;
-        };
-
-        const setHandoffMediaVisibility = (video, mode) => {
-          const fallback = getHandoffFallback(video);
-          const showVideo = mode === 'video';
-          const showFallback = mode === 'fallback';
-
-          video.style.opacity = showVideo ? '1' : '0';
-          video.style.visibility = showVideo ? 'visible' : 'hidden';
-
-          if (fallback instanceof HTMLElement) {
-            fallback.style.opacity = showFallback ? '1' : '0';
-            fallback.style.visibility = showFallback ? 'visible' : 'hidden';
-          }
-        };
-
-        const playHandoffVideo = (video, { timeoutMs = 750 } = {}) =>
-          new Promise((resolve) => {
-            let hasResolved = false;
-            let timeout = 0;
-
-            const cleanup = () => {
-              if (timeout) window.clearTimeout(timeout);
-              video.removeEventListener('playing', onPlaying);
-              video.removeEventListener('canplay', onReady);
-              video.removeEventListener('canplaythrough', onReady);
-              video.removeEventListener('error', onError);
-            };
-
-            const done = (didPlay) => {
-              if (hasResolved) return;
-              hasResolved = true;
-              cleanup();
-              resolve(didPlay);
-            };
-
-            const confirmPlayback = () => {
-              if (!video.paused && !video.ended && video.readyState >= 2) {
-                done(true);
-              }
-            };
-
-            const tryPlay = () => {
-              if (hasResolved) return;
-
-              try {
-                const playAttempt = video.play();
-
-                if (playAttempt?.then) {
-                  playAttempt.then(confirmPlayback).catch(() => done(false));
-                  return;
-                }
-
-                window.requestAnimationFrame(confirmPlayback);
-              } catch {
-                done(false);
-              }
-            };
-
-            function onPlaying() {
-              confirmPlayback();
-            }
-
-            function onReady() {
-              tryPlay();
-            }
-
-            function onError() {
-              done(false);
-            }
-
-            preparePassivePreloaderVideo(video);
-            video.addEventListener('playing', onPlaying);
-            video.addEventListener('canplay', onReady);
-            video.addEventListener('canplaythrough', onReady);
-            video.addEventListener('error', onError, { once: true });
-            timeout = window.setTimeout(() => done(false), timeoutMs);
-            tryPlay();
-          });
-
-        const restartHandoffVideo = (video) => {
-          preparePassivePreloaderVideo(video);
-          setHandoffMediaVisibility(video, null);
-
-          try {
-            video.pause();
-            video.currentTime = 0;
-          } catch {
-            // Metadata may not be ready yet; autoplay still starts from the beginning on fresh elements.
-          }
-
-          playHandoffVideo(video).then((didPlay) => {
-            setHandoffMediaVisibility(video, didPlay ? 'video' : 'fallback');
-          });
-        };
-
-        const ensureHandoffPreloader = ({ restart = true } = {}) => {
-          document.documentElement.classList.add('home-preloader-handoff-active');
-          activateNavigationPreloader();
-
-          const existingOverlay = document.querySelector('[data-home-preloader-handoff]');
-
-          if (existingOverlay instanceof HTMLElement) {
-            const existingVideo = existingOverlay.querySelector('video');
-            const existingFallback = existingOverlay.querySelector('.home-preloader__fallback');
-            const isCompact = window.matchMedia?.('(max-width: 720px)').matches;
-            styleHandoffOverlay(existingOverlay);
-            document.body?.prepend(existingOverlay);
-
-            if (!(existingFallback instanceof HTMLImageElement)) {
-              const fallback = document.createElement('img');
-              fallback.className = 'home-preloader__fallback';
-              fallback.src = preloaderFallbackSrc;
-              fallback.alt = '';
-              fallback.width = 960;
-              fallback.height = 666;
-              fallback.decoding = 'async';
-              fallback.loading = 'eager';
-              fallback.setAttribute('aria-hidden', 'true');
-              styleHandoffMedia(fallback, isCompact);
-              existingOverlay.append(fallback);
-            }
-
-            if (restart && existingVideo instanceof HTMLVideoElement) {
-              restartHandoffVideo(existingVideo);
-            }
-
-            return {
-              overlay: existingOverlay,
-              video: existingVideo instanceof HTMLVideoElement ? existingVideo : null,
-            };
-          }
-
-          const overlay = document.createElement('div');
-          const video = document.createElement('video');
-          const fallback = document.createElement('img');
-          const isCompact = window.matchMedia?.('(max-width: 720px)').matches;
-
-          overlay.dataset.homePreloaderHandoff = 'true';
-          overlay.setAttribute('data-astro-transition-persist', 'varelism-home-preloader-handoff');
-          overlay.setAttribute('aria-hidden', 'true');
-          styleHandoffOverlay(overlay);
-
-          video.className = 'home-preloader__media';
-          video.src = preloaderVideoSrc;
-          video.autoplay = true;
-          video.defaultMuted = true;
-          video.loop = false;
-          video.muted = true;
-          video.playsInline = true;
-          video.setAttribute('webkit-playsinline', '');
-          preparePassivePreloaderVideo(video);
-          styleHandoffMedia(video, isCompact);
-
-          fallback.className = 'home-preloader__fallback';
-          fallback.src = preloaderFallbackSrc;
-          fallback.alt = '';
-          fallback.width = 960;
-          fallback.height = 666;
-          fallback.decoding = 'async';
-          fallback.loading = 'eager';
-          fallback.setAttribute('aria-hidden', 'true');
-          styleHandoffMedia(fallback, isCompact);
-
-          overlay.append(video, fallback);
-          document.body?.prepend(overlay);
-
-          if (restart) restartHandoffVideo(video);
-
-          return { overlay, video };
         };
 
         const isSamePath = (pathA, pathB) =>
@@ -608,9 +239,17 @@ const globalPreloaderPaths = [
 
         const getPendingPreloaderNavigation = () => window[pendingPreloaderKey] || null;
 
-        const getActiveHandoff = () => window[activeHandoffKey] || null;
-
         const getPendingHomeReturn = () => window[pendingHomeReturnKey] || null;
+
+        const beginRouteContentTransition = (url) => {
+          window[pendingPreloaderKey] = null;
+          deactivateNavigationPreloader();
+          removeHandoffPreloader();
+          window[pendingHomeReturnKey] = {
+            pathname: url.pathname,
+          };
+          showHomeReturnOverlay();
+        };
 
         const clearPreloaderForReturnReplay = () => {
           window[pendingPreloaderKey] = null;
@@ -622,274 +261,6 @@ const globalPreloaderPaths = [
           );
           deactivateNavigationPreloader();
           removeHandoffPreloader();
-        };
-
-        const isPendingPreloaderPath = (pathname) => {
-          const pendingNavigation = getPendingPreloaderNavigation();
-
-          return Boolean(pendingNavigation?.pathname && isSamePath(pendingNavigation.pathname, pathname));
-        };
-
-        const restoreRoutePreloaderShell = () => {
-          const pendingNavigation = getPendingPreloaderNavigation();
-
-          if (!pendingNavigation?.keepBootingAfterSwap || !isPendingPreloaderPath(window.location.pathname)) {
-            return;
-          }
-
-          showPreloaderShell({ navigation: Boolean(pendingNavigation.navigationPreloader) });
-        };
-
-        const preparePreloaderNavigation = (url, { force = false, restartHandoff = true } = {}) => {
-          clearArchitectSceneReadyFlag(url.pathname);
-
-          const nextRoute = getPreloaderRoute(url.pathname);
-          const forceTriptychPreloader = force && shouldForceTriptychPreloader(url.pathname);
-          const shouldUseRoutePreloader = shouldPlayPreloader(nextRoute, {
-            force: forceTriptychPreloader,
-          });
-          const standaloneHandoffRoute = getStandaloneHandoffRoute(url.pathname);
-          const currentPendingNavigation = getPendingPreloaderNavigation();
-          const shouldReuseHandoff = Boolean(
-            (currentPendingNavigation?.handoffStartedAt &&
-              currentPendingNavigation.pathname &&
-              isSamePath(currentPendingNavigation.pathname, url.pathname)) ||
-              (getActiveHandoff()?.startedAt &&
-                getActiveHandoff()?.pathname &&
-                isSamePath(getActiveHandoff().pathname, url.pathname))
-          );
-          const shouldUseHandoffSurface = forceTriptychPreloader || Boolean(standaloneHandoffRoute);
-          const currentActiveHandoff = getActiveHandoff();
-          const nextHandoffStartedAt =
-            shouldReuseHandoff && currentActiveHandoff?.startedAt
-              ? currentActiveHandoff.startedAt
-              : shouldReuseHandoff && currentPendingNavigation?.handoffStartedAt
-                ? currentPendingNavigation.handoffStartedAt
-                : window.performance.now();
-          const preloaderAnchorY = getDocumentScrollY();
-
-          if (!shouldUseRoutePreloader && !standaloneHandoffRoute && !forceTriptychPreloader) {
-            window[pendingPreloaderKey] = null;
-            return null;
-          }
-
-          if (shouldUseHandoffSurface) {
-            window[activeHandoffKey] = {
-              cycleComplete: shouldReuseHandoff && Boolean(currentActiveHandoff?.cycleComplete),
-              cycleDurationMs: currentActiveHandoff?.cycleDurationMs || preloaderCycleDurationMs,
-              pathname: url.pathname,
-              startedAt: nextHandoffStartedAt,
-              anchorY: currentActiveHandoff?.anchorY ?? currentPendingNavigation?.anchorY ?? preloaderAnchorY,
-            };
-          }
-
-          window[pendingPreloaderKey] = {
-            forcePreloader: forceTriptychPreloader,
-            handoffCycleComplete:
-              shouldReuseHandoff &&
-              Boolean(currentPendingNavigation?.handoffCycleComplete || currentActiveHandoff?.cycleComplete),
-            handoffCycleDurationMs: currentPendingNavigation?.handoffCycleDurationMs || preloaderCycleDurationMs,
-            handoffStartedAt: nextHandoffStartedAt,
-            keepBootingAfterSwap: shouldUseRoutePreloader,
-            navigationPreloader: true,
-            pathname: url.pathname,
-            anchorY: currentPendingNavigation?.anchorY ?? currentActiveHandoff?.anchorY ?? preloaderAnchorY,
-            suppressRoutePreloaderVideo:
-              shouldUseHandoffSurface ||
-              (shouldReuseHandoff && Boolean(currentPendingNavigation?.suppressRoutePreloaderVideo)),
-          };
-          showPreloaderShell({ navigation: true });
-
-          const handoffPreloader =
-            shouldUseHandoffSurface || shouldReuseHandoff
-              ? ensureHandoffPreloader({ restart: restartHandoff && !shouldReuseHandoff })
-              : null;
-
-          if (handoffPreloader?.overlay) {
-            handoffPreloader.overlay.dataset.handoffPath = url.pathname;
-            delete handoffPreloader.overlay.dataset.handoffReleased;
-          }
-
-          return handoffPreloader;
-        };
-
-        const continueTriptychNavigation = (url) => {
-          const navigate = window[astroNavigateKey];
-
-          if (typeof navigate === 'function') {
-            navigate(url.href);
-            return;
-          }
-
-          window.location.assign(url.href);
-        };
-
-        const cancelActiveTriptychNavigation = () => {
-          if (activeTriptychNavigation) {
-            activeTriptychNavigation.cancelled = true;
-            activeTriptychNavigation = null;
-          }
-        };
-
-        const syncHandoffVideoToPending = (video, pendingNavigation) => {
-          if (!(video instanceof HTMLVideoElement) || !pendingNavigation?.handoffStartedAt) return;
-
-          const elapsedSeconds = Math.max(0, (window.performance.now() - pendingNavigation.handoffStartedAt) / 1000);
-          const maxSeekTime = Math.max(0, preloaderCycleDurationMs / 1000 - 0.05);
-          const targetTime = Math.min(elapsedSeconds, maxSeekTime);
-
-          preparePassivePreloaderVideo(video);
-          setHandoffMediaVisibility(video, null);
-
-          const seekAndPlay = () => {
-            try {
-              video.currentTime = targetTime;
-            } catch {
-              // If the browser rejects the seek, playback still stays passive and control-free.
-            }
-
-            playHandoffVideo(video).then((didPlay) => {
-              setHandoffMediaVisibility(video, didPlay ? 'video' : 'fallback');
-            });
-          };
-
-          if (video.readyState === 0) {
-            video.addEventListener('loadedmetadata', seekAndPlay, { once: true });
-            video.load();
-            return;
-          }
-
-          seekAndPlay();
-        };
-
-        const restoreActiveHandoffOverlay = () => {
-          const pendingNavigation = getPendingPreloaderNavigation();
-          const activeHandoff = getActiveHandoff();
-          const pendingHandoff = pendingNavigation?.suppressRoutePreloaderVideo ? pendingNavigation : null;
-          const handoffState = activeHandoff
-            ? {
-                handoffCycleComplete: activeHandoff.cycleComplete,
-                handoffStartedAt: activeHandoff.startedAt,
-                pathname: activeHandoff.pathname,
-              }
-            : pendingHandoff;
-
-          if (!handoffState?.handoffStartedAt || handoffState.handoffCycleComplete) {
-            if (!activeHandoff && !pendingHandoff) {
-              removeHandoffPreloader();
-            }
-
-            return;
-          }
-
-          const existingOverlay = document.querySelector('[data-home-preloader-handoff]');
-          const existingVideo = existingOverlay?.querySelector('video');
-
-          if (
-            existingOverlay instanceof HTMLElement &&
-            existingVideo instanceof HTMLVideoElement &&
-            (existingOverlay.querySelector('.home-preloader__fallback') instanceof HTMLElement ||
-              !existingVideo.paused) &&
-            (existingVideo.style.visibility === 'visible' ||
-              existingOverlay.querySelector('.home-preloader__fallback')?.style.visibility === 'visible')
-          ) {
-            return;
-          }
-
-          const handoffPreloader = ensureHandoffPreloader({ restart: false });
-          syncHandoffVideoToPending(handoffPreloader?.video, handoffState);
-        };
-
-        const waitForHandoffCycle = (video) =>
-          new Promise((resolve) => {
-            if (!(video instanceof HTMLVideoElement)) {
-              window.setTimeout(resolve, handoffCycleFallbackMs);
-              return;
-            }
-
-            let timer = null;
-            let didResolve = false;
-
-            const cleanup = () => {
-              if (timer) window.clearTimeout(timer);
-              video.removeEventListener('ended', done);
-              video.removeEventListener('error', done);
-              video.removeEventListener('loadedmetadata', refreshFallback);
-            };
-
-            const done = () => {
-              if (didResolve) return;
-              didResolve = true;
-              cleanup();
-              resolve();
-            };
-
-            const refreshFallback = () => {
-              if (timer) window.clearTimeout(timer);
-              const duration =
-                Number.isFinite(video.duration) && video.duration > 0
-                  ? Math.ceil(Math.max(0, video.duration - video.currentTime) * 1000) + 180
-                  : handoffCycleFallbackMs;
-              timer = window.setTimeout(done, duration);
-            };
-
-            preparePassivePreloaderVideo(video);
-
-            if (video.ended) {
-              done();
-              return;
-            }
-
-            video.addEventListener('ended', done, { once: true });
-            video.addEventListener('error', done, { once: true });
-            video.addEventListener('loadedmetadata', refreshFallback, { once: true });
-            refreshFallback();
-          });
-
-        const fadeHandoffToBlank = ({ video } = {}) =>
-          new Promise((resolve) => {
-            if (video instanceof HTMLVideoElement) {
-              setHandoffMediaVisibility(video, null);
-            }
-
-            window.setTimeout(resolve, handoffMediaFadeMs + handoffBlankHoldMs);
-          });
-
-        const releaseHandoffPreloader = (url) => {
-          const pendingNavigation = getPendingPreloaderNavigation();
-          const activeHandoff = getActiveHandoff();
-
-          if (activeHandoff?.pathname && !isSamePath(activeHandoff.pathname, url.pathname)) return;
-          if (pendingNavigation?.pathname && !isSamePath(pendingNavigation.pathname, url.pathname)) return;
-
-          if (activeHandoff) {
-            window[activeHandoffKey] = {
-              ...activeHandoff,
-              cycleComplete: true,
-            };
-          }
-
-          if (pendingNavigation) {
-            window[pendingPreloaderKey] = {
-              ...pendingNavigation,
-              handoffCycleComplete: true,
-              suppressRoutePreloaderVideo: true,
-            };
-          }
-
-          const handoffOverlay = document.querySelector('[data-home-preloader-handoff]');
-
-          if (handoffOverlay instanceof HTMLElement) {
-            handoffOverlay.dataset.handoffReleased = 'true';
-          }
-
-          window.dispatchEvent(
-            new CustomEvent('varelism:handoff-complete', {
-              detail: {
-                pathname: url.pathname,
-              },
-            })
-          );
         };
 
         const ensureHomeReturnOverlay = () => {
@@ -906,7 +277,7 @@ const globalPreloaderPaths = [
             background: '#ffffff',
             inset: '0',
             opacity: '0',
-            pointerEvents: 'auto',
+            pointerEvents: 'none',
             position: 'fixed',
             transition: `opacity ${homeReturnFadeMs}ms ease`,
             visibility: 'visible',
@@ -927,74 +298,44 @@ const globalPreloaderPaths = [
           return overlay;
         };
 
-        const revealHomeFromWhite = () => {
+        const waitForRouteTransitionReady = (pathname) =>
+          new Promise((resolve) => {
+            if (!isArchitectPath(pathname) || window[architectSceneReadyFlag]) {
+              resolve();
+              return;
+            }
+
+            window.addEventListener('varelism:architect-scene-ready', resolve, { once: true });
+          });
+
+        const revealRouteFromWhite = () => {
           const pendingHomeReturn = getPendingHomeReturn();
 
-          if (!pendingHomeReturn || !isSamePath(window.location.pathname, '/')) return;
+          if (!pendingHomeReturn || !isSamePath(window.location.pathname, pendingHomeReturn.pathname)) return;
 
           const overlay = ensureHomeReturnOverlay();
           overlay.style.opacity = '1';
-          window[pendingHomeReturnKey] = null;
-          window.requestAnimationFrame(() => {
+
+          waitForRouteTransitionReady(window.location.pathname).then(() => {
+            const currentPendingHomeReturn = getPendingHomeReturn();
+            if (
+              !currentPendingHomeReturn ||
+              !isSamePath(window.location.pathname, currentPendingHomeReturn.pathname)
+            ) {
+              return;
+            }
+
+            window[pendingHomeReturnKey] = null;
             window.requestAnimationFrame(() => {
-              overlay.style.transition = `opacity ${homeReturnRevealMs}ms ease`;
-              overlay.style.opacity = '0';
-              window.setTimeout(() => {
-                overlay.remove();
-                document.documentElement.classList.remove(homeReturnClass);
-              }, homeReturnRevealMs);
+              window.requestAnimationFrame(() => {
+                overlay.style.transition = `opacity ${homeReturnRevealMs}ms ease`;
+                overlay.style.opacity = '0';
+                window.setTimeout(() => {
+                  overlay.remove();
+                  document.documentElement.classList.remove(homeReturnClass);
+                }, homeReturnRevealMs);
+              });
             });
-          });
-        };
-
-        const startHomeReturnNavigation = (url) => {
-          cancelActiveTriptychNavigation();
-          skipNextHomePreloader = true;
-          markRoutePlayed(getPreloaderRoute('/'));
-          window[pendingPreloaderKey] = null;
-          deactivateNavigationPreloader();
-          window[pendingHomeReturnKey] = {
-            pathname: url.pathname,
-          };
-          removeHandoffPreloader();
-
-          if (activeHomeReturnNavigation) {
-            window.clearTimeout(activeHomeReturnNavigation);
-            activeHomeReturnNavigation = null;
-          }
-
-          showHomeReturnOverlay();
-
-          activeHomeReturnNavigation = window.setTimeout(() => {
-            activeHomeReturnNavigation = null;
-            continueTriptychNavigation(url);
-          }, homeReturnFadeMs);
-        };
-
-        const startTriptychNavigation = (url) => {
-          cancelActiveTriptychNavigation();
-
-          const handoffPreloader = preparePreloaderNavigation(url, { force: true });
-          const navigation = { cancelled: false };
-          activeTriptychNavigation = navigation;
-
-          waitForHandoffCycle(handoffPreloader?.video)
-            .then(() => {
-              if (navigation.cancelled) return;
-              return fadeHandoffToBlank(ensureHandoffPreloader({ restart: false }));
-            })
-            .then(() => {
-              if (navigation.cancelled) return;
-              releaseHandoffPreloader(url);
-              removeHandoffPreloader();
-              if (activeTriptychNavigation === navigation) {
-                activeTriptychNavigation = null;
-              }
-            });
-
-          window.requestAnimationFrame(() => {
-            if (navigation.cancelled || activeTriptychNavigation !== navigation) return;
-            continueTriptychNavigation(url);
           });
         };
 
@@ -1027,7 +368,6 @@ const globalPreloaderPaths = [
 
           if (url.origin !== window.location.origin) return;
 
-          const isTriptychLink = Boolean(link.closest('.triptych-item'));
           const isReturnReplayNavigation =
             markAuthorReplayIfNeeded(url.pathname, window.location.pathname) ||
             markArchitectReplayIfNeeded(url.pathname, window.location.pathname);
@@ -1039,17 +379,9 @@ const globalPreloaderPaths = [
             (link.closest('.site-logo') && isHomePath(url.pathname)) ||
             isPrimaryHomeReturn(url.pathname, window.location.pathname)
           ) {
-            if (isSamePath(window.location.pathname, '/')) return;
-            event.preventDefault();
-            event.stopImmediatePropagation();
-            startHomeReturnNavigation(url);
-            return;
-          }
-
-          if (isTriptychLink && shouldForceTriptychPreloader(url.pathname)) {
-            event.preventDefault();
-            event.stopImmediatePropagation();
-            startTriptychNavigation(url);
+            if (!isSamePath(window.location.pathname, '/')) {
+              beginRouteContentTransition(url);
+            }
             return;
           }
 
@@ -1057,10 +389,6 @@ const globalPreloaderPaths = [
             clearPreloaderForReturnReplay();
             return;
           }
-
-          preparePreloaderNavigation(url, {
-            force: isTriptychLink,
-          });
         }, { capture: true });
 
         document.addEventListener('astro:before-preparation', (event) => {
@@ -1074,36 +402,12 @@ const globalPreloaderPaths = [
           markArchitectReplayOnExit(window.location.pathname, url.pathname);
           markAuthorReplayOnExit(window.location.pathname, url.pathname);
 
+          beginRouteContentTransition(url);
+
           if (isReturnReplayNavigation) {
             clearPreloaderForReturnReplay();
             return;
           }
-
-          if (isHomePath(url.pathname) && !isHomePath(window.location.pathname)) {
-            skipNextHomePreloader = false;
-            markRoutePlayed(getPreloaderRoute('/'));
-            window[pendingPreloaderKey] = null;
-            deactivateNavigationPreloader();
-            window[pendingHomeReturnKey] = {
-              pathname: url.pathname,
-            };
-            removeHandoffPreloader();
-            showHomeReturnOverlay();
-            return;
-          }
-
-          if (skipNextHomePreloader && isHomePath(url.pathname)) {
-            skipNextHomePreloader = false;
-            window[pendingPreloaderKey] = null;
-            removeHandoffPreloader();
-            showHomeReturnOverlay();
-            return;
-          }
-
-          preparePreloaderNavigation(url, {
-            force: Boolean(isPendingPreloaderPath(url.pathname) && getPendingPreloaderNavigation()?.forcePreloader),
-            restartHandoff: false,
-          });
         });
 
         document.addEventListener('astro:after-swap', () => {
@@ -1113,27 +417,11 @@ const globalPreloaderPaths = [
           if (isReturnReplayNavigation) {
             clearPreloaderForReturnReplay();
           }
-          restoreRoutePreloaderShell();
-          restoreActiveHandoffOverlay();
           if (getPendingHomeReturn()) showHomeReturnOverlay();
         });
 
         document.addEventListener('astro:page-load', () => {
-          const currentRoute = getPreloaderRoute(window.location.pathname);
-          const standaloneHandoffRoute = getStandaloneHandoffRoute(window.location.pathname);
-          const pendingNavigation = getPendingPreloaderNavigation();
-          const shouldForceCurrentRoute = Boolean(
-            pendingNavigation?.forcePreloader && isPendingPreloaderPath(window.location.pathname)
-          );
-          const shouldPreloadCurrentRoute = shouldPlayPreloader(currentRoute, {
-            force: shouldForceCurrentRoute,
-          });
-
-          if (
-            !shouldPreloadCurrentRoute &&
-            !standaloneHandoffRoute &&
-            !document.querySelector('[data-home-preloader]')
-          ) {
+          if (!document.querySelector('[data-home-preloader]')) {
             document.documentElement.classList.remove(
               'home-preloader-active',
               'home-preloader-booting',
@@ -1146,22 +434,12 @@ const globalPreloaderPaths = [
             clearNavigationPreloaderClassIfIdle();
           }
 
-          revealHomeFromWhite();
+          revealRouteFromWhite();
           lastPathname = window.location.pathname;
         });
 
         window.addEventListener('popstate', () => {
-          if (isPrimaryHomeReturn(window.location.pathname, lastPathname)) {
-            skipNextHomePreloader = true;
-            markRoutePlayed(getPreloaderRoute('/'));
-            window[pendingPreloaderKey] = null;
-            deactivateNavigationPreloader();
-            window[pendingHomeReturnKey] = {
-              pathname: window.location.pathname,
-            };
-            removeHandoffPreloader();
-            showHomeReturnOverlay();
-          }
+          beginRouteContentTransition(new URL(window.location.href));
 
           const isReturnReplayNavigation =
             markAuthorReplayIfNeeded(window.location.pathname) ||
@@ -1171,11 +449,6 @@ const globalPreloaderPaths = [
           }
         });
       })();
-    </script>
-    <script>
-      import { navigate } from 'astro:transitions/client';
-
-      window.__varelismAstroNavigate = navigate;
     </script>
     <title>{title}</title>
   </head>
@@ -1231,12 +504,15 @@ const globalPreloaderPaths = [
         </nav>
       </header>
       <main>
-        <HomePreloader
-          activePaths={globalPreloaderPaths}
-          playOnce={false}
-          sessionKey="varelism-global-preloader-seen"
-          readyEvents="/architect/=varelism:architect-scene-ready|/architect=varelism:architect-scene-ready"
-        />
+        {
+          isHomeRoute && (
+            <HomePreloader
+              activePaths={globalPreloaderPaths}
+              playOnce={false}
+              sessionKey="varelism-global-preloader-seen"
+            />
+          )
+        }
         <slot />
       </main>
       <footer class="site-footer">
