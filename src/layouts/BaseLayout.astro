@@ -50,6 +50,7 @@ const globalPreloaderPaths = [
       (() => {
         const pendingPreloaderKey = '__varelismPendingPreloaderNavigation';
         const pendingHomeReturnKey = '__varelismPendingHomeReturn';
+        const astroNavigateKey = '__varelismAstroNavigate';
         const forceAuthorReplayKey = '__varelismForceAuthorReplay';
         const authorReturnReplayKey = 'varelism-author-return-replay';
         const architectReturnReplayKey = 'varelism-architect-return-replay';
@@ -66,6 +67,7 @@ const globalPreloaderPaths = [
         const routeEnterEvent = 'varelism:route-enter';
         const homeReturnFadeMs = 260;
         const homeReturnRevealMs = 320;
+        const routeBlankHoldMs = 70;
         const authorReplayReturnPaths = ['/books/', '/books', '/memories/', '/memories'];
         const architectReplayReturnPaths = ['/projects/', '/projects', '/portfolios/', '/portfolios'];
         const isHomePath = (pathname) => pathname === '/' || pathname === '/index.html';
@@ -77,6 +79,7 @@ const globalPreloaderPaths = [
           window[architectSceneReadyFlag] = false;
         };
         let lastPathname = window.location.pathname;
+        let activeOutInNavigation = null;
 
         clearArchitectSceneReadyFlag();
 
@@ -243,6 +246,14 @@ const globalPreloaderPaths = [
 
         const getPendingHomeReturn = () => window[pendingHomeReturnKey] || null;
 
+        const clearActiveOutInNavigation = () => {
+          if (activeOutInNavigation?.timer) {
+            window.clearTimeout(activeOutInNavigation.timer);
+          }
+
+          activeOutInNavigation = null;
+        };
+
         const beginRouteContentTransition = (url) => {
           window[pendingPreloaderKey] = null;
           deactivateNavigationPreloader();
@@ -251,6 +262,46 @@ const globalPreloaderPaths = [
             pathname: url.pathname,
           };
           showHomeReturnOverlay();
+        };
+
+        const hasPendingRouteContentTransition = (url) => {
+          const pendingHomeReturn = getPendingHomeReturn();
+
+          return Boolean(pendingHomeReturn?.pathname && isSamePath(pendingHomeReturn.pathname, url.pathname));
+        };
+
+        const continueOutInNavigation = (url, options = {}) => {
+          const navigate = window[astroNavigateKey];
+
+          if (typeof navigate === 'function') {
+            navigate(url.href, options);
+            return;
+          }
+
+          window.location.assign(url.href);
+        };
+
+        const startOutInNavigation = (url, options = {}) => {
+          if (isSamePath(window.location.pathname, url.pathname) && window.location.search === url.search && !url.hash) {
+            return false;
+          }
+
+          clearActiveOutInNavigation();
+          beginRouteContentTransition(url);
+
+          activeOutInNavigation = {
+            pathname: url.pathname,
+            timer: window.setTimeout(() => {
+              const navigation = activeOutInNavigation;
+
+              if (!navigation || !isSamePath(navigation.pathname, url.pathname)) return;
+
+              activeOutInNavigation = null;
+              continueOutInNavigation(url, options);
+            }, homeReturnFadeMs + routeBlankHoldMs),
+          };
+
+          return true;
         };
 
         const clearPreloaderForReturnReplay = () => {
@@ -385,19 +436,22 @@ const globalPreloaderPaths = [
           markArchitectReplayOnExit(window.location.pathname, url.pathname);
           markAuthorReplayOnExit(window.location.pathname, url.pathname);
 
-          if (
-            (link.closest('.site-logo') && isHomePath(url.pathname)) ||
-            isPrimaryHomeReturn(url.pathname, window.location.pathname)
-          ) {
-            if (!isSamePath(window.location.pathname, '/')) {
-              beginRouteContentTransition(url);
-            }
+          if (isReturnReplayNavigation) {
+            clearPreloaderForReturnReplay();
+          }
+
+          if (link.dataset.astroReload !== undefined || link.hasAttribute('download')) {
             return;
           }
 
-          if (isReturnReplayNavigation) {
-            clearPreloaderForReturnReplay();
-            return;
+          if (
+            startOutInNavigation(url, {
+              history: link.dataset.astroHistory === 'replace' ? 'replace' : 'auto',
+              sourceElement: link,
+            })
+          ) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
           }
         }, { capture: true });
 
@@ -412,7 +466,9 @@ const globalPreloaderPaths = [
           markArchitectReplayOnExit(window.location.pathname, url.pathname);
           markAuthorReplayOnExit(window.location.pathname, url.pathname);
 
-          beginRouteContentTransition(url);
+          if (!hasPendingRouteContentTransition(url)) {
+            beginRouteContentTransition(url);
+          }
 
           if (isReturnReplayNavigation) {
             clearPreloaderForReturnReplay();
@@ -457,6 +513,7 @@ const globalPreloaderPaths = [
           }
 
           revealRouteFromWhite();
+          clearActiveOutInNavigation();
           lastPathname = window.location.pathname;
         });
 
@@ -471,6 +528,11 @@ const globalPreloaderPaths = [
           }
         });
       })();
+    </script>
+    <script>
+      import { navigate } from 'astro:transitions/client';
+
+      window.__varelismAstroNavigate = navigate;
     </script>
     <title>{title}</title>
   </head>
