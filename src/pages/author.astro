@@ -46,6 +46,7 @@ import BaseLayout from '../layouts/BaseLayout.astro';
     const BOOKS_REVEAL_DELAY_MS = 0;
     const MEMORIES_REVEAL_DELAY_MS = BOOKS_REVEAL_DELAY_MS + 750;
     const CONNECTOR_DRAW_DELAY_MS = MEMORIES_REVEAL_DELAY_MS + 450;
+    const NON_PHONE_DRAW_DURATION_SCALE = 2 / 3;
     const AUTHOR_RETURN_BLANK_HOLD_MS = 360;
     const PORTRAIT_PHONE_PRESETS = [
       {
@@ -1191,7 +1192,10 @@ import BaseLayout from '../layouts/BaseLayout.astro';
       };
 
       const animatePath = (onComplete) => {
-        const duration = clamp(pathLength * 5, 2400, 5600);
+        const viewport = getViewportSnapshot();
+        const isPhoneViewport = viewport.width <= 600 || isPortraitPhoneViewport(viewport.width, viewport.height);
+        const baseDuration = clamp(pathLength * 5, 2400, 5600);
+        const duration = isPhoneViewport ? baseDuration : baseDuration * NON_PHONE_DRAW_DURATION_SCALE;
         let hasFinished = false;
         let fallbackTimer = 0;
 
