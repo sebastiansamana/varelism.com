@@ -40,6 +40,160 @@ const sections = [
   </section>
 </BaseLayout>
 
+<script is:inline>
+  (() => {
+    const setupColumnFootprintHitboxes = () => {
+      document.querySelectorAll('.triptych-item').forEach((item) => {
+        const link = item.querySelector('.triptych-link');
+        const stack = item.querySelector('.column-stack');
+        const image = item.querySelector('.column-base');
+
+        if (
+          !(item instanceof HTMLElement) ||
+          !(link instanceof HTMLAnchorElement) ||
+          !(stack instanceof HTMLElement) ||
+          !(image instanceof HTMLImageElement) ||
+          stack.dataset.columnFootprintHitboxReady === 'true'
+        ) {
+          return;
+        }
+
+        stack.dataset.columnFootprintHitboxReady = 'true';
+
+        const alphaThreshold = 16;
+        const backgroundThreshold = 250;
+        const clickMoveTolerance = 10;
+        let context = null;
+        let naturalWidth = 0;
+        let naturalHeight = 0;
+        let pointerStart = null;
+
+        const setColumnHitState = (isHit) => {
+          item.classList.toggle('is-column-hit', isHit);
+          stack.style.cursor = isHit ? 'pointer' : '';
+        };
+
+        const buildHitCanvas = () => {
+          if (!image.naturalWidth || !image.naturalHeight || context) return;
+
+          naturalWidth = image.naturalWidth;
+          naturalHeight = image.naturalHeight;
+
+          const canvas = document.createElement('canvas');
+          canvas.width = naturalWidth;
+          canvas.height = naturalHeight;
+
+          const nextContext = canvas.getContext('2d', { willReadFrequently: true });
+          if (!nextContext) return;
+
+          nextContext.drawImage(image, 0, 0, naturalWidth, naturalHeight);
+          context = nextContext;
+        };
+
+        const isColumnPixel = (event) => {
+          if (!context || !naturalWidth || !naturalHeight) return false;
+
+          const rect = image.getBoundingClientRect();
+
+          if (
+            rect.width <= 0 ||
+            rect.height <= 0 ||
+            event.clientX < rect.left ||
+            event.clientX > rect.right ||
+            event.clientY < rect.top ||
+            event.clientY > rect.bottom
+          ) {
+            return false;
+          }
+
+          const x = Math.min(
+            naturalWidth - 1,
+            Math.max(0, Math.floor(((event.clientX - rect.left) / rect.width) * naturalWidth)),
+          );
+          const y = Math.min(
+            naturalHeight - 1,
+            Math.max(0, Math.floor(((event.clientY - rect.top) / rect.height) * naturalHeight)),
+          );
+          const [red, green, blue, alpha] = context.getImageData(x, y, 1, 1).data;
+
+          return (
+            alpha > alphaThreshold &&
+            !(red > backgroundThreshold && green > backgroundThreshold && blue > backgroundThreshold)
+          );
+        };
+
+        const getPointerDistance = (event) => {
+          if (!pointerStart) return 0;
+
+          return Math.hypot(event.clientX - pointerStart.x, event.clientY - pointerStart.y);
+        };
+
+        if (image.complete) {
+          buildHitCanvas();
+        } else {
+          image.addEventListener('load', buildHitCanvas, { once: true });
+        }
+
+        image.decode?.().then(buildHitCanvas).catch(() => {
+          // The load event fallback above covers browsers that reject decode during navigation.
+        });
+
+        stack.addEventListener('pointermove', (event) => {
+          setColumnHitState(isColumnPixel(event));
+        });
+
+        stack.addEventListener('pointerdown', (event) => {
+          const isHit = isColumnPixel(event);
+
+          pointerStart = isHit
+            ? {
+                id: event.pointerId,
+                x: event.clientX,
+                y: event.clientY,
+              }
+            : null;
+          setColumnHitState(isHit);
+        });
+
+        stack.addEventListener('pointerup', (event) => {
+          if (!pointerStart || pointerStart.id !== event.pointerId) return;
+
+          setColumnHitState(isColumnPixel(event));
+        });
+
+        stack.addEventListener('pointercancel', () => {
+          pointerStart = null;
+          setColumnHitState(false);
+        });
+
+        stack.addEventListener('pointerleave', () => {
+          pointerStart = null;
+          setColumnHitState(false);
+        });
+
+        stack.addEventListener('click', (event) => {
+          const movedPastClick = getPointerDistance(event) > clickMoveTolerance;
+
+          if (!movedPastClick && isColumnPixel(event)) {
+            event.preventDefault();
+            event.stopPropagation();
+            link.click();
+          }
+
+          pointerStart = null;
+        });
+      });
+    };
+
+    setupColumnFootprintHitboxes();
+
+    if (window.__varelismHomeColumnFootprintHitboxesReady) return;
+
+    window.__varelismHomeColumnFootprintHitboxesReady = true;
+    document.addEventListener('astro:page-load', setupColumnFootprintHitboxes);
+  })();
+</script>
+
 <style>
   :global(.site-shell > main) {
     display: grid;
@@ -114,6 +268,14 @@ const sections = [
   .column-hover {
     opacity: 0;
     transition: opacity 180ms ease;
+  }
+
+  .triptych-item.is-column-hit h1 {
+    color: #691b17;
+  }
+
+  .triptych-item.is-column-hit .column-hover {
+    opacity: 1;
   }
 
   .triptych-link:focus-visible h1 {
