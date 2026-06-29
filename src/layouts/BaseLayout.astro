@@ -68,7 +68,12 @@ const globalPreloaderPaths = [
         const homeReturnFadeMs = 260;
         const homeReturnRevealMs = 320;
         const routeBlankHoldMs = 70;
-        const authorReplayReturnPaths = ['/books/', '/books', '/author/everything/', '/author/everything'];
+        const authorReplayReturnPaths = [
+          '/author/books/',
+          '/author/books',
+          '/author/everything/',
+          '/author/everything',
+        ];
         const architectReplayReturnPaths = ['/projects/', '/projects', '/portfolios/', '/portfolios'];
         const isHomePath = (pathname) => pathname === '/' || pathname === '/index.html';
         const isArchitectScenePath = (pathname) => pathname === '/architect/' || pathname === '/architect';
