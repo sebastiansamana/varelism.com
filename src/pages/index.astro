@@ -67,10 +67,27 @@ const sections = [
         let naturalWidth = 0;
         let naturalHeight = 0;
         let pointerStart = null;
+        let clearGroupTimer = 0;
+
+        const setGroupHitState = (isHit) => {
+          window.clearTimeout(clearGroupTimer);
+          clearGroupTimer = 0;
+          item.classList.toggle('is-column-hit', isHit);
+        };
 
         const setColumnHitState = (isHit) => {
-          item.classList.toggle('is-column-hit', isHit);
+          setGroupHitState(isHit);
           stack.style.cursor = isHit ? 'pointer' : '';
+        };
+
+        const clearColumnHitState = () => {
+          setGroupHitState(false);
+          stack.style.cursor = '';
+        };
+
+        const scheduleGroupClear = () => {
+          window.clearTimeout(clearGroupTimer);
+          clearGroupTimer = window.setTimeout(clearColumnHitState, 80);
         };
 
         const buildHitCanvas = () => {
@@ -163,12 +180,12 @@ const sections = [
 
         stack.addEventListener('pointercancel', () => {
           pointerStart = null;
-          setColumnHitState(false);
+          clearColumnHitState();
         });
 
         stack.addEventListener('pointerleave', () => {
           pointerStart = null;
-          setColumnHitState(false);
+          scheduleGroupClear();
         });
 
         stack.addEventListener('click', (event) => {
@@ -182,6 +199,21 @@ const sections = [
 
           pointerStart = null;
         });
+
+        const setLinkHitState = () => {
+          setGroupHitState(true);
+          stack.style.cursor = '';
+        };
+
+        link.addEventListener('pointerenter', setLinkHitState);
+        link.addEventListener('pointermove', setLinkHitState);
+        link.addEventListener('pointerdown', setLinkHitState);
+        link.addEventListener('mouseenter', setLinkHitState);
+        link.addEventListener('mousemove', setLinkHitState);
+
+        link.addEventListener('pointerleave', scheduleGroupClear);
+        link.addEventListener('focus', () => setGroupHitState(true));
+        link.addEventListener('blur', scheduleGroupClear);
       });
     };
 
@@ -227,6 +259,9 @@ const sections = [
     gap: clamp(0.75rem, 1.8vh, 1.25rem);
     min-width: 0;
     text-decoration: none;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    user-select: none;
     width: 100%;
   }
 
@@ -234,6 +269,8 @@ const sections = [
     color: inherit;
     display: block;
     text-decoration: none;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
   }
 
   h1 {
@@ -253,6 +290,8 @@ const sections = [
     display: grid;
     max-width: 100%;
     position: relative;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
     width: clamp(6.25rem, 17vw, 13.25rem);
   }
 
@@ -278,6 +317,14 @@ const sections = [
     opacity: 1;
   }
 
+  .triptych-item:focus-within h1 {
+    color: #691b17;
+  }
+
+  .triptych-item:focus-within .column-hover {
+    opacity: 1;
+  }
+
   .triptych-link:focus-visible h1 {
     color: #691b17;
   }
@@ -291,8 +338,16 @@ const sections = [
     color: #691b17;
   }
 
+  .triptych-link:hover + .column-stack .column-hover {
+    opacity: 1;
+  }
+
   .triptych-link:active h1 {
     color: #691b17;
+  }
+
+  .triptych-link:active + .column-stack .column-hover {
+    opacity: 1;
   }
 
   @media (max-width: 720px) {
