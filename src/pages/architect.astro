@@ -1651,8 +1651,18 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
     pointer-events: auto;
     transition:
       opacity var(--architect-link-fade-ms, 450ms) ease,
-      color 180ms ease;
+      color 180ms ease,
+      visibility 0ms linear 0ms;
     visibility: visible;
+  }
+
+  :global(html.architect-rock-controls-locked)
+    .architect-stage.is-reveal-sequence.is-projects-visible
+    .architect-spatial-link--projects,
+  :global(html.architect-rock-controls-locked)
+    .architect-stage.is-reveal-sequence.is-portfolios-visible
+    .architect-spatial-link--portfolios {
+    pointer-events: auto;
   }
 
   .architect-spatial-link:focus-visible {
