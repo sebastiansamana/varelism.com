@@ -203,10 +203,10 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
       const hasActivePreloaderSurface = () =>
         Boolean(document.querySelector('[data-home-preloader].is-visible, [data-home-preloader-handoff]'));
       const isRouteEntering = () => document.documentElement.classList.contains(routeEnteringClass);
-      const getSpatialLinks = () =>
-        Array.from(controlsElement.querySelectorAll('[data-architect-spatial-link]')).filter(
-          (link) => link instanceof HTMLAnchorElement,
-        );
+      const spatialLinks = Array.from(controlsElement.querySelectorAll('[data-architect-spatial-link]')).filter(
+        (link) => link instanceof HTMLAnchorElement,
+      );
+      const getSpatialLinks = () => spatialLinks;
 
       const setPreloaderTimer = (callback, delay) => {
         const timer = window.setTimeout(() => {
@@ -565,6 +565,7 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
         let hitTestBufferWidth = 0;
         let hitTestBufferHeight = 0;
         let renderVersion = 0;
+        let hitTestRenderVersion = -1;
         let lastHitTestKey = '';
         let lastHitTestResult = false;
 
@@ -591,6 +592,8 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
             hitTestBufferWidth = nextHitTestBufferWidth;
             hitTestBufferHeight = nextHitTestBufferHeight;
             hitTestRenderTarget.setSize(hitTestBufferWidth, hitTestBufferHeight);
+            hitTestRenderVersion = -1;
+            lastHitTestKey = '';
           }
 
           hitTestScaleX = hitTestRect.width > 0 ? hitTestBufferWidth / hitTestRect.width : 1;
@@ -612,6 +615,8 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
             scene.overrideMaterial = previousOverrideMaterial;
             renderer.setRenderTarget(previousRenderTarget);
           }
+
+          hitTestRenderVersion = renderVersion;
         };
 
         const isRenderedPixelCovered = (clientX, clientY) => {
@@ -640,6 +645,10 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
 
           const hitTestKey = `${renderVersion}:${bufferX}:${bufferY}`;
           if (hitTestKey === lastHitTestKey) return lastHitTestResult;
+
+          if (hitTestRenderVersion !== renderVersion) {
+            renderHitTestScene();
+          }
 
           const toleranceX = Math.max(1, Math.round(hitTestScaleX * 3));
           const toleranceY = Math.max(1, Math.round(hitTestScaleY * 3));
@@ -748,6 +757,12 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
           controlsElement.style.touchAction = 'pan-y pinch-zoom';
         };
 
+        const orbitEye = new THREE.Vector3();
+        const orbitEyeDirection = new THREE.Vector3();
+        const orbitUpDirection = new THREE.Vector3();
+        const orbitSidewaysDirection = new THREE.Vector3();
+        const orbitMoveDirection = new THREE.Vector3();
+        const orbitAxisScratch = new THREE.Vector3();
         const terminalOrbit = {
           active: false,
           paused: false,
@@ -803,14 +818,14 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
 
         const getOrbitAxisFromScreenDelta = (deltaX, deltaY, threshold = orbitDragThreshold) => {
           if (Math.hypot(deltaX, deltaY) <= threshold) return null;
-          const eye = new THREE.Vector3().subVectors(camera.position, controls.target);
-          const eyeDirection = eye.clone().normalize();
-          const upDirection = camera.up.clone().normalize().setLength(deltaY);
-          const sidewaysDirection = camera.up.clone().cross(eyeDirection).normalize().setLength(deltaX);
-          const moveDirection = upDirection.add(sidewaysDirection);
-          const axis = new THREE.Vector3().crossVectors(moveDirection, eye).normalize();
+          orbitEye.subVectors(camera.position, controls.target);
+          orbitEyeDirection.copy(orbitEye).normalize();
+          orbitUpDirection.copy(camera.up).normalize().multiplyScalar(deltaY);
+          orbitSidewaysDirection.copy(camera.up).cross(orbitEyeDirection).normalize().multiplyScalar(deltaX);
+          orbitMoveDirection.copy(orbitUpDirection).add(orbitSidewaysDirection);
+          orbitAxisScratch.crossVectors(orbitMoveDirection, orbitEye).normalize();
 
-          return axis.lengthSq() > 0.000001 ? axis : null;
+          return orbitAxisScratch.lengthSq() > 0.000001 ? orbitAxisScratch : null;
         };
 
         const getFallbackOrbitAxis = () => {
@@ -1100,7 +1115,6 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
           controls.handleResize();
           controls.update();
           renderer.render(scene, camera);
-          renderHitTestScene();
           renderVersion += 1;
         };
 
@@ -1121,7 +1135,6 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
           applyTerminalOrbit();
           controls.update();
           renderer.render(scene, camera);
-          renderHitTestScene();
           renderVersion += 1;
         };
 
