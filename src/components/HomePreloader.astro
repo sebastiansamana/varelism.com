@@ -501,6 +501,8 @@ const {
       const isSuppressedByReturnBlank = Boolean(
         (document.documentElement.classList.contains('author-return-blank-active') &&
           activePaths.some((path) => isSamePath(path, '/author/'))) ||
+          (document.documentElement.classList.contains('artist-return-blank-active') &&
+            activePaths.some((path) => isSamePath(path, '/artist/'))) ||
           (document.documentElement.classList.contains('architect-return-blank-active') &&
             activePaths.some((path) => isSamePath(path, '/architect/'))) ||
           (document.documentElement.classList.contains('home-return-active') &&

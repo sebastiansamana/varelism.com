@@ -52,9 +52,12 @@ const globalPreloaderPaths = [
         const pendingHomeReturnKey = '__varelismPendingHomeReturn';
         const astroNavigateKey = '__varelismAstroNavigate';
         const forceAuthorReplayKey = '__varelismForceAuthorReplay';
+        const forceArtistReplayKey = '__varelismForceArtistReplay';
         const authorReturnReplayKey = 'varelism-author-return-replay';
+        const artistReturnReplayKey = 'varelism-artist-return-replay';
         const architectReturnReplayKey = 'varelism-architect-return-replay';
         const authorReturnBlankClass = 'author-return-blank-active';
+        const artistReturnBlankClass = 'artist-return-blank-active';
         const architectReturnBlankClass = 'architect-return-blank-active';
         const navigationPreloaderClass = 'home-preloader-navigation-active';
         const initialHomePreloaderClass = 'home-preloader-initial-home-active';
@@ -73,6 +76,12 @@ const globalPreloaderPaths = [
           '/author/books',
           '/author/everything/',
           '/author/everything',
+        ];
+        const artistReplayReturnPaths = [
+          '/artist/exhibitions/',
+          '/artist/exhibitions',
+          '/artist/everything/',
+          '/artist/everything',
         ];
         const architectReplayReturnPaths = [
           '/architect/projects/',
@@ -189,9 +198,25 @@ const globalPreloaderPaths = [
           }
         };
 
+        const markArtistReturnReplay = () => {
+          try {
+            sessionStorage.setItem(artistReturnReplayKey, 'true');
+          } catch {
+            // Storage can be unavailable in strict privacy contexts.
+          }
+        };
+
         const hasAuthorReturnReplay = () => {
           try {
             return sessionStorage.getItem(authorReturnReplayKey) === 'true';
+          } catch {
+            return false;
+          }
+        };
+
+        const hasArtistReturnReplay = () => {
+          try {
+            return sessionStorage.getItem(artistReturnReplayKey) === 'true';
           } catch {
             return false;
           }
@@ -220,6 +245,21 @@ const globalPreloaderPaths = [
           return false;
         };
 
+        const markArtistReplayIfNeeded = (toPathname, fromPathname = lastPathname) => {
+          if (
+            isArtistPath(toPathname) &&
+            (hasArtistReturnReplay() ||
+              artistReplayReturnPaths.some((path) => isSamePath(fromPathname, path)))
+          ) {
+            window[forceArtistReplayKey] = true;
+            markArtistReturnReplay();
+            document.documentElement.classList.add(artistReturnBlankClass);
+            return true;
+          }
+
+          return false;
+        };
+
         const markArchitectReplayIfNeeded = (toPathname, fromPathname = lastPathname) => {
           if (
             isArchitectPath(toPathname) &&
@@ -240,6 +280,15 @@ const globalPreloaderPaths = [
             authorReplayReturnPaths.some((path) => isSamePath(toPathname, path))
           ) {
             markAuthorReturnReplay();
+          }
+        };
+
+        const markArtistReplayOnExit = (fromPathname, toPathname) => {
+          if (
+            isArtistPath(fromPathname) &&
+            artistReplayReturnPaths.some((path) => isSamePath(toPathname, path))
+          ) {
+            markArtistReturnReplay();
           }
         };
 
@@ -441,9 +490,11 @@ const globalPreloaderPaths = [
 
           const isReturnReplayNavigation =
             markAuthorReplayIfNeeded(url.pathname, window.location.pathname) ||
+            markArtistReplayIfNeeded(url.pathname, window.location.pathname) ||
             markArchitectReplayIfNeeded(url.pathname, window.location.pathname);
 
           markArchitectReplayOnExit(window.location.pathname, url.pathname);
+          markArtistReplayOnExit(window.location.pathname, url.pathname);
           markAuthorReplayOnExit(window.location.pathname, url.pathname);
 
           if (isReturnReplayNavigation) {
@@ -472,8 +523,10 @@ const globalPreloaderPaths = [
 
           const isReturnReplayNavigation =
             markAuthorReplayIfNeeded(url.pathname, window.location.pathname) ||
+            markArtistReplayIfNeeded(url.pathname, window.location.pathname) ||
             markArchitectReplayIfNeeded(url.pathname, window.location.pathname);
           markArchitectReplayOnExit(window.location.pathname, url.pathname);
+          markArtistReplayOnExit(window.location.pathname, url.pathname);
           markAuthorReplayOnExit(window.location.pathname, url.pathname);
 
           if (!hasPendingRouteContentTransition(url)) {
@@ -498,6 +551,7 @@ const globalPreloaderPaths = [
         document.addEventListener('astro:after-swap', () => {
           const isReturnReplayNavigation =
             markAuthorReplayIfNeeded(window.location.pathname) ||
+            markArtistReplayIfNeeded(window.location.pathname) ||
             markArchitectReplayIfNeeded(window.location.pathname);
           if (isReturnReplayNavigation) {
             clearPreloaderForReturnReplay();
@@ -532,6 +586,7 @@ const globalPreloaderPaths = [
 
           const isReturnReplayNavigation =
             markAuthorReplayIfNeeded(window.location.pathname) ||
+            markArtistReplayIfNeeded(window.location.pathname) ||
             markArchitectReplayIfNeeded(window.location.pathname);
           if (isReturnReplayNavigation) {
             clearPreloaderForReturnReplay();
