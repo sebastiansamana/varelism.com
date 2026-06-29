@@ -541,8 +541,13 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
           depthBuffer: true,
           stencilBuffer: false,
         });
+        const hitTestMaterial = new THREE.MeshBasicMaterial({
+          color: 0xffffff,
+          side: THREE.DoubleSide,
+        });
         const hitTestPixel = new Uint8Array(4);
         const hitTestAlphaThreshold = 96;
+        const hitTestMaxDimension = 960;
         const hitTestSampleOffsets = [
           [0, 0],
           [1, 0],
@@ -570,13 +575,46 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
           hitTestRect.width = rect.width;
           hitTestRect.height = rect.height;
           const rendererContext = renderer.getContext();
-          hitTestBufferWidth = rendererContext.drawingBufferWidth;
-          hitTestBufferHeight = rendererContext.drawingBufferHeight;
+          const drawingBufferWidth = rendererContext.drawingBufferWidth;
+          const drawingBufferHeight = rendererContext.drawingBufferHeight;
+          const hitTestScale = Math.min(
+            1,
+            hitTestMaxDimension / Math.max(drawingBufferWidth || 1, drawingBufferHeight || 1),
+          );
+          const nextHitTestBufferWidth = Math.max(1, Math.round(drawingBufferWidth * hitTestScale));
+          const nextHitTestBufferHeight = Math.max(1, Math.round(drawingBufferHeight * hitTestScale));
+
+          if (
+            nextHitTestBufferWidth !== hitTestBufferWidth ||
+            nextHitTestBufferHeight !== hitTestBufferHeight
+          ) {
+            hitTestBufferWidth = nextHitTestBufferWidth;
+            hitTestBufferHeight = nextHitTestBufferHeight;
+            hitTestRenderTarget.setSize(hitTestBufferWidth, hitTestBufferHeight);
+          }
+
           hitTestScaleX = hitTestRect.width > 0 ? hitTestBufferWidth / hitTestRect.width : 1;
           hitTestScaleY = hitTestRect.height > 0 ? hitTestBufferHeight / hitTestRect.height : 1;
         };
 
-        const isCanvasPixelCovered = (clientX, clientY) => {
+        const renderHitTestScene = () => {
+          if (!hitTestBufferWidth || !hitTestBufferHeight) return;
+
+          const previousRenderTarget = renderer.getRenderTarget();
+          const previousOverrideMaterial = scene.overrideMaterial;
+
+          try {
+            scene.overrideMaterial = hitTestMaterial;
+            renderer.setRenderTarget(hitTestRenderTarget);
+            renderer.clear(true, true, true);
+            renderer.render(scene, camera);
+          } finally {
+            scene.overrideMaterial = previousOverrideMaterial;
+            renderer.setRenderTarget(previousRenderTarget);
+          }
+        };
+
+        const isRenderedPixelCovered = (clientX, clientY) => {
           updateHitTestMetrics();
 
           if (
@@ -603,33 +641,26 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
           const hitTestKey = `${renderVersion}:${bufferX}:${bufferY}`;
           if (hitTestKey === lastHitTestKey) return lastHitTestResult;
 
-          const previousRenderTarget = renderer.getRenderTarget();
-          const previousCameraView = camera.view?.enabled ? { ...camera.view } : null;
           const toleranceX = Math.max(1, Math.round(hitTestScaleX * 3));
           const toleranceY = Math.max(1, Math.round(hitTestScaleY * 3));
           let isCovered = false;
 
           try {
-            renderer.setRenderTarget(hitTestRenderTarget);
             for (const [offsetX, offsetY] of hitTestSampleOffsets) {
               const sampleX = bufferX + Math.round(offsetX * toleranceX);
-              const sampleYFromTop = bufferYFromTop + Math.round(offsetY * toleranceY);
+              const sampleY = bufferY - Math.round(offsetY * toleranceY);
 
               if (
                 sampleX < 0 ||
                 sampleX >= hitTestBufferWidth ||
-                sampleYFromTop < 0 ||
-                sampleYFromTop >= hitTestBufferHeight
+                sampleY < 0 ||
+                sampleY >= hitTestBufferHeight
               ) {
                 continue;
               }
 
               hitTestPixel.fill(0);
-              camera.setViewOffset(hitTestBufferWidth, hitTestBufferHeight, sampleX, sampleYFromTop, 1, 1);
-              camera.updateProjectionMatrix();
-              renderer.clear(true, true, true);
-              renderer.render(scene, camera);
-              renderer.readRenderTargetPixels(hitTestRenderTarget, 0, 0, 1, 1, hitTestPixel);
+              renderer.readRenderTargetPixels(hitTestRenderTarget, sampleX, sampleY, 1, 1, hitTestPixel);
 
               if (hitTestPixel[3] >= hitTestAlphaThreshold) {
                 isCovered = true;
@@ -638,21 +669,6 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
             }
           } catch {
             return false;
-          } finally {
-            if (previousCameraView) {
-              camera.setViewOffset(
-                previousCameraView.fullWidth,
-                previousCameraView.fullHeight,
-                previousCameraView.offsetX,
-                previousCameraView.offsetY,
-                previousCameraView.width,
-                previousCameraView.height,
-              );
-            } else {
-              camera.clearViewOffset();
-            }
-            camera.updateProjectionMatrix();
-            renderer.setRenderTarget(previousRenderTarget);
           }
 
           lastHitTestKey = hitTestKey;
@@ -693,6 +709,7 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
           controls?.dispose();
           disposeScene();
           hitTestRenderTarget.dispose();
+          hitTestMaterial.dispose();
           renderer.dispose();
           renderer.domElement.remove();
         };
@@ -1041,7 +1058,7 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
         sculpture.add(model);
         scene.add(sculpture);
 
-        isPointCoveredByModel = isCanvasPixelCovered;
+        isPointCoveredByModel = isRenderedPixelCovered;
         isRockHitTestReady = true;
 
         const displayBox = new THREE.Box3().setFromObject(sculpture);
@@ -1083,6 +1100,7 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
           controls.handleResize();
           controls.update();
           renderer.render(scene, camera);
+          renderHitTestScene();
           renderVersion += 1;
         };
 
@@ -1103,6 +1121,7 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
           applyTerminalOrbit();
           controls.update();
           renderer.render(scene, camera);
+          renderHitTestScene();
           renderVersion += 1;
         };
 
