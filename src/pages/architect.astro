@@ -542,6 +542,18 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
           stencilBuffer: false,
         });
         const hitTestPixel = new Uint8Array(4);
+        const hitTestAlphaThreshold = 96;
+        const hitTestSampleOffsets = [
+          [0, 0],
+          [1, 0],
+          [-1, 0],
+          [0, 1],
+          [0, -1],
+          [0.7, 0.7],
+          [-0.7, 0.7],
+          [0.7, -0.7],
+          [-0.7, -0.7],
+        ];
         const hitTestRect = { left: 0, top: 0, width: 0, height: 0 };
         let hitTestScaleX = 1;
         let hitTestScaleY = 1;
@@ -565,6 +577,8 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
         };
 
         const isCanvasPixelCovered = (clientX, clientY) => {
+          updateHitTestMetrics();
+
           if (
             hitTestRect.width <= 0 ||
             hitTestRect.height <= 0 ||
@@ -591,15 +605,37 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
 
           const previousRenderTarget = renderer.getRenderTarget();
           const previousCameraView = camera.view?.enabled ? { ...camera.view } : null;
-          hitTestPixel.fill(0);
+          const toleranceX = Math.max(1, Math.round(hitTestScaleX * 3));
+          const toleranceY = Math.max(1, Math.round(hitTestScaleY * 3));
+          let isCovered = false;
 
           try {
-            camera.setViewOffset(hitTestBufferWidth, hitTestBufferHeight, bufferX, bufferYFromTop, 1, 1);
-            camera.updateProjectionMatrix();
             renderer.setRenderTarget(hitTestRenderTarget);
-            renderer.clear(true, true, true);
-            renderer.render(scene, camera);
-            renderer.readRenderTargetPixels(hitTestRenderTarget, 0, 0, 1, 1, hitTestPixel);
+            for (const [offsetX, offsetY] of hitTestSampleOffsets) {
+              const sampleX = bufferX + Math.round(offsetX * toleranceX);
+              const sampleYFromTop = bufferYFromTop + Math.round(offsetY * toleranceY);
+
+              if (
+                sampleX < 0 ||
+                sampleX >= hitTestBufferWidth ||
+                sampleYFromTop < 0 ||
+                sampleYFromTop >= hitTestBufferHeight
+              ) {
+                continue;
+              }
+
+              hitTestPixel.fill(0);
+              camera.setViewOffset(hitTestBufferWidth, hitTestBufferHeight, sampleX, sampleYFromTop, 1, 1);
+              camera.updateProjectionMatrix();
+              renderer.clear(true, true, true);
+              renderer.render(scene, camera);
+              renderer.readRenderTargetPixels(hitTestRenderTarget, 0, 0, 1, 1, hitTestPixel);
+
+              if (hitTestPixel[3] >= hitTestAlphaThreshold) {
+                isCovered = true;
+                break;
+              }
+            }
           } catch {
             return false;
           } finally {
@@ -620,7 +656,7 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
           }
 
           lastHitTestKey = hitTestKey;
-          lastHitTestResult = hitTestPixel[3] >= 96;
+          lastHitTestResult = isCovered;
           return lastHitTestResult;
         };
 
