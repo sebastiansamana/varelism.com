@@ -1006,8 +1006,9 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
 
         const fitCamera = () => {
           const width = Math.max(viewer.clientWidth, 1);
-          const height = Math.max(viewer.clientHeight, 1);
-          const aspect = width / height;
+          const renderHeight = Math.max(viewer.clientHeight, 1);
+          const visualHeight = Math.max(Math.min(renderHeight, window.innerHeight || renderHeight), 1);
+          const aspect = width / visualHeight;
           const verticalFov = THREE.MathUtils.degToRad(camera.fov);
           const horizontalFov = 2 * Math.atan(Math.tan(verticalFov / 2) * aspect);
           const limitingFov = Math.min(verticalFov, horizontalFov);
@@ -1021,11 +1022,15 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
           camera.near = Math.max(displayRadius / 320, 0.01);
           camera.far = displayRadius * 90;
           camera.position.copy(target).add(direction.multiplyScalar(distance));
+          camera.clearViewOffset();
+          if (renderHeight > visualHeight + 1) {
+            camera.setViewOffset(width, visualHeight, 0, 0, width, renderHeight);
+          }
           camera.updateProjectionMatrix();
           hasAppliedInitialCameraBookmark = true;
 
           renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
-          renderer.setSize(width, height, false);
+          renderer.setSize(width, renderHeight, false);
           updateHitTestMetrics();
           controls.handleResize();
           controls.update();
@@ -1534,7 +1539,7 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
     height: 100dvh;
     inset: 0 auto auto 0;
     pointer-events: none;
-    position: fixed;
+    position: absolute;
     width: 100vw;
     z-index: 1;
   }
@@ -1622,15 +1627,15 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
     align-self: start;
     bottom: auto;
     grid-area: 1 / 1;
-    height: 100vh;
-    height: 100svh;
-    height: 100dvh;
+    height: calc(100vh + var(--architect-footer-offset));
+    height: calc(100svh + var(--architect-footer-offset));
+    height: calc(100dvh + var(--architect-footer-offset));
     justify-self: start;
     left: 0;
     min-height: 0;
     overflow: visible;
     pointer-events: none;
-    position: fixed;
+    position: relative;
     right: auto;
     touch-action: pan-y pinch-zoom;
     top: 0;
@@ -1719,9 +1724,9 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
     }
 
     .architect-viewer {
-      height: 100vh;
-      height: 100svh;
-      height: 100dvh;
+      height: calc(100vh + var(--architect-footer-offset));
+      height: calc(100svh + var(--architect-footer-offset));
+      height: calc(100dvh + var(--architect-footer-offset));
       width: 100vw;
     }
   }
