@@ -590,6 +590,7 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
           if (hitTestKey === lastHitTestKey) return lastHitTestResult;
 
           const previousRenderTarget = renderer.getRenderTarget();
+          const previousCameraView = camera.view?.enabled ? { ...camera.view } : null;
           hitTestPixel.fill(0);
 
           try {
@@ -602,7 +603,18 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
           } catch {
             return false;
           } finally {
-            camera.clearViewOffset();
+            if (previousCameraView) {
+              camera.setViewOffset(
+                previousCameraView.fullWidth,
+                previousCameraView.fullHeight,
+                previousCameraView.offsetX,
+                previousCameraView.offsetY,
+                previousCameraView.width,
+                previousCameraView.height,
+              );
+            } else {
+              camera.clearViewOffset();
+            }
             camera.updateProjectionMatrix();
             renderer.setRenderTarget(previousRenderTarget);
           }
