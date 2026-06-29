@@ -108,6 +108,8 @@ const sections = [
         };
 
         const isColumnPixel = (event) => {
+          buildHitCanvas();
+
           if (!context || !naturalWidth || !naturalHeight) return false;
 
           const rect = image.getBoundingClientRect();
