@@ -159,6 +159,41 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
 
       const stage = document.querySelector('[data-architect-stage]');
       const controlsElement = stage instanceof HTMLElement ? stage : viewer;
+      const shell = viewer.closest('.site-shell');
+      let stableViewportWidth = 0;
+      let stableViewportOrientation = '';
+      const getViewportOrientation = () =>
+        window.innerWidth > window.innerHeight ? 'landscape' : 'portrait';
+      const isSmallLandscapeViewport = () =>
+        window.matchMedia('(orientation: landscape) and (max-width: 1180px)').matches;
+      const syncArchitectViewportHeight = ({ force = false } = {}) => {
+        if (!(shell instanceof HTMLElement)) return;
+
+        const nextWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+        const nextOrientation = getViewportOrientation();
+
+        if (
+          !force &&
+          isSmallLandscapeViewport() &&
+          nextWidth === stableViewportWidth &&
+          nextOrientation === stableViewportOrientation
+        ) {
+          return;
+        }
+
+        stableViewportWidth = nextWidth;
+        stableViewportOrientation = nextOrientation;
+        shell.style.setProperty(
+          '--architect-viewport-height',
+          `${window.innerHeight || document.documentElement.clientHeight || 1}px`,
+        );
+      };
+
+      syncArchitectViewportHeight({ force: true });
+      const forceSyncArchitectViewportHeight = () => syncArchitectViewportHeight({ force: true });
+      window.addEventListener('resize', syncArchitectViewportHeight);
+      window.addEventListener('orientationchange', forceSyncArchitectViewportHeight);
+      window.visualViewport?.addEventListener('resize', syncArchitectViewportHeight);
 
       if (shouldReplayWithoutPreloader) {
         document.documentElement.classList.add(architectReturnBlankClass);
@@ -1507,6 +1542,12 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
         viewer.classList.remove('is-ready', 'is-return-reveal', 'is-return-reveal-visible', 'is-rock-visible');
         viewer.style.removeProperty('--architect-rock-fade-ms');
         viewer.style.removeProperty('--architect-return-rock-fade-ms');
+        if (shell instanceof HTMLElement) {
+          shell.style.removeProperty('--architect-viewport-height');
+        }
+        window.removeEventListener('resize', syncArchitectViewportHeight);
+        window.removeEventListener('orientationchange', forceSyncArchitectViewportHeight);
+        window.visualViewport?.removeEventListener('resize', syncArchitectViewportHeight);
         if (stage instanceof HTMLElement) {
           stage.classList.remove(
             'is-reveal-sequence',
@@ -1552,9 +1593,7 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
 
   :global(.site-shell) {
     --architect-footer-offset: 7.5rem;
-    min-height: calc(100vh + var(--architect-footer-offset));
-    min-height: calc(100svh + var(--architect-footer-offset));
-    min-height: calc(100dvh + var(--architect-footer-offset));
+    min-height: calc(var(--architect-viewport-height, 100dvh) + var(--architect-footer-offset));
   }
 
   :global(.site-shell > main) {
@@ -1562,9 +1601,7 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
     display: grid !important;
     justify-items: stretch !important;
     max-width: none !important;
-    min-height: calc(100vh + var(--architect-footer-offset)) !important;
-    min-height: calc(100svh + var(--architect-footer-offset)) !important;
-    min-height: calc(100dvh + var(--architect-footer-offset)) !important;
+    min-height: calc(var(--architect-viewport-height, 100dvh) + var(--architect-footer-offset)) !important;
     padding: 0 !important;
     position: relative !important;
     width: 100% !important;
@@ -1576,9 +1613,7 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
     pointer-events: none;
     position: absolute;
     right: 0;
-    top: 100vh;
-    top: 100svh;
-    top: 100dvh;
+    top: var(--architect-viewport-height, 100dvh);
     width: 100%;
     z-index: 20;
   }
@@ -1590,9 +1625,7 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
     grid-area: 1 / 1;
     isolation: isolate;
     justify-self: stretch;
-    min-height: calc(100vh + var(--architect-footer-offset));
-    min-height: calc(100svh + var(--architect-footer-offset));
-    min-height: calc(100dvh + var(--architect-footer-offset));
+    min-height: calc(var(--architect-viewport-height, 100dvh) + var(--architect-footer-offset));
     overflow: visible;
     place-items: center;
     position: relative;
@@ -1614,9 +1647,7 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
   }
 
   .architect-spatial-nav {
-    height: 100vh;
-    height: 100svh;
-    height: 100dvh;
+    height: var(--architect-viewport-height, 100dvh);
     inset: 0 auto auto 0;
     pointer-events: none;
     position: absolute;
@@ -1717,9 +1748,7 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
     align-self: start;
     bottom: auto;
     grid-area: 1 / 1;
-    height: calc(100vh + var(--architect-footer-offset));
-    height: calc(100svh + var(--architect-footer-offset));
-    height: calc(100dvh + var(--architect-footer-offset));
+    height: calc(var(--architect-viewport-height, 100dvh) + var(--architect-footer-offset));
     justify-self: start;
     left: 0;
     min-height: 0;
@@ -1794,9 +1823,7 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
 
   @media (max-width: 560px) {
     .architect-stage {
-      min-height: calc(100vh + var(--architect-footer-offset));
-      min-height: calc(100svh + var(--architect-footer-offset));
-      min-height: calc(100dvh + var(--architect-footer-offset));
+      min-height: calc(var(--architect-viewport-height, 100dvh) + var(--architect-footer-offset));
     }
 
     .architect-spatial-link {
@@ -1814,9 +1841,7 @@ const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
     }
 
     .architect-viewer {
-      height: calc(100vh + var(--architect-footer-offset));
-      height: calc(100svh + var(--architect-footer-offset));
-      height: calc(100dvh + var(--architect-footer-offset));
+      height: calc(var(--architect-viewport-height, 100dvh) + var(--architect-footer-offset));
       width: 100vw;
     }
   }
