@@ -74,7 +74,12 @@ const globalPreloaderPaths = [
           '/author/everything/',
           '/author/everything',
         ];
-        const architectReplayReturnPaths = ['/projects/', '/projects', '/portfolios/', '/portfolios'];
+        const architectReplayReturnPaths = [
+          '/architect/projects/',
+          '/architect/projects',
+          '/architect/portfolios/',
+          '/architect/portfolios',
+        ];
         const isHomePath = (pathname) => pathname === '/' || pathname === '/index.html';
         const isArchitectScenePath = (pathname) => pathname === '/architect/' || pathname === '/architect';
         const clearArchitectSceneReadyFlag = (pathname = window.location.pathname) => {
