@@ -1,7 +1,22 @@
 ---
+import AboutComposition from '../components/AboutComposition.astro';
 import BaseLayout from '../layouts/BaseLayout.astro';
+
+const paragraphs = [
+  'Father plays the guitar at night. In the bunk bed, I clasp my blanket and close my eyes, his voice constant. I feel happy hearing the music, as does my sister below. Mother waits by the door. After the prayer, Father retreats to Mother, silhouettes glowing from the warm light behind.',
+  'I was six then, an age of inventing words. Until Tomorrow is the direct translation. My best word. In Spanish, this means Hasta Mañana and in Catalan Fins Demà. So, I mixed them…',
+  'Samana.',
+  'My purpose is to reach it. Every human has a skill set, I see in me a triptych of author, architect and artist. This would be what I could offer humanity.',
+  'In dreams I can have a clear image of Samana. Releasing visions into reality, in this, the task and mighty labor lies.',
+];
 ---
 
 <BaseLayout title="About | Varelism" description="About.">
-  <section aria-label="About"></section>
+  <AboutComposition
+    caption="portrait"
+    imageAlt="Sebastian Varela portrait"
+    label="About"
+    paragraphs={paragraphs}
+    signature="— Sebastian Varela, 2026"
+  />
 </BaseLayout>
