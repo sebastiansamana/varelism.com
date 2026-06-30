@@ -8,7 +8,7 @@ interface Props {
 const { imageAlt, label, paragraphs } = Astro.props;
 ---
 
-<section class="about-composition" aria-label={label}>
+<section class="about-composition" aria-label={label} data-about-composition>
   <figure class="about-portrait">
     <img
       src="/images/about_me_v2.png"
@@ -29,6 +29,45 @@ const { imageAlt, label, paragraphs } = Astro.props;
   </div>
 </section>
 
+<script>
+  (() => {
+    const revealTextDelayMs = 750;
+    const routeEnterEvent = 'varelism:route-enter';
+    const routeEnteringClass = 'varelism-route-entering';
+
+    const revealAbout = () => {
+      const composition = document.querySelector('[data-about-composition]');
+
+      if (!(composition instanceof HTMLElement) || composition.dataset.aboutRevealBooted === 'true') {
+        return;
+      }
+
+      composition.dataset.aboutRevealBooted = 'true';
+
+      const reveal = () => {
+        composition.classList.add('is-portrait-visible');
+        window.setTimeout(() => {
+          composition.classList.add('is-text-visible');
+        }, revealTextDelayMs);
+      };
+
+      if (document.documentElement.classList.contains(routeEnteringClass)) {
+        window.addEventListener(routeEnterEvent, reveal, { once: true });
+        return;
+      }
+
+      reveal();
+    };
+
+    revealAbout();
+
+    if (window.__varelismAboutRevealReady) return;
+
+    window.__varelismAboutRevealReady = true;
+    document.addEventListener('astro:page-load', revealAbout);
+  })();
+</script>
+
 <style>
   .about-composition {
     align-items: center;
@@ -44,6 +83,8 @@ const { imageAlt, label, paragraphs } = Astro.props;
     display: flex;
     flex-direction: column;
     margin: 0;
+    opacity: 0;
+    transition: opacity 450ms ease;
     width: clamp(9.0625rem, 13.75vw, 12.1875rem);
   }
 
@@ -68,8 +109,15 @@ const { imageAlt, label, paragraphs } = Astro.props;
         clamp(1.25rem, 2.125vw, 1.75rem)
     );
     max-width: min(100%, 51rem);
+    opacity: 0;
     text-align: left;
+    transition: opacity 450ms ease;
     width: 100%;
+  }
+
+  .about-composition.is-portrait-visible .about-portrait,
+  .about-composition.is-text-visible .about-text {
+    opacity: 1;
   }
 
   .about-text p {
