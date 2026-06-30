@@ -1,12 +1,11 @@
 ---
 interface Props {
-  caption: string;
   imageAlt: string;
   label: string;
   paragraphs: string[];
 }
 
-const { caption, imageAlt, label, paragraphs } = Astro.props;
+const { imageAlt, label, paragraphs } = Astro.props;
 ---
 
 <section class="about-composition" aria-label={label}>
@@ -19,7 +18,6 @@ const { caption, imageAlt, label, paragraphs } = Astro.props;
       loading="eager"
       decoding="async"
     />
-    <figcaption>{caption}</figcaption>
   </figure>
 
   <div class="about-text">
@@ -57,24 +55,14 @@ const { caption, imageAlt, label, paragraphs } = Astro.props;
     width: 100%;
   }
 
-  .about-portrait figcaption {
-    color: #919191;
-    font-family: inherit;
-    font-size: 0.58rem;
-    font-weight: 200;
-    line-height: 1;
-    margin-top: 0.35rem;
-    text-align: right;
-  }
-
   .about-text {
     font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
       'Helvetica Neue', Arial, sans-serif;
     font-size: 1.08rem;
-    font-weight: 300;
+    font-weight: 200;
     letter-spacing: 0;
     line-height: 1.58;
-    margin-top: clamp(2.4rem, 5vh, 4rem);
+    margin-top: clamp(3.2rem, 6vh, 5rem);
     max-width: min(100%, 51rem);
     text-align: left;
     width: 100%;
@@ -104,7 +92,7 @@ const { caption, imageAlt, label, paragraphs } = Astro.props;
     .about-text {
       font-size: 0.98rem;
       line-height: 1.55;
-      margin-top: clamp(2rem, 4.5vh, 2.8rem);
+      margin-top: clamp(2.75rem, 5.5vh, 3.6rem);
     }
   }
 </style>
