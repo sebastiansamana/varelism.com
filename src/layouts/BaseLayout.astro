@@ -68,7 +68,7 @@ const languageSwitchHref = getLanguageSwitchHref(Astro.url.pathname);
 const contactHref = isSpanishRoute ? '/esp/contacto/' : '/contact/';
 const contactLabel = isSpanishRoute ? 'contacto' : 'contact';
 const aboutHref = isSpanishRoute ? '/esp/sobre/' : '/about/';
-const aboutLabel = isSpanishRoute ? 'sobre' : 'about';
+const aboutLabel = isSpanishRoute ? 'Acerca' : 'about';
 const buyHref = isSpanishRoute ? '/esp/comprar/' : '/buy/';
 const buyLabel = isSpanishRoute ? 'comprar' : 'buy';
 const globalPreloaderPaths = [
@@ -773,7 +773,7 @@ const globalPreloaderPaths = [
           });
           updateLink('[data-nav-about]', {
             href: isSpanish ? '/esp/sobre/' : '/about/',
-            text: isSpanish ? 'sobre' : 'about',
+            text: isSpanish ? 'Acerca' : 'about',
           });
           updateLink('[data-nav-buy]', {
             ariaLabel: isSpanish ? 'comprar' : 'buy',
