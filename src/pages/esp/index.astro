@@ -65,12 +65,15 @@ const sections = [
         const alphaThreshold = 16;
         const backgroundThreshold = 250;
         const clickMoveTolerance = 10;
+        const coarsePointerQuery = '(hover: none), (pointer: coarse)';
         let context = null;
         let naturalWidth = 0;
         let naturalHeight = 0;
         let pendingColumnClick = null;
         let pointerStart = null;
         let clearGroupTimer = 0;
+
+        const isCoarsePointer = () => Boolean(window.matchMedia?.(coarsePointerQuery)?.matches);
 
         const setGroupHitState = (isHit) => {
           window.clearTimeout(clearGroupTimer);
@@ -125,7 +128,9 @@ const sections = [
         };
 
         const isColumnPixel = (event) => {
-          buildHitCanvas();
+          if (!isCoarsePointer()) {
+            buildHitCanvas();
+          }
 
           if (!context || !naturalWidth || !naturalHeight) return false;
 
@@ -175,22 +180,31 @@ const sections = [
           }
         };
 
-        if (image.complete) {
-          buildHitCanvas();
-        } else {
-          image.addEventListener('load', buildHitCanvas, { once: true });
-        }
+        const prepareFinePointerHitCanvas = () => {
+          if (isCoarsePointer()) return;
 
-        image.decode?.().then(buildHitCanvas).catch(() => {
-          // The load event fallback above covers browsers that reject decode during navigation.
-        });
+          if (image.complete) {
+            buildHitCanvas();
+          } else {
+            image.addEventListener('load', buildHitCanvas, { once: true });
+          }
+
+          image.decode?.().then(buildHitCanvas).catch(() => {
+            // The load event fallback above covers browsers that reject decode during navigation.
+          });
+        };
+
+        const isImmediateColumnTap = (event) =>
+          !context && isCoarsePointer() && isPointInsideImageRect(event);
+
+        prepareFinePointerHitCanvas();
 
         stack.addEventListener('pointermove', (event) => {
           setColumnHitState(isColumnPixel(event));
         });
 
         stack.addEventListener('pointerdown', (event) => {
-          const isHit = isColumnPixel(event);
+          const isHit = isImmediateColumnTap(event) || isColumnPixel(event);
 
           pointerStart = isHit
             ? {
@@ -205,7 +219,7 @@ const sections = [
         stack.addEventListener('pointerup', (event) => {
           if (!pointerStart || pointerStart.id !== event.pointerId) return;
 
-          setColumnHitState(isColumnPixel(event));
+          setColumnHitState(isImmediateColumnTap(event) || isColumnPixel(event));
         });
 
         stack.addEventListener('pointercancel', () => {
@@ -221,7 +235,7 @@ const sections = [
         stack.addEventListener('click', (event) => {
           const movedPastClick = getPointerDistance(event) > clickMoveTolerance;
 
-          if (!movedPastClick && isColumnPixel(event)) {
+          if (!movedPastClick && (isImmediateColumnTap(event) || isColumnPixel(event))) {
             event.preventDefault();
             event.stopPropagation();
             link.click();

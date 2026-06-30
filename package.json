@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
+    "test:home-mobile": "npm run build && node tests/home-cold-mobile-tap.mjs",
     "preview": "astro preview",
     "astro": "astro"
   },
