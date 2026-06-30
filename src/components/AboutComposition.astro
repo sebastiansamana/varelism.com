@@ -4,19 +4,18 @@ interface Props {
   imageAlt: string;
   label: string;
   paragraphs: string[];
-  signature: string;
 }
 
-const { caption, imageAlt, label, paragraphs, signature } = Astro.props;
+const { caption, imageAlt, label, paragraphs } = Astro.props;
 ---
 
 <section class="about-composition" aria-label={label}>
   <figure class="about-portrait">
     <img
-      src="/images/about_me.jpeg"
+      src="/images/about_me_v2.png"
       alt={imageAlt}
-      width="2862"
-      height="3248"
+      width="1254"
+      height="1254"
       loading="eager"
       decoding="async"
     />
@@ -24,8 +23,11 @@ const { caption, imageAlt, label, paragraphs, signature } = Astro.props;
   </figure>
 
   <div class="about-text">
-    {paragraphs.map((paragraph) => <p>{paragraph}</p>)}
-    <p class="about-signature">{signature}</p>
+    {
+      paragraphs.map((paragraph) => (
+        <p class:list={{ 'about-samana': paragraph === 'Samana.' }}>{paragraph}</p>
+      ))
+    }
   </div>
 </section>
 
@@ -44,7 +46,7 @@ const { caption, imageAlt, label, paragraphs, signature } = Astro.props;
     display: flex;
     flex-direction: column;
     margin: 0;
-    width: clamp(7.25rem, 11vw, 9.75rem);
+    width: clamp(9.0625rem, 13.75vw, 12.1875rem);
   }
 
   .about-portrait img {
@@ -86,8 +88,8 @@ const { caption, imageAlt, label, paragraphs, signature } = Astro.props;
     margin-bottom: 0;
   }
 
-  .about-signature {
-    padding-top: 0.15rem;
+  .about-samana {
+    color: #691b17;
   }
 
   @media (max-width: 720px) {
@@ -96,7 +98,7 @@ const { caption, imageAlt, label, paragraphs, signature } = Astro.props;
     }
 
     .about-portrait {
-      width: clamp(6.25rem, 25vw, 7.5rem);
+      width: clamp(7.8125rem, 31.25vw, 9.375rem);
     }
 
     .about-text {
