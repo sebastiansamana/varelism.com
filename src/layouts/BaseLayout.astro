@@ -9,15 +9,79 @@ interface Props {
 }
 
 const { title, description = 'Website under construction.' } = Astro.props;
-const isHomeRoute = Astro.url.pathname === '/' || Astro.url.pathname === '/index.html';
+const normalizeRoutePath = (pathname: string) => {
+  const withoutIndex = pathname.replace(/\/index\.html$/, '') || '/';
+
+  return withoutIndex.length > 1 ? withoutIndex.replace(/\/+$/, '') : withoutIndex;
+};
+const withTrailingSlash = (pathname: string) =>
+  pathname === '/' || pathname === '/esp' ? pathname : `${pathname.replace(/\/+$/, '')}/`;
+const englishToSpanishRoutes = new Map<string, string>([
+  ['/', '/esp'],
+  ['/contact', '/esp/contacto/'],
+  ['/about', '/esp/sobre/'],
+  ['/author', '/esp/autor/'],
+  ['/architect', '/esp/arquitecto/'],
+  ['/artist', '/esp/artista/'],
+  ['/buy', '/esp/comprar/'],
+  ['/author/books', '/esp/autor/libros/'],
+  ['/author/everything', '/esp/autor/todo/'],
+  ['/architect/projects', '/esp/arquitecto/proyectos/'],
+  ['/architect/portfolios', '/esp/arquitecto/portafolios/'],
+  ['/artist/exhibitions', '/esp/artista/exposiciones/'],
+  ['/artist/everything', '/esp/artista/todo/'],
+]);
+const spanishToEnglishRoutes = new Map<string, string>(
+  Array.from(englishToSpanishRoutes.entries()).map(([englishPath, spanishPath]) => [
+    normalizeRoutePath(spanishPath),
+    withTrailingSlash(englishPath),
+  ]),
+);
+const getLanguageSwitchHref = (pathname: string) => {
+  const normalizedPath = normalizeRoutePath(pathname);
+
+  if (normalizedPath.startsWith('/esp/arquitecto/proyectos/')) {
+    const slug = normalizedPath.slice('/esp/arquitecto/proyectos/'.length);
+    return slug ? `/architect/projects/${slug}/` : '/architect/projects/';
+  }
+
+  if (normalizedPath.startsWith('/architect/projects/')) {
+    const slug = normalizedPath.slice('/architect/projects/'.length);
+    return slug ? `/esp/arquitecto/proyectos/${slug}/` : '/esp/arquitecto/proyectos/';
+  }
+
+  if (normalizedPath === '/esp' || normalizedPath.startsWith('/esp/')) {
+    return spanishToEnglishRoutes.get(normalizedPath) ?? '/';
+  }
+
+  return englishToSpanishRoutes.get(normalizedPath) ?? '/esp';
+};
+const normalizedPath = normalizeRoutePath(Astro.url.pathname);
+const isSpanishRoute = normalizedPath === '/esp' || normalizedPath.startsWith('/esp/');
+const isHomeRoute = normalizedPath === '/' || normalizedPath === '/esp';
+const siteNavLabel = isSpanishRoute ? 'Navegación del sitio' : 'Site navigation';
+const primaryNavLabel = isSpanishRoute ? 'Navegación principal' : 'Primary navigation';
+const homeHref = isSpanishRoute ? '/esp' : '/';
+const homeLabel = isSpanishRoute ? 'Inicio de Varelism' : 'Varelism home';
+const languageSwitchLabel = isSpanishRoute ? 'eng' : 'esp';
+const languageSwitchHref = getLanguageSwitchHref(Astro.url.pathname);
+const contactHref = isSpanishRoute ? '/esp/contacto/' : '/contact/';
+const contactLabel = isSpanishRoute ? 'contacto' : 'contact';
+const aboutHref = isSpanishRoute ? '/esp/sobre/' : '/about/';
+const aboutLabel = isSpanishRoute ? 'sobre' : 'about';
+const buyHref = isSpanishRoute ? '/esp/comprar/' : '/buy/';
+const buyLabel = isSpanishRoute ? 'comprar' : 'buy';
 const globalPreloaderPaths = [
   '/',
   '/index.html',
+  '/esp',
+  '/esp/',
+  '/esp/index.html',
 ];
 ---
 
 <!doctype html>
-<html lang="en">
+<html lang={isSpanishRoute ? 'es' : 'en'}>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -76,21 +140,46 @@ const globalPreloaderPaths = [
           '/author/books',
           '/author/everything/',
           '/author/everything',
+          '/esp/autor/libros/',
+          '/esp/autor/libros',
+          '/esp/autor/todo/',
+          '/esp/autor/todo',
         ];
         const artistReplayReturnPaths = [
           '/artist/exhibitions/',
           '/artist/exhibitions',
           '/artist/everything/',
           '/artist/everything',
+          '/esp/artista/exposiciones/',
+          '/esp/artista/exposiciones',
+          '/esp/artista/todo/',
+          '/esp/artista/todo',
         ];
         const architectReplayReturnPaths = [
           '/architect/projects/',
           '/architect/projects',
           '/architect/portfolios/',
           '/architect/portfolios',
+          '/esp/arquitecto/proyectos/',
+          '/esp/arquitecto/proyectos',
+          '/esp/arquitecto/portafolios/',
+          '/esp/arquitecto/portafolios',
         ];
-        const isHomePath = (pathname) => pathname === '/' || pathname === '/index.html';
-        const isArchitectScenePath = (pathname) => pathname === '/architect/' || pathname === '/architect';
+        const normalizeClientPath = (pathname) => {
+          const withoutIndex = pathname.replace(/\/index\.html$/, '') || '/';
+
+          return withoutIndex.length > 1 ? withoutIndex.replace(/\/+$/, '') : withoutIndex;
+        };
+        const isHomePath = (pathname) => {
+          const path = normalizeClientPath(pathname);
+
+          return path === '/' || path === '/esp';
+        };
+        const isArchitectScenePath = (pathname) => {
+          const path = normalizeClientPath(pathname);
+
+          return path === '/architect' || path === '/esp/arquitecto';
+        };
         const clearArchitectSceneReadyFlag = (pathname = window.location.pathname) => {
           if (!isArchitectScenePath(pathname)) return;
 
@@ -175,9 +264,12 @@ const globalPreloaderPaths = [
           pathA === pathB ||
           `${pathA.replace(/\/$/, '')}/` === `${pathB.replace(/\/$/, '')}/`;
 
-        const isAuthorPath = (pathname) => isSamePath(pathname, '/author/');
-        const isArchitectPath = (pathname) => isSamePath(pathname, '/architect/');
-        const isArtistPath = (pathname) => isSamePath(pathname, '/artist/');
+        const isAuthorPath = (pathname) =>
+          isSamePath(pathname, '/author/') || isSamePath(pathname, '/esp/autor/');
+        const isArchitectPath = (pathname) =>
+          isSamePath(pathname, '/architect/') || isSamePath(pathname, '/esp/arquitecto/');
+        const isArtistPath = (pathname) =>
+          isSamePath(pathname, '/artist/') || isSamePath(pathname, '/esp/artista/');
         const isPrimaryHomeReturn = (toPathname, fromPathname) =>
           isHomePath(toPathname) &&
           (isAuthorPath(fromPathname) || isArchitectPath(fromPathname) || isArtistPath(fromPathname));
@@ -599,16 +691,117 @@ const globalPreloaderPaths = [
 
       window.__varelismAstroNavigate = navigate;
     </script>
+    <script is:inline>
+      (() => {
+        const normalizePath = (pathname) => {
+          const withoutIndex = pathname.replace(/\/index\.html$/, '') || '/';
+
+          return withoutIndex.length > 1 ? withoutIndex.replace(/\/+$/, '') : withoutIndex;
+        };
+        const withTrailingSlash = (pathname) =>
+          pathname === '/' || pathname === '/esp' ? pathname : `${pathname.replace(/\/+$/, '')}/`;
+        const englishToSpanishRoutes = new Map([
+          ['/', '/esp'],
+          ['/contact', '/esp/contacto/'],
+          ['/about', '/esp/sobre/'],
+          ['/author', '/esp/autor/'],
+          ['/architect', '/esp/arquitecto/'],
+          ['/artist', '/esp/artista/'],
+          ['/buy', '/esp/comprar/'],
+          ['/author/books', '/esp/autor/libros/'],
+          ['/author/everything', '/esp/autor/todo/'],
+          ['/architect/projects', '/esp/arquitecto/proyectos/'],
+          ['/architect/portfolios', '/esp/arquitecto/portafolios/'],
+          ['/artist/exhibitions', '/esp/artista/exposiciones/'],
+          ['/artist/everything', '/esp/artista/todo/'],
+        ]);
+        const spanishToEnglishRoutes = new Map(
+          Array.from(englishToSpanishRoutes.entries()).map(([englishPath, spanishPath]) => [
+            normalizePath(spanishPath),
+            withTrailingSlash(englishPath),
+          ]),
+        );
+        const isSpanishPath = (pathname) => pathname === '/esp' || pathname.startsWith('/esp/');
+        const getLanguageSwitchHref = (pathname) => {
+          const normalizedPath = normalizePath(pathname);
+
+          if (normalizedPath.startsWith('/esp/arquitecto/proyectos/')) {
+            const slug = normalizedPath.slice('/esp/arquitecto/proyectos/'.length);
+            return slug ? `/architect/projects/${slug}/` : '/architect/projects/';
+          }
+
+          if (normalizedPath.startsWith('/architect/projects/')) {
+            const slug = normalizedPath.slice('/architect/projects/'.length);
+            return slug ? `/esp/arquitecto/proyectos/${slug}/` : '/esp/arquitecto/proyectos/';
+          }
+
+          if (isSpanishPath(normalizedPath)) {
+            return spanishToEnglishRoutes.get(normalizedPath) ?? '/';
+          }
+
+          return englishToSpanishRoutes.get(normalizedPath) ?? '/esp';
+        };
+        const updateLink = (selector, { ariaLabel, href, text }) => {
+          const link = document.querySelector(selector);
+
+          if (!(link instanceof HTMLAnchorElement)) return;
+
+          link.href = href;
+          if (typeof text === 'string') link.textContent = text;
+          if (typeof ariaLabel === 'string') link.setAttribute('aria-label', ariaLabel);
+        };
+        const syncHeaderLanguage = () => {
+          const pathname = normalizePath(window.location.pathname);
+          const isSpanish = isSpanishPath(pathname);
+          const header = document.querySelector('[data-varelism-site-header]');
+          const nav = document.querySelector('[data-varelism-site-nav]');
+
+          header?.setAttribute('aria-label', isSpanish ? 'Navegación del sitio' : 'Site navigation');
+          nav?.setAttribute('aria-label', isSpanish ? 'Navegación principal' : 'Primary navigation');
+
+          updateLink('[data-nav-home]', {
+            ariaLabel: isSpanish ? 'Inicio de Varelism' : 'Varelism home',
+            href: isSpanish ? '/esp' : '/',
+          });
+          updateLink('[data-nav-language]', {
+            href: getLanguageSwitchHref(pathname),
+            text: isSpanish ? 'eng' : 'esp',
+          });
+          updateLink('[data-nav-contact]', {
+            href: isSpanish ? '/esp/contacto/' : '/contact/',
+            text: isSpanish ? 'contacto' : 'contact',
+          });
+          updateLink('[data-nav-about]', {
+            href: isSpanish ? '/esp/sobre/' : '/about/',
+            text: isSpanish ? 'sobre' : 'about',
+          });
+          updateLink('[data-nav-buy]', {
+            ariaLabel: isSpanish ? 'comprar' : 'buy',
+            href: isSpanish ? '/esp/comprar/' : '/buy/',
+          });
+        };
+
+        syncHeaderLanguage();
+
+        if (window.__varelismHeaderLanguageSync) return;
+
+        window.__varelismHeaderLanguageSync = true;
+        document.addEventListener('astro:after-swap', syncHeaderLanguage);
+        document.addEventListener('astro:page-load', syncHeaderLanguage);
+        window.addEventListener('popstate', syncHeaderLanguage);
+      })();
+    </script>
     <title>{title}</title>
   </head>
   <body>
     <div class="site-shell">
       <header
         class="site-header"
-        aria-label="Site navigation"
+        aria-label={siteNavLabel}
+        data-varelism-site-header
         data-astro-transition-persist="varelism-site-header"
       >
-        <a class="site-logo" href="/" aria-label="Varelism home">
+        <a class="site-logo" href={homeHref} aria-label={homeLabel} data-nav-home>
           <span class="image-swap">
             <img
               class="image-swap__base"
@@ -627,10 +820,11 @@ const globalPreloaderPaths = [
             />
           </span>
         </a>
-        <nav class="site-nav" aria-label="Primary navigation">
-          <a href="/contact/">contact</a>
-          <a href="/about/">about</a>
-          <a class="cart-link" href="/buy/" aria-label="buy">
+        <nav class="site-nav" aria-label={primaryNavLabel} data-varelism-site-nav>
+          <a href={languageSwitchHref} data-nav-language>{languageSwitchLabel}</a>
+          <a href={contactHref} data-nav-contact>{contactLabel}</a>
+          <a href={aboutHref} data-nav-about>{aboutLabel}</a>
+          <a class="cart-link" href={buyHref} aria-label={buyLabel} data-nav-buy>
             <span class="image-swap">
               <img
                 class="image-swap__base"

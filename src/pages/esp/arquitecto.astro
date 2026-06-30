@@ -1,0 +1,1858 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+
+const basePath = import.meta.env.BASE_URL === '/' ? '' : import.meta.env.BASE_URL.replace(/\/$/, '');
+const modelUrl = `${basePath}/models/Processed_Rock_Model_optimized.glb`;
+---
+
+<BaseLayout title="Arquitecto | Varelism" description="Arquitecto.">
+  <div class="architect-viewer" data-architect-viewer data-model-url={modelUrl}></div>
+  <section class="architect-stage" data-architect-stage aria-label="Arquitecto">
+    <nav class="architect-spatial-nav" aria-label="Secciones de arquitecto">
+      <a
+        class="architect-spatial-link architect-spatial-link--projects"
+        href="/esp/arquitecto/proyectos"
+        data-architect-spatial-link
+      >
+        Proyectos
+      </a>
+      <a
+        class="architect-spatial-link architect-spatial-link--portfolios"
+        href="/esp/arquitecto/portafolios"
+        data-architect-spatial-link
+      >
+        Portafolios
+      </a>
+    </nav>
+  </section>
+</BaseLayout>
+
+<script>
+  (() => {
+    const stateKey = '__varelismArchitectViewer';
+    const state = (window[stateKey] ||= {
+      dispose: null,
+      listenersAttached: false,
+    });
+    const navigationPreloaderClass = 'home-preloader-navigation-active';
+    const rockControlsLockedClass = 'architect-rock-controls-locked';
+    const architectReturnReplayKey = 'varelism-architect-return-replay';
+    const architectReturnBlankClass = 'architect-return-blank-active';
+    const routeEnteringClass = 'varelism-route-entering';
+    const ARCHITECT_RETURN_BLANK_HOLD_MS = 360;
+    const ARCHITECT_ROCK_FADE_MS = 620;
+    const ARCHITECT_LINK_FADE_MS = 450;
+    const ARCHITECT_PROJECTS_REVEAL_DELAY_MS = ARCHITECT_ROCK_FADE_MS + 240;
+    const ARCHITECT_PORTFOLIOS_REVEAL_DELAY_MS = ARCHITECT_PROJECTS_REVEAL_DELAY_MS + 750;
+    const ARCHITECT_INTRO_ORBIT_RAMP_MS =
+      ARCHITECT_PORTFOLIOS_REVEAL_DELAY_MS - ARCHITECT_PROJECTS_REVEAL_DELAY_MS + ARCHITECT_LINK_FADE_MS;
+    const ARCHITECT_SCENE_READY_EVENT = 'varelism:architect-scene-ready';
+    const ARCHITECT_SCENE_READY_FLAG = '__varelismReady_varelism_architect_scene_ready';
+
+    const clearNavigationPreloaderClassIfIdle = () => {
+      if (
+        document.querySelector(
+          '[data-home-preloader-handoff], [data-home-preloader][data-navigation-preloader="true"]'
+        )
+      ) {
+        return;
+      }
+
+      document.documentElement.classList.remove(navigationPreloaderClass);
+      window.__varelismUnlockNavigationPreloaderScroll?.();
+    };
+
+    const disposeCurrentViewer = () => {
+      if (typeof state.dispose === 'function') {
+        state.dispose();
+        state.dispose = null;
+      }
+    };
+
+    const isSamePath = (pathA, pathB) =>
+      pathA === pathB ||
+      `${pathA.replace(/\/$/, '')}/` === `${pathB.replace(/\/$/, '')}/`;
+
+    const markArchitectReturnReplay = () => {
+      try {
+        sessionStorage.setItem(architectReturnReplayKey, 'true');
+      } catch {
+        // Storage can be unavailable in strict privacy contexts.
+      }
+    };
+
+    const consumeArchitectReturnReplay = () => {
+      try {
+        if (sessionStorage.getItem(architectReturnReplayKey) !== 'true') return false;
+        sessionStorage.removeItem(architectReturnReplayKey);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    const getPendingHandoffState = () => {
+      const visibleHandoff = document.querySelector('[data-home-preloader-handoff]');
+      const visibleHandoffPath = visibleHandoff instanceof HTMLElement ? visibleHandoff.dataset.handoffPath : '';
+      const activeHandoff = window.__varelismActivePreloaderHandoff;
+      const pendingNavigation = window.__varelismPendingPreloaderNavigation;
+      const shouldHonorVisibleHandoff = Boolean(
+        activeHandoff?.startedAt || pendingNavigation?.suppressRoutePreloaderVideo
+      );
+
+      if (
+        visibleHandoff instanceof HTMLElement &&
+        shouldHonorVisibleHandoff &&
+        isSamePath(visibleHandoffPath || window.location.pathname, window.location.pathname)
+      ) {
+        return {
+          cycleComplete: visibleHandoff.dataset.handoffReleased === 'true',
+          pathname: visibleHandoffPath || window.location.pathname,
+        };
+      }
+
+      if (visibleHandoff instanceof HTMLElement && !shouldHonorVisibleHandoff) {
+        visibleHandoff.remove();
+        document.documentElement.classList.remove('home-preloader-handoff-active');
+        clearNavigationPreloaderClassIfIdle();
+      }
+
+      if (
+        activeHandoff?.startedAt &&
+        activeHandoff.pathname &&
+        isSamePath(activeHandoff.pathname, window.location.pathname)
+      ) {
+        return {
+          cycleComplete: Boolean(activeHandoff.cycleComplete),
+          pathname: activeHandoff.pathname,
+        };
+      }
+
+      if (
+        !pendingNavigation?.suppressRoutePreloaderVideo ||
+        !pendingNavigation.pathname ||
+        !isSamePath(pendingNavigation.pathname, window.location.pathname)
+      ) {
+        return null;
+      }
+
+      return {
+        cycleComplete: Boolean(pendingNavigation.handoffCycleComplete),
+        pathname: pendingNavigation.pathname,
+      };
+    };
+
+    const initArchitectViewer = () => {
+      const viewer = document.querySelector('[data-architect-viewer]');
+
+      if (!(viewer instanceof HTMLElement)) {
+        return;
+      }
+
+      const shouldReplayWithoutPreloader = consumeArchitectReturnReplay();
+
+      if (viewer.dataset.viewerBooted === 'true') {
+        if (!shouldReplayWithoutPreloader) return;
+
+        disposeCurrentViewer();
+      }
+
+      const stage = document.querySelector('[data-architect-stage]');
+      const controlsElement = stage instanceof HTMLElement ? stage : viewer;
+      const shell = viewer.closest('.site-shell');
+      let stableViewportWidth = 0;
+      let stableViewportOrientation = '';
+      const getViewportOrientation = () =>
+        window.innerWidth > window.innerHeight ? 'landscape' : 'portrait';
+      const isSmallLandscapeViewport = () =>
+        window.matchMedia('(orientation: landscape) and (max-width: 1180px)').matches;
+      const syncArchitectViewportHeight = ({ force = false } = {}) => {
+        if (!(shell instanceof HTMLElement)) return;
+
+        const nextWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+        const nextOrientation = getViewportOrientation();
+
+        if (
+          !force &&
+          isSmallLandscapeViewport() &&
+          nextWidth === stableViewportWidth &&
+          nextOrientation === stableViewportOrientation
+        ) {
+          return;
+        }
+
+        stableViewportWidth = nextWidth;
+        stableViewportOrientation = nextOrientation;
+        shell.style.setProperty(
+          '--architect-viewport-height',
+          `${window.innerHeight || document.documentElement.clientHeight || 1}px`,
+        );
+      };
+
+      syncArchitectViewportHeight({ force: true });
+      const forceSyncArchitectViewportHeight = () => syncArchitectViewportHeight({ force: true });
+      window.addEventListener('resize', syncArchitectViewportHeight);
+      window.addEventListener('orientationchange', forceSyncArchitectViewportHeight);
+      window.visualViewport?.addEventListener('resize', syncArchitectViewportHeight);
+
+      if (shouldReplayWithoutPreloader) {
+        document.documentElement.classList.add(architectReturnBlankClass);
+        viewer.style.setProperty('--architect-return-rock-fade-ms', `${ARCHITECT_ROCK_FADE_MS}ms`);
+        viewer.classList.add('is-return-reveal');
+        document.querySelectorAll('[data-home-preloader-handoff]').forEach((overlay) => overlay.remove());
+        document.documentElement.classList.remove(
+          'home-preloader-active',
+          'home-preloader-booting',
+          'home-preloader-handoff-active',
+        );
+        document.documentElement.classList.remove(navigationPreloaderClass);
+        window.__varelismUnlockNavigationPreloaderScroll?.();
+        clearNavigationPreloaderClassIfIdle();
+
+        if (window.scrollX || window.scrollY) {
+          window.scrollTo({ left: 0, top: 0, behavior: 'auto' });
+        }
+      }
+
+      disposeCurrentViewer();
+      viewer.dataset.viewerBooted = 'true';
+
+      let didStart = false;
+      let hasDisposed = false;
+      let cleanup = () => {};
+      let observer = null;
+      let startFrameId = 0;
+      let returnBlankTimer = 0;
+      let isModelReady = false;
+      let isPreloaderHiding = false;
+      let cleanupSpatialLinks = () => {};
+      let cleanupSharedPreloaderComplete = () => {};
+      let enableRockControls = () => {};
+      let startIntroOrbitRamp = () => {};
+      let cancelIntroOrbitRamp = () => {};
+      let isRockInteractionLocked = !shouldReplayWithoutPreloader;
+      let isPointCoveredByModel = () => true;
+      let isRockHitTestReady = false;
+      let hasStartedRevealSequence = false;
+      const preloaderTimers = new Set();
+      const hasActivePreloaderSurface = () =>
+        Boolean(document.querySelector('[data-home-preloader].is-visible, [data-home-preloader-handoff]'));
+      const isRouteEntering = () => document.documentElement.classList.contains(routeEnteringClass);
+      const spatialLinks = Array.from(controlsElement.querySelectorAll('[data-architect-spatial-link]')).filter(
+        (link) => link instanceof HTMLAnchorElement,
+      );
+      const getSpatialLinks = () => spatialLinks;
+
+      const setPreloaderTimer = (callback, delay) => {
+        const timer = window.setTimeout(() => {
+          preloaderTimers.delete(timer);
+          if (!hasDisposed) callback();
+        }, delay);
+        preloaderTimers.add(timer);
+        return timer;
+      };
+
+      const lockRockControlsBehindPreloader = () => {
+        isRockInteractionLocked = true;
+        document.documentElement.classList.add(rockControlsLockedClass);
+      };
+
+      const unlockRockControlsAfterPreloader = () => {
+        isRockInteractionLocked = false;
+        document.documentElement.classList.remove(rockControlsLockedClass);
+        enableRockControls();
+      };
+
+      if (isRockInteractionLocked) {
+        lockRockControlsBehindPreloader();
+      }
+
+      const unlockPageBehindPreloader = () => {
+      };
+
+      viewer.style.setProperty('--architect-rock-fade-ms', `${ARCHITECT_ROCK_FADE_MS}ms`);
+      if (stage instanceof HTMLElement) {
+        stage.style.setProperty('--architect-link-fade-ms', `${ARCHITECT_LINK_FADE_MS}ms`);
+        stage.classList.add('is-reveal-sequence');
+      }
+
+      const startArchitectRevealSequence = ({ returnReveal = false } = {}) => {
+        if (hasDisposed || hasStartedRevealSequence) return;
+        hasStartedRevealSequence = true;
+
+        viewer.classList.add(returnReveal ? 'is-return-reveal-visible' : 'is-rock-visible');
+
+        if (!(stage instanceof HTMLElement)) return;
+
+        setPreloaderTimer(() => {
+          stage.classList.add('is-projects-visible');
+          startIntroOrbitRamp();
+        }, ARCHITECT_PROJECTS_REVEAL_DELAY_MS);
+
+        setPreloaderTimer(() => {
+          stage.classList.add('is-portfolios-visible');
+        }, ARCHITECT_PORTFOLIOS_REVEAL_DELAY_MS);
+      };
+
+      const clearPendingArchitectPreloader = () => {
+        const pendingNavigation = window.__varelismPendingPreloaderNavigation;
+
+        if (pendingNavigation?.pathname && isSamePath(pendingNavigation.pathname, window.location.pathname)) {
+          window.__varelismPendingPreloaderNavigation = null;
+        }
+      };
+
+      const signalArchitectSceneReady = () => {
+        if (window[ARCHITECT_SCENE_READY_FLAG]) return;
+
+        window.__varelismArchitectSceneReady = true;
+        window[ARCHITECT_SCENE_READY_FLAG] = true;
+        window.dispatchEvent(new CustomEvent(ARCHITECT_SCENE_READY_EVENT));
+      };
+
+      const removePreloader = () => {
+        clearPendingArchitectPreloader();
+        if (isModelReady) {
+          if (isRouteEntering()) {
+            setPreloaderTimer(removePreloader, 30);
+          } else {
+            startArchitectRevealSequence();
+          }
+        }
+        unlockRockControlsAfterPreloader();
+        clearNavigationPreloaderClassIfIdle();
+      };
+
+      const hidePreloaderWhenReady = () => {
+        if (
+          hasDisposed ||
+          isPreloaderHiding ||
+          !isModelReady
+        ) {
+          return;
+        }
+
+        isPreloaderHiding = true;
+        signalArchitectSceneReady();
+        if (!hasActivePreloaderSurface()) {
+          removePreloader();
+        }
+      };
+
+      if (!shouldReplayWithoutPreloader) {
+        const onSharedPreloaderComplete = () => {
+          if (!isSamePath(window.location.pathname, '/esp/arquitecto/')) return;
+
+          cleanupSharedPreloaderComplete();
+          removePreloader();
+        };
+
+        window.addEventListener('varelism:preloader-complete', onSharedPreloaderComplete);
+        cleanupSharedPreloaderComplete = () => {
+          window.removeEventListener('varelism:preloader-complete', onSharedPreloaderComplete);
+          cleanupSharedPreloaderComplete = () => {};
+        };
+      }
+
+      const installSpatialLinkGuards = () => {
+        const spatialLinks = getSpatialLinks();
+        const dragThreshold = 10;
+        let activePointer = null;
+        let hoveredLink = null;
+        let suppressedClickLink = null;
+
+        const getEventPoint = (event) => {
+          if (typeof event.clientX === 'number' && typeof event.clientY === 'number') {
+            return { x: event.clientX, y: event.clientY };
+          }
+
+          const touch = event.changedTouches?.[0] || event.touches?.[0];
+          if (!touch) return null;
+          return { x: touch.clientX, y: touch.clientY };
+        };
+
+        const isVisibleLinkHit = (event) => {
+          const point = getEventPoint(event);
+          return Boolean(point && !isPointCoveredByModel(point.x, point.y));
+        };
+
+        const setHoveredLink = (link) => {
+          if (hoveredLink === link) return;
+          hoveredLink?.classList.remove('is-visible-hit');
+          hoveredLink = link;
+          hoveredLink?.classList.add('is-visible-hit');
+        };
+
+        const onPointerDown = (event) => {
+          if (!isVisibleLinkHit(event)) {
+            suppressedClickLink = event.currentTarget;
+            setHoveredLink(null);
+            return;
+          }
+
+          event.stopPropagation();
+          suppressedClickLink = null;
+          setHoveredLink(event.currentTarget);
+          activePointer = {
+            id: event.pointerId,
+            link: event.currentTarget,
+            startX: event.clientX,
+            startY: event.clientY,
+            hasDragged: false,
+            startedVisible: true,
+          };
+          event.currentTarget.setPointerCapture?.(event.pointerId);
+        };
+
+        const onPointerMove = (event) => {
+          const isVisible = isVisibleLinkHit(event);
+
+          if (isVisible) {
+            setHoveredLink(event.currentTarget);
+          } else if (hoveredLink === event.currentTarget) {
+            setHoveredLink(null);
+          }
+
+          if (!activePointer || activePointer.id !== event.pointerId) return;
+          if (activePointer.link !== event.currentTarget) return;
+
+          if (!activePointer.startedVisible) {
+            return;
+          }
+
+          event.stopPropagation();
+
+          const deltaX = event.clientX - activePointer.startX;
+          const deltaY = event.clientY - activePointer.startY;
+          if (Math.hypot(deltaX, deltaY) > dragThreshold) {
+            activePointer.hasDragged = true;
+          }
+        };
+
+        const onPointerUp = (event) => {
+          if (!activePointer || activePointer.id !== event.pointerId) return;
+          if (activePointer.startedVisible) {
+            event.stopPropagation();
+          }
+
+          if (activePointer.hasDragged) {
+            const linkToSuppress = activePointer.link;
+            suppressedClickLink = linkToSuppress;
+            window.setTimeout(() => {
+              if (suppressedClickLink === linkToSuppress) suppressedClickLink = null;
+            }, 0);
+          }
+
+          activePointer = null;
+        };
+
+        const onPointerCancel = (event) => {
+          if (activePointer?.startedVisible) {
+            event.stopPropagation();
+          }
+
+          activePointer = null;
+          suppressedClickLink = null;
+          setHoveredLink(null);
+        };
+
+        const onPointerEnter = (event) => {
+          if (isVisibleLinkHit(event)) {
+            setHoveredLink(event.currentTarget);
+          }
+        };
+
+        const onPointerLeave = (event) => {
+          if (hoveredLink === event.currentTarget) {
+            setHoveredLink(null);
+          }
+        };
+
+        const onClick = (event) => {
+          const isSuppressed = suppressedClickLink === event.currentTarget || !isVisibleLinkHit(event);
+          if (!isSuppressed) {
+            markArchitectReturnReplay();
+            return;
+          }
+
+          event.preventDefault();
+          event.stopPropagation();
+          event.stopImmediatePropagation();
+          suppressedClickLink = null;
+          setHoveredLink(null);
+        };
+
+        const stopTouchPropagation = (event) => {
+          if (isVisibleLinkHit(event)) {
+            event.stopPropagation();
+          }
+        };
+
+        spatialLinks.forEach((link) => {
+          link.addEventListener('pointerenter', onPointerEnter);
+          link.addEventListener('pointerleave', onPointerLeave);
+          link.addEventListener('pointerdown', onPointerDown);
+          link.addEventListener('pointermove', onPointerMove);
+          link.addEventListener('pointerup', onPointerUp);
+          link.addEventListener('pointercancel', onPointerCancel);
+          link.addEventListener('click', onClick);
+          link.addEventListener('touchstart', stopTouchPropagation);
+          link.addEventListener('touchmove', stopTouchPropagation);
+          link.addEventListener('touchend', stopTouchPropagation);
+          link.addEventListener('touchcancel', stopTouchPropagation);
+        });
+
+        cleanupSpatialLinks = () => {
+          setHoveredLink(null);
+          spatialLinks.forEach((link) => {
+            link.removeEventListener('pointerenter', onPointerEnter);
+            link.removeEventListener('pointerleave', onPointerLeave);
+            link.removeEventListener('pointerdown', onPointerDown);
+            link.removeEventListener('pointermove', onPointerMove);
+            link.removeEventListener('pointerup', onPointerUp);
+            link.removeEventListener('pointercancel', onPointerCancel);
+            link.removeEventListener('click', onClick);
+            link.removeEventListener('touchstart', stopTouchPropagation);
+            link.removeEventListener('touchmove', stopTouchPropagation);
+            link.removeEventListener('touchend', stopTouchPropagation);
+            link.removeEventListener('touchcancel', stopTouchPropagation);
+          });
+        };
+      };
+
+      installSpatialLinkGuards();
+
+      const startViewer = async () => {
+        if (didStart || hasDisposed) return;
+        didStart = true;
+        const modelUrl = viewer.dataset.modelUrl || '/models/Processed_Rock_Model_optimized.glb';
+        const modelPath = modelUrl.slice(0, modelUrl.lastIndexOf('/') + 1);
+        const modelFetchController = new AbortController();
+        const modelBufferPromise = fetch(modelUrl, {
+          signal: modelFetchController.signal,
+        }).then((response) => {
+          if (!response.ok) {
+            throw new Error(`Architect model failed to load: ${response.status}`);
+          }
+
+          return response.arrayBuffer();
+        });
+        modelBufferPromise.catch(() => {
+          // The promise is awaited below; this prevents an abort during page swap from surfacing as unhandled.
+        });
+
+        const [THREE, { GLTFLoader }, { TrackballControls }, { MeshoptDecoder }] = await Promise.all([
+          import('three'),
+          import('three/examples/jsm/loaders/GLTFLoader.js'),
+          import('three/examples/jsm/controls/TrackballControls.js'),
+          import('three/examples/jsm/libs/meshopt_decoder.module.js'),
+        ]);
+        if (hasDisposed) return;
+        THREE.Cache.enabled = true;
+
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(37, 1, 0.01, 100);
+        const renderer = new THREE.WebGLRenderer({
+          alpha: true,
+          antialias: true,
+          powerPreference: 'high-performance',
+        });
+        const INITIAL_MODEL_ROTATION_DEGREES = { x: 0, y: 54, z: 0 };
+        const INITIAL_CAMERA_DIRECTION = new THREE.Vector3(0.43, 0.41, -0.8).normalize();
+        let resizeObserver = null;
+        let frameId = 0;
+        let resizeFrameId = 0;
+        let isRenderLoopRunning = false;
+        let requestRender = () => {};
+        let onVisibilityChange = null;
+        let controls = null;
+        let introOrbitFrameId = 0;
+        const preventTouchMove = (event) => {
+          if (isRockInteractionLocked) return;
+          if (orbitGesture.activePointerId === null) return;
+          if (event.cancelable) event.preventDefault();
+        };
+        const hitTestRenderTarget = new THREE.WebGLRenderTarget(1, 1, {
+          depthBuffer: true,
+          stencilBuffer: false,
+        });
+        const hitTestMaterial = new THREE.MeshBasicMaterial({
+          color: 0xffffff,
+          side: THREE.DoubleSide,
+        });
+        const hitTestPixel = new Uint8Array(4);
+        const hitTestAlphaThreshold = 96;
+        const hitTestMaxDimension = 960;
+        const hitTestSampleOffsets = [
+          [0, 0],
+          [1, 0],
+          [-1, 0],
+          [0, 1],
+          [0, -1],
+          [0.7, 0.7],
+          [-0.7, 0.7],
+          [0.7, -0.7],
+          [-0.7, -0.7],
+        ];
+        const hitTestRect = { left: 0, top: 0, width: 0, height: 0 };
+        let hitTestScaleX = 1;
+        let hitTestScaleY = 1;
+        let hitTestBufferWidth = 0;
+        let hitTestBufferHeight = 0;
+        let renderVersion = 0;
+        let hitTestRenderVersion = -1;
+        let lastHitTestKey = '';
+        let lastHitTestResult = false;
+
+        const updateHitTestMetrics = () => {
+          const rect = renderer.domElement.getBoundingClientRect();
+          hitTestRect.left = rect.left;
+          hitTestRect.top = rect.top;
+          hitTestRect.width = rect.width;
+          hitTestRect.height = rect.height;
+          const rendererContext = renderer.getContext();
+          const drawingBufferWidth = rendererContext.drawingBufferWidth;
+          const drawingBufferHeight = rendererContext.drawingBufferHeight;
+          const hitTestScale = Math.min(
+            1,
+            hitTestMaxDimension / Math.max(drawingBufferWidth || 1, drawingBufferHeight || 1),
+          );
+          const nextHitTestBufferWidth = Math.max(1, Math.round(drawingBufferWidth * hitTestScale));
+          const nextHitTestBufferHeight = Math.max(1, Math.round(drawingBufferHeight * hitTestScale));
+
+          if (
+            nextHitTestBufferWidth !== hitTestBufferWidth ||
+            nextHitTestBufferHeight !== hitTestBufferHeight
+          ) {
+            hitTestBufferWidth = nextHitTestBufferWidth;
+            hitTestBufferHeight = nextHitTestBufferHeight;
+            hitTestRenderTarget.setSize(hitTestBufferWidth, hitTestBufferHeight);
+            hitTestRenderVersion = -1;
+            lastHitTestKey = '';
+          }
+
+          hitTestScaleX = hitTestRect.width > 0 ? hitTestBufferWidth / hitTestRect.width : 1;
+          hitTestScaleY = hitTestRect.height > 0 ? hitTestBufferHeight / hitTestRect.height : 1;
+        };
+
+        const renderHitTestScene = () => {
+          if (!hitTestBufferWidth || !hitTestBufferHeight) return;
+
+          const previousRenderTarget = renderer.getRenderTarget();
+          const previousOverrideMaterial = scene.overrideMaterial;
+
+          try {
+            scene.overrideMaterial = hitTestMaterial;
+            renderer.setRenderTarget(hitTestRenderTarget);
+            renderer.clear(true, true, true);
+            renderer.render(scene, camera);
+          } finally {
+            scene.overrideMaterial = previousOverrideMaterial;
+            renderer.setRenderTarget(previousRenderTarget);
+          }
+
+          hitTestRenderVersion = renderVersion;
+        };
+
+        const isRenderedPixelCovered = (clientX, clientY) => {
+          updateHitTestMetrics();
+
+          if (
+            hitTestRect.width <= 0 ||
+            hitTestRect.height <= 0 ||
+            hitTestBufferWidth <= 0 ||
+            hitTestBufferHeight <= 0 ||
+            clientX < hitTestRect.left ||
+            clientX > hitTestRect.left + hitTestRect.width ||
+            clientY < hitTestRect.top ||
+            clientY > hitTestRect.top + hitTestRect.height
+          ) {
+            return false;
+          }
+
+          const bufferX = Math.floor((clientX - hitTestRect.left) * hitTestScaleX);
+          const bufferYFromTop = Math.floor((clientY - hitTestRect.top) * hitTestScaleY);
+          const bufferY = hitTestBufferHeight - 1 - bufferYFromTop;
+
+          if (bufferX < 0 || bufferX >= hitTestBufferWidth || bufferY < 0 || bufferY >= hitTestBufferHeight) {
+            return false;
+          }
+
+          const hitTestKey = `${renderVersion}:${bufferX}:${bufferY}`;
+          if (hitTestKey === lastHitTestKey) return lastHitTestResult;
+
+          if (hitTestRenderVersion !== renderVersion) {
+            renderHitTestScene();
+          }
+
+          const toleranceX = Math.max(1, Math.round(hitTestScaleX * 3));
+          const toleranceY = Math.max(1, Math.round(hitTestScaleY * 3));
+          let isCovered = false;
+
+          try {
+            for (const [offsetX, offsetY] of hitTestSampleOffsets) {
+              const sampleX = bufferX + Math.round(offsetX * toleranceX);
+              const sampleY = bufferY - Math.round(offsetY * toleranceY);
+
+              if (
+                sampleX < 0 ||
+                sampleX >= hitTestBufferWidth ||
+                sampleY < 0 ||
+                sampleY >= hitTestBufferHeight
+              ) {
+                continue;
+              }
+
+              hitTestPixel.fill(0);
+              renderer.readRenderTargetPixels(hitTestRenderTarget, sampleX, sampleY, 1, 1, hitTestPixel);
+
+              if (hitTestPixel[3] >= hitTestAlphaThreshold) {
+                isCovered = true;
+                break;
+              }
+            }
+          } catch {
+            return false;
+          }
+
+          lastHitTestKey = hitTestKey;
+          lastHitTestResult = isCovered;
+          return lastHitTestResult;
+        };
+
+        const disposeObject = (object) => {
+          object.traverse((child) => {
+            if (!child.isMesh) return;
+            child.geometry?.dispose();
+            const materials = Array.isArray(child.material) ? child.material : [child.material];
+            materials.forEach((material) => material?.dispose());
+          });
+        };
+
+        const disposeScene = () => {
+          disposeObject(scene);
+        };
+
+        cleanup = () => {
+          window.cancelAnimationFrame(frameId);
+          window.cancelAnimationFrame(resizeFrameId);
+          window.cancelAnimationFrame(introOrbitFrameId);
+          introOrbitFrameId = 0;
+          isRenderLoopRunning = false;
+          modelFetchController.abort();
+          resizeObserver?.disconnect();
+          if (onVisibilityChange) {
+            document.removeEventListener('visibilitychange', onVisibilityChange);
+          }
+          controlsElement.removeEventListener('touchmove', preventTouchMove);
+          controlsElement.removeEventListener('pointerdown', onOrbitPointerDown, { capture: true });
+          window.removeEventListener('pointermove', onOrbitPointerMove);
+          window.removeEventListener('pointerup', onOrbitPointerEnd);
+          window.removeEventListener('pointercancel', onOrbitPointerCancel);
+          controlsElement.removeEventListener('lostpointercapture', onOrbitLostPointerCapture);
+          controls?.dispose();
+          disposeScene();
+          hitTestRenderTarget.dispose();
+          hitTestMaterial.dispose();
+          renderer.dispose();
+          renderer.domElement.remove();
+        };
+
+        renderer.outputColorSpace = THREE.SRGBColorSpace;
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFShadowMap;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.04;
+        renderer.setClearColor(0xffffff, 0);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+        viewer.appendChild(renderer.domElement);
+
+        const hemisphere = new THREE.HemisphereLight(0xffffff, 0xe8e1d6, 1.45);
+        const key = new THREE.DirectionalLight(0xffffff, 5.2);
+        const fill = new THREE.DirectionalLight(0xf3efe8, 0.55);
+
+        key.position.set(3.6, 5.2, 4.4);
+        key.castShadow = true;
+        key.shadow.mapSize.set(2048, 2048);
+        key.shadow.bias = -0.00008;
+        fill.position.set(-4.2, 1.8, -3.8);
+        scene.add(hemisphere, key, fill);
+
+        controls = new TrackballControls(camera, controlsElement);
+        controls.noPan = true;
+        controls.noZoom = true;
+        controls.rotateSpeed = 0.55;
+        controls.staticMoving = false;
+        controls.dynamicDampingFactor = 0.055;
+        controls.target.set(0, 0, 0);
+        controls.enabled = false;
+        controlsElement.style.touchAction = 'pan-y pinch-zoom';
+        enableRockControls = () => {
+          if (controls) controls.enabled = false;
+          controlsElement.style.touchAction = 'pan-y pinch-zoom';
+        };
+
+        const orbitEye = new THREE.Vector3();
+        const orbitEyeDirection = new THREE.Vector3();
+        const orbitUpDirection = new THREE.Vector3();
+        const orbitSidewaysDirection = new THREE.Vector3();
+        const orbitMoveDirection = new THREE.Vector3();
+        const orbitAxisScratch = new THREE.Vector3();
+        const terminalOrbit = {
+          active: false,
+          paused: false,
+          axis: new THREE.Vector3(),
+          rampAngle: null,
+        };
+        const orbitGesture = {
+          activePointerId: null,
+          startX: 0,
+          startY: 0,
+          lastX: 0,
+          lastY: 0,
+          hasDragged: false,
+        };
+        const orbitDragThreshold = 5;
+        const terminalOrbitAngle = 0.0046;
+        const minimumCapturedOrbitAngle = 0.00008;
+
+        const pauseTerminalOrbit = () => {
+          if (terminalOrbit.active) terminalOrbit.paused = true;
+        };
+
+        const resumeTerminalOrbit = () => {
+          terminalOrbit.paused = false;
+        };
+
+        const stopTerminalOrbit = () => {
+          terminalOrbit.active = false;
+          terminalOrbit.paused = false;
+          terminalOrbit.rampAngle = null;
+        };
+
+        const setOrbitGestureEnabled = (isEnabled) => {
+          if (controls) controls.enabled = isEnabled && !isRockInteractionLocked;
+          controlsElement.classList.toggle('is-rock-orbit-active', Boolean(isEnabled && !isRockInteractionLocked));
+        };
+
+        const clearOrbitGesture = () => {
+          orbitGesture.activePointerId = null;
+          orbitGesture.hasDragged = false;
+          setOrbitGestureEnabled(false);
+        };
+
+        const didPointerStartOnRock = (event) =>
+          isRockHitTestReady &&
+          typeof event.clientX === 'number' &&
+          typeof event.clientY === 'number' &&
+          isPointCoveredByModel(event.clientX, event.clientY);
+
+        let hasStartedIntroOrbitRamp = false;
+        let hasCancelledIntroOrbitRamp = false;
+        let hasCompletedIntroOrbitRamp = false;
+
+        const getOrbitAxisFromScreenDelta = (deltaX, deltaY, threshold = orbitDragThreshold) => {
+          if (Math.hypot(deltaX, deltaY) <= threshold) return null;
+          orbitEye.subVectors(camera.position, controls.target);
+          orbitEyeDirection.copy(orbitEye).normalize();
+          orbitUpDirection.copy(camera.up).normalize().multiplyScalar(deltaY);
+          orbitSidewaysDirection.copy(camera.up).cross(orbitEyeDirection).normalize().multiplyScalar(deltaX);
+          orbitMoveDirection.copy(orbitUpDirection).add(orbitSidewaysDirection);
+          orbitAxisScratch.crossVectors(orbitMoveDirection, orbitEye).normalize();
+
+          return orbitAxisScratch.lengthSq() > 0.000001 ? orbitAxisScratch : null;
+        };
+
+        const getFallbackOrbitAxis = () => {
+          const deltaX = orbitGesture.lastX - orbitGesture.startX;
+          const deltaY = orbitGesture.lastY - orbitGesture.startY;
+          return getOrbitAxisFromScreenDelta(deltaX, deltaY);
+        };
+
+        const getIntroOrbitAxis = () => getOrbitAxisFromScreenDelta(-1, 0, 0);
+
+        cancelIntroOrbitRamp = () => {
+          if (hasCompletedIntroOrbitRamp) return;
+          hasCancelledIntroOrbitRamp = true;
+          if (introOrbitFrameId) {
+            window.cancelAnimationFrame(introOrbitFrameId);
+            introOrbitFrameId = 0;
+          }
+          terminalOrbit.active = false;
+          terminalOrbit.paused = false;
+          terminalOrbit.rampAngle = null;
+          if (typeof controls?._lastAngle === 'number') controls._lastAngle = 0;
+        };
+
+        startIntroOrbitRamp = () => {
+          if (hasDisposed || hasStartedIntroOrbitRamp || hasCancelledIntroOrbitRamp || !controls) return;
+          const introAxis = getIntroOrbitAxis();
+          if (!introAxis) return;
+
+          hasStartedIntroOrbitRamp = true;
+          terminalOrbit.axis.copy(introAxis).normalize();
+          terminalOrbit.active = true;
+          terminalOrbit.paused = false;
+          terminalOrbit.rampAngle = 0;
+          if (controls._lastAxis) controls._lastAxis.copy(terminalOrbit.axis);
+          if (typeof controls._lastAngle === 'number') controls._lastAngle = 0;
+
+          const startedAt = window.performance.now();
+          const updateIntroOrbitRamp = (timestamp) => {
+            introOrbitFrameId = 0;
+            if (hasDisposed || hasCancelledIntroOrbitRamp || orbitGesture.activePointerId !== null) {
+              terminalOrbit.active = false;
+              terminalOrbit.rampAngle = null;
+              return;
+            }
+
+            const progress = Math.min(1, Math.max(0, (timestamp - startedAt) / ARCHITECT_INTRO_ORBIT_RAMP_MS));
+            terminalOrbit.rampAngle = terminalOrbitAngle * progress * progress;
+            requestRender();
+
+            if (progress < 1) {
+              introOrbitFrameId = window.requestAnimationFrame(updateIntroOrbitRamp);
+              return;
+            }
+
+            hasCompletedIntroOrbitRamp = true;
+            terminalOrbit.rampAngle = null;
+            terminalOrbit.active = true;
+            terminalOrbit.paused = false;
+            if (controls._lastAxis) controls._lastAxis.copy(terminalOrbit.axis);
+            if (typeof controls._lastAngle === 'number' && Math.abs(controls._lastAngle) < terminalOrbitAngle) {
+              controls._lastAngle = terminalOrbitAngle;
+            }
+            requestRender();
+          };
+
+          introOrbitFrameId = window.requestAnimationFrame(updateIntroOrbitRamp);
+          requestRender();
+        };
+
+        const captureTerminalOrbit = () => {
+          const angle = Math.abs(controls?._lastAngle || 0);
+          const axis = controls?._lastAxis;
+          const hasTrackedAxis = axis && typeof axis.lengthSq === 'function' && axis.lengthSq() > 0.000001;
+          const fallbackAxis = getFallbackOrbitAxis();
+          const capturedAxis =
+            hasTrackedAxis && angle > terminalOrbitAngle * 1.2 ? axis : fallbackAxis || axis;
+
+          if (!capturedAxis || capturedAxis.lengthSq() <= 0.000001) {
+            stopTerminalOrbit();
+            return;
+          }
+
+          terminalOrbit.axis.copy(capturedAxis).normalize();
+          terminalOrbit.rampAngle = null;
+          if (angle < Math.max(minimumCapturedOrbitAngle, terminalOrbitAngle)) {
+            controls._lastAngle = terminalOrbitAngle;
+          }
+          terminalOrbit.active = true;
+          terminalOrbit.paused = false;
+          requestRender();
+        };
+
+        const onOrbitPointerDown = (event) => {
+          if (isRockInteractionLocked) return;
+          if (event.button !== undefined && event.button !== 0) return;
+          if (orbitGesture.activePointerId !== null) return;
+          if (!didPointerStartOnRock(event)) {
+            setOrbitGestureEnabled(false);
+            return;
+          }
+
+          if (event.cancelable) event.preventDefault();
+          setOrbitGestureEnabled(true);
+          cancelIntroOrbitRamp();
+          orbitGesture.activePointerId = event.pointerId;
+          orbitGesture.startX = event.clientX;
+          orbitGesture.startY = event.clientY;
+          orbitGesture.lastX = event.clientX;
+          orbitGesture.lastY = event.clientY;
+          orbitGesture.hasDragged = false;
+          pauseTerminalOrbit();
+          requestRender();
+        };
+
+        const onOrbitPointerMove = (event) => {
+          if (isRockInteractionLocked) return;
+          if (orbitGesture.activePointerId !== event.pointerId) return;
+          if (event.cancelable) event.preventDefault();
+
+          const deltaX = event.clientX - orbitGesture.startX;
+          const deltaY = event.clientY - orbitGesture.startY;
+          orbitGesture.lastX = event.clientX;
+          orbitGesture.lastY = event.clientY;
+          if (Math.hypot(deltaX, deltaY) <= orbitDragThreshold) return;
+
+          orbitGesture.hasDragged = true;
+          cancelIntroOrbitRamp();
+          stopTerminalOrbit();
+          requestRender();
+        };
+
+        const onOrbitPointerEnd = (event) => {
+          if (isRockInteractionLocked) return;
+          if (orbitGesture.activePointerId !== event.pointerId) return;
+
+          const didDrag = orbitGesture.hasDragged;
+          orbitGesture.lastX = event.clientX;
+          orbitGesture.lastY = event.clientY;
+
+          if (didDrag) {
+            captureTerminalOrbit();
+          } else {
+            resumeTerminalOrbit();
+          }
+          clearOrbitGesture();
+          requestRender();
+        };
+
+        const onOrbitPointerCancel = (event) => {
+          if (isRockInteractionLocked) return;
+          if (orbitGesture.activePointerId !== event.pointerId) return;
+
+          clearOrbitGesture();
+          resumeTerminalOrbit();
+          requestRender();
+        };
+
+        const onOrbitLostPointerCapture = (event) => {
+          if (orbitGesture.activePointerId !== event.pointerId) return;
+
+          clearOrbitGesture();
+          resumeTerminalOrbit();
+          requestRender();
+        };
+
+        const applyTerminalOrbit = () => {
+          if (!terminalOrbit.active || terminalOrbit.paused || orbitGesture.activePointerId !== null) return;
+          if (!controls?._lastAxis || typeof controls._lastAngle !== 'number') return;
+
+          const targetAngle = terminalOrbit.rampAngle ?? terminalOrbitAngle;
+          controls._lastAxis.copy(terminalOrbit.axis);
+          if (Math.abs(controls._lastAngle) < targetAngle) {
+            controls._lastAngle = targetAngle;
+          }
+        };
+
+        controlsElement.addEventListener('touchmove', preventTouchMove, { passive: false });
+        controlsElement.addEventListener('pointerdown', onOrbitPointerDown, { capture: true });
+        window.addEventListener('pointermove', onOrbitPointerMove);
+        window.addEventListener('pointerup', onOrbitPointerEnd);
+        window.addEventListener('pointercancel', onOrbitPointerCancel);
+        controlsElement.addEventListener('lostpointercapture', onOrbitLostPointerCapture);
+
+        const loader = new GLTFLoader();
+        loader.setMeshoptDecoder(MeshoptDecoder);
+        let modelBuffer;
+
+        try {
+          modelBuffer = await modelBufferPromise;
+        } catch (error) {
+          if (hasDisposed) return;
+          throw error;
+        }
+
+        const gltf = await new Promise((resolve, reject) => {
+          loader.parse(modelBuffer, modelPath, resolve, reject);
+        });
+        if (hasDisposed) {
+          disposeObject(gltf.scene);
+          return;
+        }
+        const model = gltf.scene;
+        const importedRig = [];
+
+        model.traverse((child) => {
+          if (child.isLight || child.isCamera) {
+            importedRig.push(child);
+            return;
+          }
+
+          if (!child.isMesh) return;
+
+          child.castShadow = true;
+          child.receiveShadow = true;
+
+          if (child.geometry && !child.geometry.attributes.normal) {
+            child.geometry.computeVertexNormals();
+          }
+
+          const materials = Array.isArray(child.material) ? child.material : [child.material];
+          materials.forEach((material) => {
+            if (!material) return;
+            if ('roughness' in material) material.roughness = Math.max(material.roughness ?? 0.82, 0.78);
+            if ('metalness' in material) material.metalness = Math.min(material.metalness ?? 0, 0.04);
+            material.needsUpdate = true;
+          });
+        });
+
+        importedRig.forEach((child) => child.parent?.remove(child));
+
+        const sourceBox = new THREE.Box3().setFromObject(model);
+        const sourceCenter = sourceBox.getCenter(new THREE.Vector3());
+        const sourceSize = sourceBox.getSize(new THREE.Vector3());
+        const maxDimension = Math.max(sourceSize.x, sourceSize.y, sourceSize.z) || 1;
+        const normalizedScale = 2.85 / maxDimension;
+        const sculpture = new THREE.Group();
+
+        model.position.sub(sourceCenter);
+        sculpture.rotation.set(
+          THREE.MathUtils.degToRad(INITIAL_MODEL_ROTATION_DEGREES.x),
+          THREE.MathUtils.degToRad(INITIAL_MODEL_ROTATION_DEGREES.y),
+          THREE.MathUtils.degToRad(INITIAL_MODEL_ROTATION_DEGREES.z),
+        );
+        sculpture.scale.setScalar(normalizedScale);
+        sculpture.add(model);
+        scene.add(sculpture);
+
+        isPointCoveredByModel = isRenderedPixelCovered;
+        isRockHitTestReady = true;
+
+        const displayBox = new THREE.Box3().setFromObject(sculpture);
+        const displaySphere = displayBox.getBoundingSphere(new THREE.Sphere());
+        const displayRadius = displaySphere.radius || 1.2;
+        const target = displaySphere.center.clone();
+        let hasAppliedInitialCameraBookmark = false;
+
+        controls.target.copy(target);
+
+        const fitCamera = () => {
+          const width = Math.max(viewer.clientWidth, 1);
+          const renderHeight = Math.max(viewer.clientHeight, 1);
+          const visualHeight = Math.max(Math.min(renderHeight, window.innerHeight || renderHeight), 1);
+          const aspect = width / visualHeight;
+          const verticalFov = THREE.MathUtils.degToRad(camera.fov);
+          const horizontalFov = 2 * Math.atan(Math.tan(verticalFov / 2) * aspect);
+          const limitingFov = Math.min(verticalFov, horizontalFov);
+          const cameraFill = aspect < 0.72 ? 0.62 : aspect < 1 ? 0.52 : 0.44;
+          const distance = (displayRadius / Math.sin(limitingFov / 2)) * cameraFill;
+          const direction = hasAppliedInitialCameraBookmark
+            ? camera.position.clone().sub(target).normalize()
+            : INITIAL_CAMERA_DIRECTION.clone();
+
+          camera.aspect = aspect;
+          camera.near = Math.max(displayRadius / 320, 0.01);
+          camera.far = displayRadius * 90;
+          camera.position.copy(target).add(direction.multiplyScalar(distance));
+          camera.clearViewOffset();
+          if (renderHeight > visualHeight + 1) {
+            camera.setViewOffset(width, visualHeight, 0, 0, width, renderHeight);
+          }
+          camera.updateProjectionMatrix();
+          hasAppliedInitialCameraBookmark = true;
+
+          renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+          renderer.setSize(width, renderHeight, false);
+          updateHitTestMetrics();
+          controls.handleResize();
+          controls.update();
+          renderer.render(scene, camera);
+          renderVersion += 1;
+        };
+
+        fitCamera();
+
+        const scheduleFitCamera = () => {
+          window.cancelAnimationFrame(resizeFrameId);
+          resizeFrameId = window.requestAnimationFrame(() => {
+            resizeFrameId = 0;
+            if (!hasDisposed) fitCamera();
+          });
+        };
+
+        resizeObserver = new ResizeObserver(scheduleFitCamera);
+        resizeObserver.observe(viewer);
+
+        const renderScene = () => {
+          applyTerminalOrbit();
+          controls.update();
+          renderer.render(scene, camera);
+          renderVersion += 1;
+        };
+
+        const hasResidualOrbitMotion = () => Math.abs(controls?._lastAngle || 0) > 0.00001;
+        const shouldRenderContinuously = () =>
+          !hasDisposed &&
+          !document.hidden &&
+          (orbitGesture.activePointerId !== null || terminalOrbit.active || hasResidualOrbitMotion());
+
+        const render = () => {
+          frameId = 0;
+          renderScene();
+
+          if (shouldRenderContinuously()) {
+            frameId = window.requestAnimationFrame(render);
+          } else {
+            isRenderLoopRunning = false;
+          }
+        };
+
+        requestRender = () => {
+          if (hasDisposed || document.hidden || isRenderLoopRunning) return;
+          isRenderLoopRunning = true;
+          frameId = window.requestAnimationFrame(render);
+        };
+
+        const stopRenderLoop = () => {
+          window.cancelAnimationFrame(frameId);
+          frameId = 0;
+          isRenderLoopRunning = false;
+        };
+
+        onVisibilityChange = () => {
+          if (document.hidden) {
+            stopRenderLoop();
+            return;
+          }
+
+          if (shouldRenderContinuously()) {
+            requestRender();
+          } else {
+            renderScene();
+          }
+        };
+        document.addEventListener('visibilitychange', onVisibilityChange);
+
+        const materialTextureKeys = [
+          'alphaMap',
+          'aoMap',
+          'bumpMap',
+          'clearcoatMap',
+          'clearcoatNormalMap',
+          'clearcoatRoughnessMap',
+          'displacementMap',
+          'emissiveMap',
+          'envMap',
+          'iridescenceMap',
+          'iridescenceThicknessMap',
+          'lightMap',
+          'map',
+          'metalnessMap',
+          'normalMap',
+          'roughnessMap',
+          'sheenColorMap',
+          'sheenRoughnessMap',
+          'specularColorMap',
+          'specularIntensityMap',
+          'thicknessMap',
+          'transmissionMap',
+        ];
+
+        const collectMaterialTextures = (object) => {
+          const textures = new Set();
+
+          object.traverse((child) => {
+            if (!child.isMesh) return;
+
+            const materials = Array.isArray(child.material) ? child.material : [child.material];
+            materials.forEach((material) => {
+              if (!material) return;
+
+              materialTextureKeys.forEach((key) => {
+                const texture = material[key];
+                if (texture?.isTexture) textures.add(texture);
+              });
+            });
+          });
+
+          return [...textures];
+        };
+
+        const isTextureSourceReady = (texture) => {
+          const source = texture?.source?.data || texture?.image;
+
+          if (!source) return true;
+
+          if (typeof source.complete === 'boolean' && !source.complete) return false;
+          if (typeof source.naturalWidth === 'number') return source.naturalWidth > 0;
+          if (
+            typeof HTMLMediaElement !== 'undefined' &&
+            source instanceof HTMLMediaElement
+          ) {
+            return source.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA;
+          }
+          if (
+            typeof source.width === 'number' &&
+            typeof source.height === 'number'
+          ) {
+            return source.width > 0 && source.height > 0;
+          }
+
+          return true;
+        };
+
+        const waitForMaterialTextures = (textures) =>
+          new Promise((resolve) => {
+            const checkTextures = () => {
+              if (hasDisposed || textures.every(isTextureSourceReady)) {
+                resolve();
+                return;
+              }
+
+              window.requestAnimationFrame(checkTextures);
+            };
+
+            checkTextures();
+          });
+
+        const compileSceneMaterials = async () => {
+          if (hasDisposed) return;
+
+          try {
+            if (typeof renderer.compileAsync === 'function') {
+              await renderer.compileAsync(scene, camera);
+              return;
+            }
+
+            renderer.compile(scene, camera);
+          } catch {
+            renderer.compile?.(scene, camera);
+          }
+        };
+
+        const hasVisibleTexturedFrame = () => {
+          const gl = renderer.getContext();
+          const drawingWidth = gl.drawingBufferWidth;
+          const drawingHeight = gl.drawingBufferHeight;
+
+          if (!drawingWidth || !drawingHeight) return false;
+
+          const pixelCount = drawingWidth * drawingHeight;
+          const pixels = new Uint8Array(pixelCount * 4);
+
+          try {
+            gl.readPixels(0, 0, drawingWidth, drawingHeight, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+          } catch {
+            return true;
+          }
+
+          const sampleStride = Math.max(1, Math.floor(pixelCount / 150000));
+          const sampledPixelCount = Math.ceil(pixelCount / sampleStride);
+          const minVisiblePixels = Math.max(24, Math.floor(sampledPixelCount * 0.0015));
+          let visiblePixels = 0;
+          let nonWhitePixels = 0;
+
+          for (let pixelIndex = 0; pixelIndex < pixelCount; pixelIndex += sampleStride) {
+            const offset = pixelIndex * 4;
+            const alpha = pixels[offset + 3];
+
+            if (alpha < 96) continue;
+
+            visiblePixels += 1;
+
+            if (
+              pixels[offset] < 244 ||
+              pixels[offset + 1] < 244 ||
+              pixels[offset + 2] < 244
+            ) {
+              nonWhitePixels += 1;
+            }
+          }
+
+          return (
+            visiblePixels >= minVisiblePixels &&
+            nonWhitePixels >= Math.max(8, Math.floor(visiblePixels * 0.025))
+          );
+        };
+
+        const waitForFirstVisibleTexturedFrame = () =>
+          new Promise((resolve) => {
+            const checkFrame = () => {
+              if (hasDisposed) {
+                resolve();
+                return;
+              }
+
+              renderScene();
+
+              if (hasVisibleTexturedFrame()) {
+                window.requestAnimationFrame(resolve);
+                return;
+              }
+
+              window.requestAnimationFrame(checkFrame);
+            };
+
+            window.requestAnimationFrame(checkFrame);
+          });
+
+        const positionSpatialLinksBelowModel = () => {
+          const spatialLinks = getSpatialLinks();
+          if (spatialLinks.length < 2) return;
+
+          renderScene();
+
+          const canvasRect = renderer.domElement.getBoundingClientRect();
+          const viewportWidth = window.innerWidth || canvasRect.width;
+          const viewportHeight = window.innerHeight || canvasRect.height;
+          const gl = renderer.getContext();
+          const drawingWidth = gl.drawingBufferWidth;
+          const drawingHeight = gl.drawingBufferHeight;
+
+          if (
+            !canvasRect.width ||
+            !canvasRect.height ||
+            !drawingWidth ||
+            !drawingHeight ||
+            !viewportWidth ||
+            !viewportHeight
+          ) {
+            return;
+          }
+
+          const pixels = new Uint8Array(drawingWidth * drawingHeight * 4);
+          gl.readPixels(0, 0, drawingWidth, drawingHeight, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+          const alphaThreshold = 96;
+          const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+          const pixelCount = drawingWidth * drawingHeight;
+          const sampleStride = Math.max(1, Math.floor(pixelCount / 180000));
+          let modelBottomFromTop = -Infinity;
+          let visiblePixelCount = 0;
+
+          for (let pixelIndex = 0; pixelIndex < pixelCount; pixelIndex += sampleStride) {
+            const alpha = pixels[pixelIndex * 4 + 3];
+            if (alpha < alphaThreshold) continue;
+
+            const bufferY = Math.floor(pixelIndex / drawingWidth);
+            const yFromTop = drawingHeight - 1 - bufferY;
+            modelBottomFromTop = Math.max(modelBottomFromTop, yFromTop);
+            visiblePixelCount += 1;
+          }
+
+          if (!Number.isFinite(modelBottomFromTop) || visiblePixelCount < 24) return;
+
+          const labelRects = spatialLinks.slice(0, 2).map((link) => link.getBoundingClientRect());
+          const viewportMin = Math.min(viewportWidth, viewportHeight);
+          const edgeInset = clamp(viewportMin * 0.04, 16, 42);
+          const modelGap = clamp(viewportMin * 0.035, 18, 44);
+          const labelGap = clamp(viewportWidth * 0.055, 24, 64);
+          const maxLabelHeight = Math.max(...labelRects.map((rect) => rect.height));
+          const maxLabelWidth = Math.max(...labelRects.map((rect) => rect.width));
+          const modelBottomY =
+            window.scrollY + canvasRect.top + ((modelBottomFromTop + 1) / drawingHeight) * canvasRect.height;
+          const minCenterDistance = labelRects[0].width / 2 + labelRects[1].width / 2 + labelGap;
+          const minimumOffset = minCenterDistance / 2;
+          const maxOffset = Math.max(0, viewportWidth / 2 - edgeInset - maxLabelWidth / 2);
+          const preferredOffset = clamp(viewportWidth * 0.16, minimumOffset, 230);
+          const centerOffset = Math.min(preferredOffset, maxOffset);
+          const pageCenterX = viewportWidth / 2;
+          const maxCenterY = viewportHeight - edgeInset - maxLabelHeight / 2;
+          const preferredCenterY = modelBottomY + modelGap + maxLabelHeight / 2;
+          const centerY = Math.max(edgeInset + maxLabelHeight / 2, Math.min(preferredCenterY, maxCenterY));
+          const centers = [pageCenterX - centerOffset, pageCenterX + centerOffset];
+
+          spatialLinks.slice(0, 2).forEach((link, index) => {
+            link.style.setProperty('--architect-link-x', `${centers[index]}px`);
+            link.style.setProperty('--architect-link-y', `${centerY}px`);
+          });
+        };
+        const waitForArchitectSceneReady = async () => {
+          await waitForMaterialTextures(collectMaterialTextures(model));
+          if (hasDisposed) return;
+          await compileSceneMaterials();
+          if (hasDisposed) return;
+          await waitForFirstVisibleTexturedFrame();
+        };
+
+        await waitForArchitectSceneReady();
+        if (hasDisposed) return;
+        renderer.shadowMap.autoUpdate = false;
+        positionSpatialLinksBelowModel();
+        if (hasDisposed) return;
+        renderScene();
+        await new Promise((resolve) => {
+          window.requestAnimationFrame(resolve);
+        });
+        if (hasDisposed) return;
+        viewer.classList.add('is-ready');
+        isModelReady = true;
+        if (shouldReplayWithoutPreloader) {
+          document.documentElement.classList.remove(architectReturnBlankClass);
+          window.requestAnimationFrame(() => {
+            if (hasDisposed) return;
+            window.requestAnimationFrame(() => {
+              if (hasDisposed) return;
+              startArchitectRevealSequence({ returnReveal: true });
+            });
+          });
+        }
+        hidePreloaderWhenReady();
+      };
+
+      const startViewerSafely = () => {
+        startViewer().catch((error) => {
+          document.documentElement.classList.remove(architectReturnBlankClass);
+          viewer.classList.remove('is-return-reveal', 'is-return-reveal-visible', 'is-rock-visible');
+          if (stage instanceof HTMLElement) {
+            stage.classList.remove('is-projects-visible', 'is-portfolios-visible');
+          }
+          console.error('Architect viewer failed to load.', error);
+        });
+      };
+
+      observer =
+        !shouldReplayWithoutPreloader && 'IntersectionObserver' in window
+          ? new IntersectionObserver(
+              (entries) => {
+                if (!entries.some((entry) => entry.isIntersecting)) return;
+                observer?.disconnect();
+                startViewerSafely();
+              },
+              { rootMargin: '280px' },
+            )
+          : null;
+
+      if (shouldReplayWithoutPreloader) {
+        returnBlankTimer = window.setTimeout(() => {
+          returnBlankTimer = 0;
+          startFrameId = window.requestAnimationFrame(() => {
+            startFrameId = 0;
+            startViewerSafely();
+          });
+        }, ARCHITECT_RETURN_BLANK_HOLD_MS);
+      } else if (observer) {
+        observer.observe(viewer);
+        setPreloaderTimer(startViewerSafely, 0);
+      } else {
+        setPreloaderTimer(startViewerSafely, 0);
+      }
+
+      const dispose = () => {
+        if (hasDisposed) return;
+        hasDisposed = true;
+        document.removeEventListener('astro:before-swap', dispose);
+        window.removeEventListener('pagehide', dispose);
+        if (startFrameId) {
+          window.cancelAnimationFrame(startFrameId);
+          startFrameId = 0;
+        }
+        if (returnBlankTimer) {
+          window.clearTimeout(returnBlankTimer);
+          returnBlankTimer = 0;
+        }
+        document.documentElement.classList.remove(architectReturnBlankClass);
+        observer?.disconnect();
+        preloaderTimers.forEach((timer) => window.clearTimeout(timer));
+        preloaderTimers.clear();
+        delete viewer.dataset.viewerBooted;
+        document.documentElement.classList.remove(rockControlsLockedClass);
+        viewer.classList.remove('is-ready', 'is-return-reveal', 'is-return-reveal-visible', 'is-rock-visible');
+        viewer.style.removeProperty('--architect-rock-fade-ms');
+        viewer.style.removeProperty('--architect-return-rock-fade-ms');
+        if (shell instanceof HTMLElement) {
+          shell.style.removeProperty('--architect-viewport-height');
+        }
+        window.removeEventListener('resize', syncArchitectViewportHeight);
+        window.removeEventListener('orientationchange', forceSyncArchitectViewportHeight);
+        window.visualViewport?.removeEventListener('resize', syncArchitectViewportHeight);
+        if (stage instanceof HTMLElement) {
+          stage.classList.remove(
+            'is-reveal-sequence',
+            'is-projects-visible',
+            'is-portfolios-visible'
+          );
+          stage.style.removeProperty('--architect-link-fade-ms');
+        }
+        cleanupSpatialLinks();
+        cleanupSharedPreloaderComplete();
+        unlockPageBehindPreloader();
+        clearPendingArchitectPreloader();
+        unlockRockControlsAfterPreloader();
+        clearNavigationPreloaderClassIfIdle();
+        cleanup();
+        if (state.dispose === dispose) state.dispose = null;
+      };
+
+      state.dispose = dispose;
+      document.addEventListener('astro:before-swap', dispose);
+      window.addEventListener('pagehide', dispose);
+    };
+
+    if (!state.listenersAttached) {
+      document.addEventListener('astro:after-swap', initArchitectViewer);
+      document.addEventListener('astro:page-load', initArchitectViewer);
+      window.addEventListener('pageshow', initArchitectViewer);
+      state.listenersAttached = true;
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initArchitectViewer, { once: true });
+    } else {
+      initArchitectViewer();
+    }
+  })();
+</script>
+
+<style>
+  :global(body) {
+    overflow-x: hidden;
+  }
+
+  :global(.site-shell) {
+    --architect-footer-offset: 7.5rem;
+    min-height: calc(var(--architect-viewport-height, 100dvh) + var(--architect-footer-offset));
+  }
+
+  :global(.site-shell > main) {
+    align-items: start !important;
+    display: grid !important;
+    justify-items: stretch !important;
+    max-width: none !important;
+    min-height: calc(var(--architect-viewport-height, 100dvh) + var(--architect-footer-offset)) !important;
+    padding: 0 !important;
+    position: relative !important;
+    width: 100% !important;
+  }
+
+  :global(.site-shell > .site-footer) {
+    bottom: auto;
+    left: 0;
+    pointer-events: none;
+    position: absolute;
+    right: 0;
+    top: var(--architect-viewport-height, 100dvh);
+    width: 100%;
+    z-index: 20;
+  }
+
+  .architect-stage {
+    align-self: start;
+    display: grid;
+    cursor: default;
+    grid-area: 1 / 1;
+    isolation: isolate;
+    justify-self: stretch;
+    min-height: calc(var(--architect-viewport-height, 100dvh) + var(--architect-footer-offset));
+    overflow: visible;
+    place-items: center;
+    position: relative;
+    touch-action: pan-y pinch-zoom;
+    user-select: none;
+    width: 100%;
+  }
+
+  .architect-stage.is-rock-orbit-active,
+  .architect-stage.is-rock-orbit-active:active {
+    cursor: grabbing;
+    touch-action: none;
+  }
+
+  :global(html.architect-rock-controls-locked) .architect-stage,
+  :global(html.architect-rock-controls-locked) .architect-stage:active {
+    cursor: default;
+    touch-action: pan-y pinch-zoom;
+  }
+
+  .architect-spatial-nav {
+    height: var(--architect-viewport-height, 100dvh);
+    inset: 0 auto auto 0;
+    pointer-events: none;
+    position: absolute;
+    width: 100vw;
+    z-index: 1;
+  }
+
+  :global(html.architect-return-blank-active) .architect-stage,
+  :global(html.architect-return-blank-active) .architect-viewer {
+    opacity: 0;
+    pointer-events: none;
+    visibility: hidden;
+  }
+
+  .architect-spatial-link {
+    color: #691b17;
+    cursor: default;
+    display: block;
+    font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+      'Helvetica Neue', Arial, sans-serif;
+    font-size: clamp(1.35rem, 2.1vw, 2.15rem);
+    font-weight: 300;
+    letter-spacing: 0;
+    left: var(--architect-link-x);
+    line-height: 1;
+    opacity: 0;
+    pointer-events: none;
+    position: absolute;
+    text-align: center;
+    text-decoration: none;
+    top: var(--architect-link-y);
+    touch-action: pan-y pinch-zoom;
+    transform: translate(-50%, -50%);
+    transition:
+      color 180ms ease,
+      opacity var(--architect-link-fade-ms, 450ms) ease;
+    visibility: hidden;
+    white-space: nowrap;
+  }
+
+  :global(html.architect-rock-controls-locked) .architect-spatial-link {
+    pointer-events: none;
+    touch-action: pan-y pinch-zoom;
+  }
+
+  .architect-spatial-link.is-visible-hit {
+    color: #000000;
+    cursor: pointer;
+  }
+
+  .architect-stage.is-reveal-sequence .architect-spatial-link {
+    opacity: 0;
+    pointer-events: none;
+    transition:
+      color 180ms ease,
+      opacity var(--architect-link-fade-ms, 450ms) ease,
+      visibility 0ms linear var(--architect-link-fade-ms, 450ms);
+    visibility: hidden;
+  }
+
+  .architect-stage.is-reveal-sequence.is-projects-visible .architect-spatial-link--projects,
+  .architect-stage.is-reveal-sequence.is-portfolios-visible .architect-spatial-link--portfolios {
+    opacity: 1;
+    pointer-events: auto;
+    transition:
+      opacity var(--architect-link-fade-ms, 450ms) ease,
+      color 180ms ease,
+      visibility 0ms linear 0ms;
+    visibility: visible;
+  }
+
+  :global(html.architect-rock-controls-locked)
+    .architect-stage.is-reveal-sequence.is-projects-visible
+    .architect-spatial-link--projects,
+  :global(html.architect-rock-controls-locked)
+    .architect-stage.is-reveal-sequence.is-portfolios-visible
+    .architect-spatial-link--portfolios {
+    pointer-events: auto;
+  }
+
+  .architect-spatial-link:focus-visible {
+    color: #000000;
+    outline: 1px solid #691b17;
+    outline-offset: 0.45rem;
+  }
+
+  .architect-spatial-link--projects {
+    --architect-link-x: 34%;
+    --architect-link-y: 72%;
+  }
+
+  .architect-spatial-link--portfolios {
+    --architect-link-x: 66%;
+    --architect-link-y: 72%;
+  }
+
+  .architect-viewer {
+    align-self: start;
+    bottom: auto;
+    grid-area: 1 / 1;
+    height: calc(var(--architect-viewport-height, 100dvh) + var(--architect-footer-offset));
+    justify-self: start;
+    left: 0;
+    min-height: 0;
+    overflow: visible;
+    pointer-events: none;
+    position: relative;
+    right: auto;
+    touch-action: pan-y pinch-zoom;
+    top: 0;
+    user-select: none;
+    width: 100vw;
+    z-index: 2;
+  }
+
+  .architect-viewer :global(canvas) {
+    background: transparent;
+    display: block;
+    height: 100%;
+    inset: 0;
+    position: absolute;
+    pointer-events: none;
+    touch-action: pan-y pinch-zoom;
+    opacity: 0;
+    transition: none;
+    visibility: hidden;
+    width: 100%;
+  }
+
+  .architect-viewer.is-ready :global(canvas) {
+    opacity: 0;
+    transition: opacity var(--architect-rock-fade-ms, 620ms) ease;
+    visibility: visible;
+  }
+
+  .architect-viewer.is-ready.is-return-reveal :global(canvas) {
+    opacity: 0;
+    transition: opacity var(--architect-return-rock-fade-ms, 620ms) ease;
+    visibility: visible;
+  }
+
+  .architect-viewer.is-ready.is-return-reveal.is-return-reveal-visible :global(canvas) {
+    opacity: 1;
+  }
+
+  .architect-viewer.is-ready.is-rock-visible :global(canvas) {
+    opacity: 1;
+  }
+
+  @media (min-width: 561px) and (max-width: 900px) {
+    .architect-spatial-link--projects {
+      --architect-link-x: 34%;
+      --architect-link-y: 72%;
+    }
+
+    .architect-spatial-link--portfolios {
+      --architect-link-x: 66%;
+      --architect-link-y: 72%;
+    }
+  }
+
+  @media (min-width: 561px) and (max-width: 900px) and (max-height: 560px) {
+    .architect-spatial-link--projects {
+      --architect-link-x: 34%;
+      --architect-link-y: 76%;
+    }
+
+    .architect-spatial-link--portfolios {
+      --architect-link-x: 66%;
+      --architect-link-y: 76%;
+    }
+  }
+
+  @media (max-width: 560px) {
+    .architect-stage {
+      min-height: calc(var(--architect-viewport-height, 100dvh) + var(--architect-footer-offset));
+    }
+
+    .architect-spatial-link {
+      font-size: clamp(0.95rem, 3.8vw, 1.25rem);
+    }
+
+    .architect-spatial-link--projects {
+      --architect-link-x: 32%;
+      --architect-link-y: 70%;
+    }
+
+    .architect-spatial-link--portfolios {
+      --architect-link-x: 68%;
+      --architect-link-y: 70%;
+    }
+
+    .architect-viewer {
+      height: calc(var(--architect-viewport-height, 100dvh) + var(--architect-footer-offset));
+      width: 100vw;
+    }
+  }
+
+  @media (orientation: landscape) and (max-width: 1180px) {
+    .architect-spatial-nav {
+      position: fixed;
+    }
+
+    .architect-viewer {
+      position: fixed;
+    }
+  }
+</style>

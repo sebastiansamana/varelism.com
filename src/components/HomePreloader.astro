@@ -109,11 +109,14 @@ const {
     const isSamePath = (pathA, pathB) =>
       pathA === pathB ||
       `${pathA.replace(/\/$/, '')}/` === `${pathB.replace(/\/$/, '')}/`;
+    const matchesAnyPath = (pathname, paths) => paths.some((path) => isSamePath(pathname, path));
 
     const getRouteCompleteEvents = (pathname) => {
-      if (isSamePath(pathname, '/author/')) return ['varelism:author-preloader-complete'];
-      if (isSamePath(pathname, '/artist/')) return ['varelism:artist-preloader-complete'];
-      if (isSamePath(pathname, '/architect/')) return ['varelism:architect-preloader-complete'];
+      if (matchesAnyPath(pathname, ['/author/', '/esp/autor/'])) return ['varelism:author-preloader-complete'];
+      if (matchesAnyPath(pathname, ['/artist/', '/esp/artista/'])) return ['varelism:artist-preloader-complete'];
+      if (matchesAnyPath(pathname, ['/architect/', '/esp/arquitecto/'])) {
+        return ['varelism:architect-preloader-complete'];
+      }
       return [];
     };
 
@@ -500,13 +503,13 @@ const {
       const overlayFallbackSrc = overlay.dataset.fallbackSrc || '';
       const isSuppressedByReturnBlank = Boolean(
         (document.documentElement.classList.contains('author-return-blank-active') &&
-          activePaths.some((path) => isSamePath(path, '/author/'))) ||
+          activePaths.some((path) => matchesAnyPath(path, ['/author/', '/esp/autor/']))) ||
           (document.documentElement.classList.contains('artist-return-blank-active') &&
-            activePaths.some((path) => isSamePath(path, '/artist/'))) ||
+            activePaths.some((path) => matchesAnyPath(path, ['/artist/', '/esp/artista/']))) ||
           (document.documentElement.classList.contains('architect-return-blank-active') &&
-            activePaths.some((path) => isSamePath(path, '/architect/'))) ||
+            activePaths.some((path) => matchesAnyPath(path, ['/architect/', '/esp/arquitecto/']))) ||
           (document.documentElement.classList.contains('home-return-active') &&
-            activePaths.some((path) => isSamePath(path, '/')))
+            activePaths.some((path) => matchesAnyPath(path, ['/', '/esp'])))
       );
       const isNavigationPreloader = Boolean(handoffState || window[pendingPreloaderKey]?.navigationPreloader);
       const imageFadeMs = isNavigationPreloader ? Math.min(requestedImageFadeMs, 90) : requestedImageFadeMs;

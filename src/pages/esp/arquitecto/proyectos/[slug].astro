@@ -1,0 +1,182 @@
+---
+import BaseLayout from '../../../../layouts/BaseLayout.astro';
+import { getCollection, render } from 'astro:content';
+
+export async function getStaticPaths() {
+  const projects = await getCollection('projects');
+  return projects.map((project) => ({
+    params: { slug: project.slug },
+    props: { project },
+  }));
+}
+
+const projectTranslations = {
+  'courtyard-house': {
+    title: 'Casa Patio',
+    subtitle: 'Un retiro urbano escalonado que enmarca la luz mediante un patio central.',
+    excerpt: 'Parcela urbana compacta replanteada con patios en capas y luz filtrada.',
+    location: 'Londres, Reino Unido',
+    category: 'Residencial',
+    sections: [
+      {
+        title: 'Concepto',
+        body: 'El diseño usa una secuencia de espacios comprimidos y abiertos alrededor de un patio plantado, creando privacidad sin perder apertura.',
+      },
+      {
+        title: 'Materiales',
+        body: 'Ladrillo claro, roble cepillado y yeso de cal suave se eligieron para mantener continuidad tonal. Grandes paneles correderos suavizan el borde entre interior y paisaje.',
+      },
+      {
+        title: 'Rendimiento ambiental',
+        body: 'Una estrategia híbrida de ventilación, muros de alta masa térmica y paneles fotovoltaicos en cubierta reducen la demanda anual de energía y apoyan la adaptabilidad a largo plazo.',
+      },
+    ],
+  },
+  'limestone-residence': {
+    title: 'Residencia de Caliza',
+    subtitle: 'Una casa en ladera compuesta como terrazas, muros y horizontes enmarcados.',
+    excerpt: 'Vivienda atenta al paisaje, donde la forma sigue el terreno y las vistas largas.',
+    location: 'Oporto, PT',
+    category: 'Residencial',
+    sections: [
+      {
+        title: 'Lógica del sitio',
+        body: 'Insertada en una topografía pronunciada, la casa sigue el terreno en plataformas escalonadas que reducen la excavación y conservan los muros de piedra existentes.',
+      },
+      {
+        title: 'Atmósfera interior',
+        body: 'Una secuencia de espacios serenos se define con luz filtrada, huecos profundos y materiales táctiles elegidos para envejecer con calma.',
+      },
+      {
+        title: 'Construcción',
+        body: 'Casetes prefabricados de cubierta en madera redujeron el tiempo de obra, mientras el revestimiento de caliza local vincula el proyecto con las tradiciones constructivas de la región.',
+      },
+    ],
+  },
+  'riverside-atelier': {
+    title: 'Atelier junto al Agua',
+    subtitle: 'Un estudio y galería híbridos anclados por una cubierta dentada continua.',
+    excerpt: 'Espacio creativo con volúmenes de luz norte y salas de exposición abiertas al público.',
+    location: 'Róterdam, NL',
+    category: 'Cultural',
+    sections: [
+      {
+        title: 'Programa',
+        body: 'El atelier combina estudios de artista, un taller y un recorrido de galería adaptable para la producción diaria y los eventos de noche.',
+      },
+      {
+        title: 'Carácter espacial',
+        body: 'Los interiores son deliberadamente mínimos: cerchas de madera vistas, hormigón pulido y una paleta contenida que pone en primer plano el arte y el oficio.',
+      },
+      {
+        title: 'Respuesta urbana',
+        body: 'Una planta baja porosa y un atrio ajardinado conectan el edificio con el paseo junto al agua, extendiendo la vida pública hacia el sitio.',
+      },
+    ],
+  },
+} as const;
+
+const { project } = Astro.props;
+const { Content } = await render(project);
+const translation = projectTranslations[project.slug as keyof typeof projectTranslations];
+const detail = {
+  category: translation?.category ?? project.data.category,
+  excerpt: translation?.excerpt ?? project.data.excerpt,
+  location: translation?.location ?? project.data.location,
+  sections: translation?.sections,
+  subtitle: translation?.subtitle ?? project.data.subtitle,
+  title: translation?.title ?? project.data.title,
+};
+---
+
+<BaseLayout title={`${detail.title} | Arquitecto`} description={detail.excerpt}>
+  <article class="project-detail">
+    <header class="detail-header section fade-up">
+      <p class="eyebrow">Arquitecto</p>
+      <h1 class="page-title">{detail.title}</h1>
+      <p class="page-intro">{detail.subtitle}</p>
+      <div class="detail-meta">
+        <span>{project.data.year}</span>
+        <span>{detail.location}</span>
+        <span>{detail.category}</span>
+      </div>
+    </header>
+
+    <section class="section image-frame fade-up stagger" style="--delay:.1s">
+      <img src={project.data.coverImage} alt={detail.title} />
+    </section>
+
+    <section class="section content-wrap fade-up stagger" style="--delay:.15s">
+      {
+        detail.sections ? (
+          detail.sections.map((section) => (
+            <>
+              <h2>{section.title}</h2>
+              <p>{section.body}</p>
+            </>
+          ))
+        ) : (
+          <Content />
+        )
+      }
+    </section>
+
+    <section class="gallery section">
+      {project.data.gallery.map((image, index) => (
+        <figure class="image-frame fade-up stagger" style={`--delay:${0.2 + index * 0.08}s`}>
+          <img src={image} alt={`${detail.title} imagen ${index + 1}`} loading="lazy" />
+        </figure>
+      ))}
+    </section>
+  </article>
+</BaseLayout>
+
+<style>
+  .detail-meta {
+    border-top: 1px solid var(--line);
+    display: flex;
+    gap: 1.2rem;
+    margin-top: 1.4rem;
+    padding-top: 0.9rem;
+  }
+
+  .detail-meta span {
+    color: var(--muted);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .content-wrap {
+    margin-inline: auto;
+    max-width: 72ch;
+  }
+
+  .content-wrap :global(h2) {
+    font-size: 1.8rem;
+    font-weight: 400;
+    margin: 1.2rem 0 0.5rem;
+  }
+
+  .content-wrap :global(p) {
+    margin: 0 0 1rem;
+  }
+
+  .gallery {
+    display: grid;
+    gap: 1.2rem;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  @media (max-width: 760px) {
+    .detail-meta {
+      flex-direction: column;
+      gap: 0.2rem;
+    }
+
+    .gallery {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
