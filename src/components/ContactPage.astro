@@ -12,6 +12,7 @@ const { label } = Astro.props;
 
 <script>
   (() => {
+    const activeClass = 'is-contact-active';
     const routeEnterEvent = 'varelism:route-enter';
     const routeEnteringClass = 'varelism-route-entering';
 
@@ -28,6 +29,32 @@ const { label } = Astro.props;
       }
     };
 
+    const bindContactInteraction = (page) => {
+      const email = page.querySelector('.contact-email');
+
+      if (!(email instanceof HTMLElement) || email.dataset.contactInteractionBound === 'true') {
+        return;
+      }
+
+      email.dataset.contactInteractionBound = 'true';
+
+      const setActive = () => {
+        email.classList.add(activeClass);
+      };
+      const clearActive = () => {
+        email.classList.remove(activeClass);
+      };
+
+      email.addEventListener('pointerdown', setActive);
+      email.addEventListener('pointerup', clearActive);
+      email.addEventListener('pointercancel', clearActive);
+      email.addEventListener('pointerleave', clearActive);
+      email.addEventListener('blur', clearActive);
+      email.addEventListener('touchstart', setActive, { passive: true });
+      email.addEventListener('touchend', clearActive);
+      email.addEventListener('touchcancel', clearActive);
+    };
+
     const revealContact = () => {
       const page = document.querySelector('[data-contact-page]');
 
@@ -36,6 +63,7 @@ const { label } = Astro.props;
       }
 
       page.dataset.contactRevealBooted = 'true';
+      bindContactInteraction(page);
       syncViewportOffset(page);
 
       const reveal = () => {
@@ -106,12 +134,19 @@ const { label } = Astro.props;
     line-height: 1;
     overflow-wrap: anywhere;
     text-decoration: none;
+    transition: color 180ms ease;
   }
 
   .contact-email:focus-visible {
     color: #691b17;
     outline: 1px solid #691b17;
     outline-offset: 0.75rem;
+  }
+
+  .contact-email:hover,
+  .contact-email:active,
+  .contact-email.is-contact-active {
+    color: #691b17;
   }
 
   @media (max-width: 720px) {
