@@ -1,7 +1,20 @@
 ---
+import { getCollection } from 'astro:content';
+import ArtworkArchive from '../../../components/ArtworkArchive.astro';
 import BaseLayout from '../../../layouts/BaseLayout.astro';
+import { getPublicArtworks } from '../../../lib/artworks';
+
+const artworks = getPublicArtworks(await getCollection('artworks'));
 ---
 
 <BaseLayout title="Todo | Varelism" description="Todo.">
-  <section aria-label="Todo"></section>
+  <ArtworkArchive
+    artworks={artworks}
+    labels={{
+      empty: 'Todavia no hay obras publicas.',
+      grid: 'Mosaico',
+      list: 'Indice',
+      title: 'Todo',
+    }}
+  />
 </BaseLayout>

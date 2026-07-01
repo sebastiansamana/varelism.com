@@ -1,0 +1,172 @@
+---
+import type { GetStaticPaths } from 'astro';
+import { getCollection } from 'astro:content';
+import BaseLayout from '../../../layouts/BaseLayout.astro';
+import { getArtworkMetadata, getPublicArtworks } from '../../../lib/artworks';
+
+export const getStaticPaths = (async () => {
+  const artworks = getPublicArtworks(await getCollection('artworks'));
+
+  return artworks.map((artwork) => ({
+    params: { slug: artwork.id },
+    props: { artwork },
+  }));
+}) satisfies GetStaticPaths;
+
+const { artwork } = Astro.props;
+const metadata = getArtworkMetadata(artwork);
+const hasDescription = Boolean(artwork.data.description);
+---
+
+<BaseLayout title={`${artwork.data.title} | Varelism`} description={artwork.data.description ?? artwork.data.title}>
+  <article class="artwork-detail">
+    <a class="artwork-back" href="/artist/everything/">Everything</a>
+
+    <figure class="artwork-figure">
+      {
+        artwork.data.image && artwork.data.imageWidth && artwork.data.imageHeight && (
+          <img
+            src={artwork.data.image}
+            alt={artwork.data.imageAlt ?? artwork.data.title}
+            width={artwork.data.imageWidth}
+            height={artwork.data.imageHeight}
+            decoding="async"
+          />
+        )
+      }
+      <figcaption>
+        <h1>{artwork.data.title}</h1>
+        {
+          metadata.length > 0 && (
+            <dl>
+              {
+                metadata.map((item) => (
+                  <div>
+                    <dt>{item.label}</dt>
+                    <dd>{item.value}</dd>
+                  </div>
+                ))
+              }
+            </dl>
+          )
+        }
+      </figcaption>
+    </figure>
+
+    {hasDescription && <p class="artwork-description">{artwork.data.description}</p>}
+  </article>
+</BaseLayout>
+
+<style>
+  :global(.site-shell > main) {
+    max-width: none;
+    padding: clamp(7rem, 13vh, 8.5rem) clamp(1rem, 4vw, 3rem) 0;
+    width: 100%;
+  }
+
+  .artwork-detail {
+    color: #000000;
+    margin: 0 auto;
+    max-width: 76rem;
+    min-height: calc(100vh - clamp(7rem, 13vh, 8.5rem));
+    padding-bottom: clamp(2rem, 6vh, 4rem);
+  }
+
+  .artwork-back {
+    display: inline-block;
+    font-size: 0.82rem;
+    font-weight: 200;
+    line-height: 1;
+    margin-bottom: clamp(2rem, 5vw, 4rem);
+    transition: color 180ms ease;
+  }
+
+  .artwork-back:focus-visible,
+  .artwork-back:hover {
+    color: #691b17;
+  }
+
+  .artwork-back:focus-visible {
+    outline: 1px solid #691b17;
+    outline-offset: 0.35rem;
+  }
+
+  .artwork-figure {
+    display: grid;
+    gap: clamp(1.5rem, 4vw, 3rem);
+    grid-template-columns: minmax(0, 1fr) minmax(13rem, 18rem);
+    margin: 0;
+  }
+
+  .artwork-figure img {
+    display: block;
+    height: auto;
+    max-width: 100%;
+    width: 100%;
+  }
+
+  .artwork-figure h1 {
+    font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+      'Helvetica Neue', Arial, sans-serif;
+    font-size: clamp(1.35rem, 2.1vw, 2.15rem);
+    font-weight: 300;
+    letter-spacing: 0;
+    line-height: 1;
+    margin: 0;
+  }
+
+  .artwork-figure dl {
+    display: grid;
+    gap: 0.65rem;
+    margin: 1.6rem 0 0;
+  }
+
+  .artwork-figure div {
+    display: grid;
+    gap: 0.2rem;
+  }
+
+  .artwork-figure dt,
+  .artwork-figure dd,
+  .artwork-description {
+    font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+      'Helvetica Neue', Arial, sans-serif;
+    letter-spacing: 0;
+  }
+
+  .artwork-figure dt {
+    color: #757575;
+    font-size: 0.68rem;
+    font-weight: 200;
+    line-height: 1;
+  }
+
+  .artwork-figure dd {
+    font-size: 0.88rem;
+    font-weight: 300;
+    line-height: 1.25;
+    margin: 0;
+  }
+
+  .artwork-description {
+    font-size: 1rem;
+    font-weight: 200;
+    line-height: 1.55;
+    margin: clamp(1.8rem, 5vw, 3.5rem) 0 0;
+    max-width: 42rem;
+  }
+
+  @media (max-width: 760px) {
+    :global(.site-shell > main) {
+      padding-top: 6.5rem;
+    }
+
+    .artwork-figure {
+      grid-template-columns: 1fr;
+    }
+
+    .artwork-figure h1 {
+      font-size: clamp(0.95rem, 3.8vw, 1.25rem);
+    }
+  }
+</style>

@@ -1,0 +1,351 @@
+---
+import type { Artwork } from '../lib/artworks';
+import { getArtworkDateLabel, getArtworkMetadata } from '../lib/artworks';
+
+interface Props {
+  artworks: Artwork[];
+  labels?: {
+    empty: string;
+    grid: string;
+    list: string;
+    title: string;
+  };
+}
+
+const {
+  artworks,
+  labels = {
+    empty: 'No public artworks yet.',
+    grid: 'Grid',
+    list: 'Index',
+    title: 'Everything',
+  },
+} = Astro.props;
+---
+
+<section class="artwork-archive" data-artwork-archive data-archive-view="grid" aria-labelledby="artwork-archive-title">
+  <header class="artwork-archive__header">
+    <h1 id="artwork-archive-title">{labels.title}</h1>
+    {
+      artworks.length > 0 && (
+        <div class="artwork-archive__modes" aria-label="Archive view">
+          <button type="button" data-archive-view-button="grid" aria-pressed="true">{labels.grid}</button>
+          <button type="button" data-archive-view-button="list" aria-pressed="false">{labels.list}</button>
+        </div>
+      )
+    }
+  </header>
+
+  {
+    artworks.length > 0 ? (
+      <>
+        <div class="artwork-masonry" data-artwork-masonry>
+          <div class="artwork-column-sizer" aria-hidden="true"></div>
+          <div class="artwork-gutter-sizer" aria-hidden="true"></div>
+          {
+            artworks.map((artwork) => (
+              <article class="artwork-card">
+                <a href={`/artist/everything/${artwork.id}/`}>
+                  {
+                    artwork.data.image && artwork.data.imageWidth && artwork.data.imageHeight && (
+                      <img
+                        src={artwork.data.image}
+                        alt={artwork.data.imageAlt ?? artwork.data.title}
+                        width={artwork.data.imageWidth}
+                        height={artwork.data.imageHeight}
+                        loading="lazy"
+                        decoding="async"
+                      />
+                    )
+                  }
+                  <span class="artwork-card__title">{artwork.data.title}</span>
+                  {
+                    getArtworkDateLabel(artwork) && (
+                      <span class="artwork-card__meta">{getArtworkDateLabel(artwork)}</span>
+                    )
+                  }
+                </a>
+              </article>
+            ))
+          }
+        </div>
+
+        <ol class="artwork-index" data-artwork-index>
+          {
+            artworks.map((artwork) => (
+              <li>
+                <a href={`/artist/everything/${artwork.id}/`}>
+                  <span class="artwork-index__title">{artwork.data.title}</span>
+                  {
+                    getArtworkMetadata(artwork).length > 0 && (
+                      <span class="artwork-index__meta">
+                        {getArtworkMetadata(artwork).map((item) => item.value).join(' · ')}
+                      </span>
+                    )
+                  }
+                </a>
+              </li>
+            ))
+          }
+        </ol>
+      </>
+    ) : (
+      <p class="artwork-empty">{labels.empty}</p>
+    )
+  }
+</section>
+
+<script>
+  import imagesLoaded from 'imagesloaded';
+  import Masonry from 'masonry-layout';
+
+  (() => {
+    const setupArchive = () => {
+      document.querySelectorAll('[data-artwork-archive]').forEach((archive) => {
+        if (!(archive instanceof HTMLElement) || archive.dataset.artworkArchiveReady === 'true') {
+          return;
+        }
+
+        archive.dataset.artworkArchiveReady = 'true';
+
+        const grid = archive.querySelector('[data-artwork-masonry]');
+        const viewButtons = Array.from(archive.querySelectorAll('[data-archive-view-button]'));
+
+        let masonry = null;
+
+        if (grid instanceof HTMLElement) {
+          masonry = new Masonry(grid, {
+            columnWidth: '.artwork-column-sizer',
+            fitWidth: true,
+            gutter: '.artwork-gutter-sizer',
+            itemSelector: '.artwork-card',
+            percentPosition: false,
+          });
+
+          imagesLoaded(grid)
+            .on('progress', () => masonry?.layout())
+            .on('always', () => masonry?.layout());
+        }
+
+        const setView = (view) => {
+          archive.dataset.archiveView = view;
+          viewButtons.forEach((button) => {
+            if (!(button instanceof HTMLButtonElement)) return;
+            button.setAttribute('aria-pressed', String(button.dataset.archiveViewButton === view));
+          });
+
+          if (view === 'grid') {
+            window.requestAnimationFrame(() => masonry?.layout());
+          }
+        };
+
+        viewButtons.forEach((button) => {
+          button.addEventListener('click', () => {
+            setView(button instanceof HTMLElement && button.dataset.archiveViewButton === 'list' ? 'list' : 'grid');
+          });
+        });
+      });
+    };
+
+    setupArchive();
+
+    if (window.__varelismArtworkArchiveReady) return;
+
+    window.__varelismArtworkArchiveReady = true;
+    document.addEventListener('astro:page-load', setupArchive);
+  })();
+</script>
+
+<style>
+  :global(.site-shell > main) {
+    max-width: none;
+    padding: clamp(7rem, 13vh, 8.5rem) clamp(1rem, 4vw, 3rem) 0;
+    width: 100%;
+  }
+
+  .artwork-archive {
+    --artwork-gap: clamp(0.8rem, 1.8vw, 1.35rem);
+    --artwork-column-width: clamp(11rem, 23vw, 18rem);
+
+    color: #000000;
+    margin: 0 auto;
+    max-width: 82rem;
+    min-height: calc(100vh - clamp(7rem, 13vh, 8.5rem));
+    padding-bottom: clamp(2rem, 6vh, 4rem);
+    width: 100%;
+  }
+
+  .artwork-archive__header {
+    align-items: baseline;
+    display: flex;
+    gap: 1rem;
+    justify-content: space-between;
+    margin: 0 0 clamp(2rem, 5vw, 4rem);
+  }
+
+  .artwork-archive h1 {
+    font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+      'Helvetica Neue', Arial, sans-serif;
+    font-size: clamp(1.35rem, 2.1vw, 2.15rem);
+    font-weight: 300;
+    letter-spacing: 0;
+    line-height: 1;
+    margin: 0;
+  }
+
+  .artwork-archive__modes {
+    display: flex;
+    gap: 0.8rem;
+  }
+
+  .artwork-archive__modes button {
+    background: transparent;
+    border: 0;
+    color: #000000;
+    cursor: pointer;
+    font: inherit;
+    font-size: clamp(0.82rem, 1vw, 0.98rem);
+    font-weight: 200;
+    line-height: 1;
+    padding: 0;
+    transition: color 180ms ease;
+  }
+
+  .artwork-archive__modes button[aria-pressed='true'],
+  .artwork-archive__modes button:focus-visible,
+  .artwork-archive__modes button:hover {
+    color: #691b17;
+  }
+
+  .artwork-archive__modes button:focus-visible {
+    outline: 1px solid #691b17;
+    outline-offset: 0.35rem;
+  }
+
+  .artwork-masonry {
+    margin: 0 auto;
+  }
+
+  .artwork-column-sizer,
+  .artwork-card {
+    width: var(--artwork-column-width);
+  }
+
+  .artwork-gutter-sizer {
+    width: var(--artwork-gap);
+  }
+
+  .artwork-card {
+    margin-bottom: var(--artwork-gap);
+  }
+
+  .artwork-card a {
+    display: block;
+  }
+
+  .artwork-card img {
+    display: block;
+    height: auto;
+    width: 100%;
+  }
+
+  .artwork-card__title,
+  .artwork-card__meta {
+    display: block;
+    font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+      'Helvetica Neue', Arial, sans-serif;
+    letter-spacing: 0;
+    line-height: 1.2;
+  }
+
+  .artwork-card__title {
+    font-size: 0.88rem;
+    font-weight: 300;
+    margin-top: 0.65rem;
+  }
+
+  .artwork-card__meta {
+    color: #757575;
+    font-size: 0.72rem;
+    font-weight: 200;
+    margin-top: 0.25rem;
+  }
+
+  .artwork-index {
+    display: none;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .artwork-index li {
+    border-top: 1px solid rgba(0, 0, 0, 0.12);
+  }
+
+  .artwork-index li:last-child {
+    border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+  }
+
+  .artwork-index a {
+    align-items: baseline;
+    display: grid;
+    gap: 1rem;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    padding: 0.85rem 0;
+  }
+
+  .artwork-index__title {
+    font-size: 0.98rem;
+    font-weight: 300;
+  }
+
+  .artwork-index__meta,
+  .artwork-empty {
+    color: #757575;
+    font-size: 0.82rem;
+    font-weight: 200;
+  }
+
+  .artwork-empty {
+    margin: 0;
+  }
+
+  [data-archive-view='list'] .artwork-masonry {
+    display: none;
+  }
+
+  [data-archive-view='list'] .artwork-index {
+    display: block;
+  }
+
+  @media (max-width: 720px) {
+    :global(.site-shell > main) {
+      padding-top: 6.5rem;
+    }
+
+    .artwork-archive {
+      --artwork-column-width: calc(50vw - var(--artwork-gap) - 1rem);
+    }
+
+    .artwork-archive__header,
+    .artwork-index a {
+      align-items: flex-start;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .artwork-index a {
+      gap: 0.35rem;
+    }
+  }
+
+  @media (max-width: 560px) {
+    .artwork-archive {
+      --artwork-column-width: calc(100vw - 1.7rem);
+    }
+
+    .artwork-archive h1 {
+      font-size: clamp(0.95rem, 3.8vw, 1.25rem);
+    }
+  }
+</style>
