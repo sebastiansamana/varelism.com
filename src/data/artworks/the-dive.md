@@ -1,14 +1,14 @@
 ---
 title: "The Dive"
-status: draft
-date: ""
-sortYear:
-sortMonth:
-sortDay:
-orderInYear:
-medium: ""
-dimensions: ""
-location: ""
+status: public
+date: "2025"
+sortYear: 2025
+sortMonth: 7
+sortDay: 5
+orderInYear: 2025
+medium: "Pastels"
+dimensions: "297 x 420 mm"
+location: "Ibiza, Spain"
 description: ""
 image: "/images/artworks/the-dive.jpg"
 imageWidth: 3159
