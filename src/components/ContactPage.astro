@@ -1,0 +1,128 @@
+---
+interface Props {
+  label: string;
+}
+
+const { label } = Astro.props;
+---
+
+<section class="contact-page" aria-label={label} data-contact-page>
+  <a class="contact-email" href="mailto:bastivarela@icloud.com">bastivarela@icloud.com</a>
+</section>
+
+<script>
+  (() => {
+    const routeEnterEvent = 'varelism:route-enter';
+    const routeEnteringClass = 'varelism-route-entering';
+
+    const syncViewportOffset = (page) => {
+      const offset = (window.innerWidth - document.documentElement.clientWidth) / 2;
+      page.style.setProperty('--contact-viewport-offset', `${Math.max(offset, 0)}px`);
+    };
+
+    const syncCurrentViewportOffset = () => {
+      const page = document.querySelector('[data-contact-page]');
+
+      if (page instanceof HTMLElement) {
+        syncViewportOffset(page);
+      }
+    };
+
+    const revealContact = () => {
+      const page = document.querySelector('[data-contact-page]');
+
+      if (!(page instanceof HTMLElement) || page.dataset.contactRevealBooted === 'true') {
+        return;
+      }
+
+      page.dataset.contactRevealBooted = 'true';
+      syncViewportOffset(page);
+
+      const reveal = () => {
+        window.requestAnimationFrame(() => {
+          page.classList.add('is-visible');
+        });
+      };
+
+      if (document.documentElement.classList.contains(routeEnteringClass)) {
+        window.addEventListener(routeEnterEvent, reveal, { once: true });
+        return;
+      }
+
+      reveal();
+    };
+
+    revealContact();
+
+    if (window.__varelismContactRevealReady) return;
+
+    window.__varelismContactRevealReady = true;
+    document.addEventListener('astro:page-load', revealContact);
+    window.addEventListener('resize', syncCurrentViewportOffset);
+    window.visualViewport?.addEventListener('resize', syncCurrentViewportOffset);
+  })();
+</script>
+
+<style>
+  :global(.site-shell > main) {
+    max-width: none;
+    min-height: 100vh;
+    min-height: 100svh;
+    min-height: 100dvh;
+    padding: 0;
+    position: relative;
+    width: 100%;
+  }
+
+  .contact-page {
+    color: #000000;
+    display: block;
+    left: 50vw;
+    line-height: 1;
+    max-width: calc(100vw - 2rem);
+    opacity: 0;
+    position: absolute;
+    text-align: center;
+    top: 50vh;
+    top: 50svh;
+    top: 50dvh;
+    transform: translate(calc(-50% + var(--contact-viewport-offset, 0px)), -50%);
+    transition: opacity 450ms ease;
+    width: max-content;
+  }
+
+  .contact-page.is-visible {
+    opacity: 1;
+  }
+
+  .contact-email {
+    color: inherit;
+    display: block;
+    font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+      'Helvetica Neue', Arial, sans-serif;
+    font-size: clamp(1.35rem, 2.1vw, 2.15rem);
+    font-weight: 300;
+    letter-spacing: 0;
+    line-height: 1;
+    overflow-wrap: anywhere;
+    text-decoration: none;
+  }
+
+  .contact-email:focus-visible {
+    color: #691b17;
+    outline: 1px solid #691b17;
+    outline-offset: 0.75rem;
+  }
+
+  @media (max-width: 720px) {
+    .contact-email {
+      font-size: clamp(0.95rem, 3.8vw, 1.25rem);
+    }
+  }
+
+  @media (max-width: 560px) {
+    .contact-page {
+      max-width: calc(100vw - 1.7rem);
+    }
+  }
+</style>
