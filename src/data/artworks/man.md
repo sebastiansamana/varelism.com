@@ -11,6 +11,7 @@ dimensions: "297 mm x 420 mm"
 location: "Ibiza, Spain"
 description: ""
 image: "/images/artworks/man.jpg"
+hoverImage: "/images/artworks/man-red.png"
 imageWidth: 1465
 imageHeight: 2321
 imageAlt: ""

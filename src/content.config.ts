@@ -60,6 +60,7 @@ const artworks = defineCollection({
     location: blankableString,
     description: blankableString,
     image: blankableString,
+    hoverImage: blankableString,
     imageWidth: blankableInteger,
     imageHeight: blankableInteger,
     imageAlt: blankableString,

@@ -11,6 +11,7 @@ dimensions: "297 x 420 mm"
 location: "Ibiza, Spain"
 description: ""
 image: "/images/artworks/the-dive.jpg"
+hoverImage: "/images/artworks/the-dive-red.png"
 imageWidth: 3159
 imageHeight: 2217
 imageAlt: ""

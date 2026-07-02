@@ -11,6 +11,7 @@ dimensions: "297 x 420 mm"
 location: "Ibiza, Spain"
 description: ""
 image: "/images/artworks/wei-s-rhino.jpg"
+hoverImage: "/images/artworks/wei-s-rhino-red.png"
 imageWidth: 3217
 imageHeight: 2298
 imageAlt: ""
