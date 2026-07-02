@@ -27,9 +27,8 @@ const normalizedDetailBasePath = detailBasePath.endsWith('/') ? detailBasePath :
 const getArtworkHref = (artwork: Artwork) => `${normalizedDetailBasePath}${artwork.id}/`;
 ---
 
-<section class="artwork-archive" data-artwork-archive data-archive-view="grid" aria-labelledby="artwork-archive-title">
+<section class="artwork-archive" data-artwork-archive data-archive-view="grid" aria-label={labels.title}>
   <header class="artwork-archive__header">
-    <h1 id="artwork-archive-title">{labels.title}</h1>
     {
       artworks.length > 0 && (
         <div class="artwork-archive__modes" aria-label="Archive view">
@@ -233,20 +232,8 @@ const getArtworkHref = (artwork: Artwork) => `${normalizedDetailBasePath}${artwo
     width: var(--artwork-aligned-width);
   }
 
-  .artwork-archive h1 {
-    font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-      'Helvetica Neue', Arial, sans-serif;
-    font-size: var(--artwork-title-font-size);
-    font-weight: 300;
-    letter-spacing: 0;
-    line-height: 1;
-    margin: 0;
-    min-width: 0;
-  }
-
   .artwork-archive__modes {
     display: flex;
-    flex: 0 0 auto;
     gap: 0.8rem;
   }
 
