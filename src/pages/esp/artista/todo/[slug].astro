@@ -74,7 +74,7 @@ const hasDescription = Boolean(artwork.data.description);
 
   .artwork-back {
     display: inline-block;
-    font-size: 0.82rem;
+    font-size: clamp(0.82rem, 1vw, 0.98rem);
     font-weight: 200;
     line-height: 1;
     margin-bottom: clamp(2rem, 5vw, 4rem);
@@ -167,6 +167,12 @@ const hasDescription = Boolean(artwork.data.description);
 
     .artwork-figure h1 {
       font-size: clamp(0.95rem, 3.8vw, 1.25rem);
+    }
+  }
+
+  @media (max-width: 560px) {
+    .artwork-back {
+      font-size: 0.72rem;
     }
   }
 </style>
