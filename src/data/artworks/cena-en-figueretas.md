@@ -11,7 +11,7 @@ dimensions: "297 x 420 mm"
 location: "Ibiza, Spain"
 description: ""
 image: "/images/artworks/cena-en-figueretas.jpg"
-hoverImage: "/images/artworks/cena-en-figueretas-red.png"
+hoverImage: "/images/artworks/cena-en-figueretas-red.webp"
 imageWidth: 3007
 imageHeight: 2198
 imageAlt: ""

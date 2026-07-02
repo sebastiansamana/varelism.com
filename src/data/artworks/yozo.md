@@ -11,7 +11,7 @@ dimensions: "420 mm x 297 mm"
 location: "Ibiza Spain"
 description: ""
 image: "/images/artworks/yozo.jpg"
-hoverImage: "/images/artworks/yozo-red.png"
+hoverImage: "/images/artworks/yozo-red.webp"
 imageWidth: 3043
 imageHeight: 2189
 imageAlt: ""

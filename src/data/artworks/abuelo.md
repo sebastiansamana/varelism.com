@@ -11,7 +11,7 @@ dimensions: "297 mm x 420 mm"
 location: "Ibiza, Spain"
 description: ""
 image: "/images/artworks/retatro-abuelo.jpg"
-hoverImage: "/images/artworks/retatro-abuelo-red.png"
+hoverImage: "/images/artworks/retatro-abuelo-red.webp"
 imageWidth: 2131
 imageHeight: 2755
 imageAlt: ""
