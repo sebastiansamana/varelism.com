@@ -7,14 +7,15 @@ import { getPublicArtworks } from '../../../lib/artworks';
 const artworks = getPublicArtworks(await getCollection('artworks'));
 ---
 
-<BaseLayout title="Todo | Varelism" description="Todo.">
+<BaseLayout title="Sebastian Varela: Lista de obras | Varelism" description="Sebastian Varela: Lista de obras.">
   <ArtworkArchive
     artworks={artworks}
+    detailBasePath="/esp/artista/todo/"
     labels={{
-      empty: 'Todavia no hay obras publicas.',
+      empty: 'Todavía no hay obras públicas.',
       grid: 'Mosaico',
-      list: 'Indice',
-      title: 'Todo',
+      list: 'Índice',
+      title: 'Sebastian Varela: Lista de obras',
     }}
   />
 </BaseLayout>

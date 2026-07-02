@@ -40,5 +40,4 @@ export const getArtworkMetadata = (artwork: Artwork) =>
     { label: 'Date', value: getArtworkDateLabel(artwork) },
     { label: 'Medium', value: artwork.data.medium },
     { label: 'Dimensions', value: artwork.data.dimensions },
-    { label: 'Location', value: artwork.data.location },
   ].filter((item): item is { label: string; value: string } => hasValue(item.value));

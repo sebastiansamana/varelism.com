@@ -50,6 +50,16 @@ const getLanguageSwitchHref = (pathname: string) => {
     return slug ? `/esp/arquitecto/proyectos/${slug}/` : '/esp/arquitecto/proyectos/';
   }
 
+  if (normalizedPath.startsWith('/esp/artista/todo/')) {
+    const slug = normalizedPath.slice('/esp/artista/todo/'.length);
+    return slug ? `/artist/everything/${slug}/` : '/artist/everything/';
+  }
+
+  if (normalizedPath.startsWith('/artist/everything/')) {
+    const slug = normalizedPath.slice('/artist/everything/'.length);
+    return slug ? `/esp/artista/todo/${slug}/` : '/esp/artista/todo/';
+  }
+
   if (normalizedPath === '/esp' || normalizedPath.startsWith('/esp/')) {
     return spanishToEnglishRoutes.get(normalizedPath) ?? '/';
   }
@@ -733,6 +743,16 @@ const globalPreloaderPaths = [
           if (normalizedPath.startsWith('/architect/projects/')) {
             const slug = normalizedPath.slice('/architect/projects/'.length);
             return slug ? `/esp/arquitecto/proyectos/${slug}/` : '/esp/arquitecto/proyectos/';
+          }
+
+          if (normalizedPath.startsWith('/esp/artista/todo/')) {
+            const slug = normalizedPath.slice('/esp/artista/todo/'.length);
+            return slug ? `/artist/everything/${slug}/` : '/artist/everything/';
+          }
+
+          if (normalizedPath.startsWith('/artist/everything/')) {
+            const slug = normalizedPath.slice('/artist/everything/'.length);
+            return slug ? `/esp/artista/todo/${slug}/` : '/esp/artista/todo/';
           }
 
           if (isSpanishPath(normalizedPath)) {

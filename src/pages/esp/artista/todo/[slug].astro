@@ -1,8 +1,8 @@
 ---
 import type { GetStaticPaths } from 'astro';
 import { getCollection } from 'astro:content';
-import BaseLayout from '../../../layouts/BaseLayout.astro';
-import { getArtworkMetadata, getPublicArtworks } from '../../../lib/artworks';
+import BaseLayout from '../../../../layouts/BaseLayout.astro';
+import { getArtworkMetadata, getPublicArtworks } from '../../../../lib/artworks';
 
 export const getStaticPaths = (async () => {
   const artworks = getPublicArtworks(await getCollection('artworks'));
@@ -20,7 +20,7 @@ const hasDescription = Boolean(artwork.data.description);
 
 <BaseLayout title={`${artwork.data.title} | Varelism`} description={artwork.data.description ?? artwork.data.title}>
   <article class="artwork-detail">
-    <a class="artwork-back" href="/artist/everything/">Return</a>
+    <a class="artwork-back" href="/esp/artista/todo/">Volver</a>
 
     <figure class="artwork-figure">
       {
